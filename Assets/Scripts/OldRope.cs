@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using UnityEngine.InputSystem;
 using UnityEngine;
 
-public class RopeVerlet : MonoBehaviour
+public class OldRope : MonoBehaviour
 {
     [Header("Rope")]
     [SerializeField] private int _numOfRopeSegments = 50;
