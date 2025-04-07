@@ -7,13 +7,13 @@ public class RopeSystem : MonoBehaviour
     [SerializeField] private int segmentCount = 20;
     [SerializeField] private float segmentLength = 0.25f;
     [SerializeField] private LayerMask hookableLayerMask;
-    [SerializeField] private float maxRopeLength = 20f;
+    [SerializeField] private float maxRopeLength = 100f;
     [SerializeField] private float minRopeLength = 2f;
-    [SerializeField] private float ropeAdjustSpeed = 2f; // 绳索调整速度
+
     
     [Header("物理设置")]
     [SerializeField] private int constraintIterations = 50;
-    [SerializeField] private float ropeWidth = 0.1f;
+    [SerializeField] private float ropeWidth = 0.8f;
     [SerializeField] private bool useGravity = true;  // 是否使用重力
     [SerializeField] private float gravityScale = 0.5f;  // 重力系数
     [SerializeField] private LayerMask obstacleLayerMask; // 障碍物层级
@@ -29,8 +29,7 @@ public class RopeSystem : MonoBehaviour
     private Vector3 hookPosition;
     private Transform hookInstance;
     private float currentRopeLength;
-    private List<Vector2> ropePositions = new List<Vector2>();
-    private Vector2 lastPlayerPosition;
+    private Rigidbody2D playerRb; // 缓存的玩家刚体组件
     
     // 钩索状态
     private enum RopeState { Idle, Shooting, Hooked }
@@ -49,6 +48,7 @@ public class RopeSystem : MonoBehaviour
         
         if (playerController == null)
             playerController = GetComponentInParent<PlayerController>();
+            playerRb = playerController.GetComponent<Rigidbody2D>();         
     }
     
     private void SetupLineRenderer()
@@ -61,49 +61,28 @@ public class RopeSystem : MonoBehaviour
         // 可以设置材质等其他属性
     }
     
-    private void Update()
+private void Update()
+{
+    switch (currentState)
     {
-        switch (currentState)
-        {
-            case RopeState.Idle:
-                // 不显示绳索
-                lineRenderer.positionCount = 0;
-                break;
-                
-            case RopeState.Shooting:
-                UpdateRopeShooting();
-                break;
-                
-            case RopeState.Hooked:
-                HandleRopeInput();
-                SimulateRope();
-                break;
-        }
+        case RopeState.Idle:
+            lineRenderer.positionCount = 0;
+            break;
+
+        case RopeState.Shooting:
+            UpdateRopeShooting();
+            break;
+
+        case RopeState.Hooked:
+            if (ropeSegments == null || ropeSegments.Count == 0)
+            {
+                InitializeRopeSegments(); // 确保绳子段被正确初始化
+            }
+            SimulateRope();
+            break;
     }
-    
-    private void HandleRopeInput()
-    {
-        // 处理钩索模式下的输入
-        // 这部分可以移到PlayerController中，这里仅作为示例
-        
-        // 上键缩短绳索
-        if (Input.GetKey(KeyCode.UpArrow) || Input.GetKey(KeyCode.W))
-        {
-            AdjustRopeLength(-ropeAdjustSpeed * Time.deltaTime);
-        }
-        
-        // 下键延长绳索
-        if (Input.GetKey(KeyCode.DownArrow) || Input.GetKey(KeyCode.S))
-        {
-            AdjustRopeLength(ropeAdjustSpeed * Time.deltaTime);
-        }
-        
-        // 空格键释放绳索
-        if (Input.GetKeyDown(KeyCode.Space))
-        {
-            ReleaseRope();
-        }
-    }
+}
+
     
     public void ShootRope(Vector2 direction, float speed, float maxLength)
     {
@@ -114,7 +93,6 @@ public class RopeSystem : MonoBehaviour
         shootDirection = direction.normalized;
         shootSpeed = speed;
         currentRopeLength = 0f;
-        maxRopeLength = maxLength;
         shootTimer = 0f;
         isRopeActive = false; // 发射状态下还未激活钩索模式
         
@@ -130,9 +108,6 @@ public class RopeSystem : MonoBehaviour
         }
         
         currentState = RopeState.Shooting;
-        
-        // 初始化绳索段
-        InitializeRopeSegments();
     }
     
     private void UpdateRopeShooting()
@@ -174,7 +149,7 @@ public class RopeSystem : MonoBehaviour
         }
         
         // 检查是否达到最大长度
-        if (distanceToTravel >= maxRopeLength)
+        if (distanceToTravel >= playerController.GetMaxShootRopeLength())
         {
             // 收回钩索
             ReleaseRope();
@@ -189,17 +164,27 @@ public class RopeSystem : MonoBehaviour
     private void InitializeRopeSegments()
     {
         ropeSegments.Clear();
-        
-        // 初始化所有绳索段在同一位置
-        Vector2 segmentPos = transform.position;
+
+        // 初始化所有绳索段在从玩家到钩子之间的均匀分布
+        Vector2 startPos = transform.position;
+        Vector2 endPos = hookPosition; // 假设钩子已经击中目标
+        Vector2 segmentDelta = (endPos - startPos) / (segmentCount - 1);
+
         for (int i = 0; i < segmentCount; i++)
         {
+            Vector2 segmentPos = startPos + segmentDelta * i;
             ropeSegments.Add(new RopeSegment(segmentPos));
         }
     }
+
     
     private void SimulateRope()
     {
+        if (ropeSegments == null || ropeSegments.Count < 2)
+        {
+            Debug.LogError("RopeSegments not initialized or insufficient segments.");
+            return; // 防止越界错误
+        }
         // 应用物理约束
         Vector2 playerPos = transform.position;
         
@@ -249,35 +234,55 @@ public class RopeSystem : MonoBehaviour
         ApplyRopeForceToPlayer();
     }
     
-    private void ApplyConstraints()
+   private void ApplyConstraints()
+{
+    for (int i = 0; i < ropeSegments.Count - 1; i++)
     {
-        // 应用距离约束，保持绳索段之间的距离
-        for (int i = 0; i < ropeSegments.Count - 1; i++)
+        RopeSegment firstSeg = ropeSegments[i];
+        RopeSegment secondSeg = ropeSegments[i + 1];
+
+        float dist = Vector2.Distance(firstSeg.posNow, secondSeg.posNow);
+        float error = dist - segmentLength;
+
+        Vector2 changeDir = (firstSeg.posNow - secondSeg.posNow).normalized;
+        Vector2 changeAmount = changeDir * Mathf.Clamp(error, -segmentLength * 1.2f, segmentLength * 1.2f);
+
+        // 减小调整幅度，让绳子更像刚体
+        float stiffnessFactor = 0.8f; // 刚性比例，值越接近1越刚性
+
+        if (i == 0)
         {
-            RopeSegment firstSeg = ropeSegments[i];
-            RopeSegment secondSeg = ropeSegments[i + 1];
-            
-            float dist = Vector2.Distance(firstSeg.posNow, secondSeg.posNow);
-            float error = dist - segmentLength;
-            
-            Vector2 changeDir = (firstSeg.posNow - secondSeg.posNow).normalized;
-            Vector2 changeAmount = changeDir * error;
-            
-            if (i > 0)
-            {
-                firstSeg.posNow -= changeAmount * 0.5f;
-                ropeSegments[i] = firstSeg;
-                secondSeg.posNow += changeAmount * 0.5f;
-                ropeSegments[i + 1] = secondSeg;
-            }
-            else
-            {
-                // 第一段固定在玩家位置
-                secondSeg.posNow += changeAmount;
-                ropeSegments[i + 1] = secondSeg;
-            }
+            // 第一个点保持不变（跟随玩家位置）
+            firstSeg.posNow = transform.position; // RopeSystem挂在玩家子层级上，玩家位置即为第一个点
+            ropeSegments[i] = firstSeg;
+
+            // 第二段调整
+            secondSeg.posNow += changeAmount * stiffnessFactor;
+            ropeSegments[i + 1] = secondSeg;
+        }
+        else if (i == ropeSegments.Count - 2)
+        {
+            // 最后一个点固定在钩子位置
+            RopeSegment hookSegment = ropeSegments[i + 1];
+            hookSegment.posNow = hookPosition;
+            ropeSegments[i + 1] = hookSegment;
+
+            // 倒数第二段调整
+            firstSeg.posNow -= changeAmount * stiffnessFactor;
+            ropeSegments[i] = firstSeg;
+        }
+        else
+        {
+            // 中间点正常调整
+            firstSeg.posNow -= changeAmount * stiffnessFactor * 0.5f;
+            ropeSegments[i] = firstSeg;
+
+            secondSeg.posNow += changeAmount * stiffnessFactor * 0.5f;
+            ropeSegments[i + 1] = secondSeg;
         }
     }
+}
+
     
     private void CheckRopeCollision()
     {
@@ -317,11 +322,7 @@ public class RopeSystem : MonoBehaviour
     
     private void ApplyRopeForceToPlayer()
     {
-        if (currentState != RopeState.Hooked)
-            return;
-            
-        Rigidbody2D playerRb = playerController.GetComponent<Rigidbody2D>();
-        if (playerRb == null)
+        if (currentState != RopeState.Hooked || playerRb == null)
             return;
             
         // 计算绳索方向
@@ -342,11 +343,7 @@ public class RopeSystem : MonoBehaviour
     
     public void Swing(float direction)
     {
-        if (!isRopeActive)
-            return;
-            
-        Rigidbody2D playerRb = playerController.GetComponent<Rigidbody2D>();
-        if (playerRb == null)
+        if (currentState != RopeState.Hooked || playerRb == null)
             return;
             
         // 计算垂直于绳索的方向
@@ -358,63 +355,76 @@ public class RopeSystem : MonoBehaviour
     }
     
     public void AdjustRopeLength(float amount)
+{
+    if (currentState != RopeState.Hooked)
+        return;
+
+    // 计算新的绳索长度
+    float newRopeLength = currentRopeLength + amount;
+
+    // 检查是否超出最大或最小长度限制
+    if (newRopeLength > maxRopeLength)
     {
-        if (!isRopeActive)
-            return;
-            
-        float newRopeLength = currentRopeLength + amount;
-        
-        // 检查是否超出最大长度限制
-        if (newRopeLength > maxRopeLength)
-        {
-            newRopeLength = maxRopeLength;
-        }
-        // 检查是否小于最小长度限制
-        else if (newRopeLength < minRopeLength)
-        {
-            newRopeLength = minRopeLength;
-        }
-        
-        // 如果是缩短绳索，检查是否会与障碍物碰撞
-        if (amount < 0)
-        {
-            // 计算玩家到钩子的方向
-            Vector2 dirToHook = ((Vector2)hookPosition - (Vector2)transform.position).normalized;
-            
-            // 检测玩家和钩子之间是否有障碍物
-            RaycastHit2D hit = Physics2D.Raycast(
-                transform.position,
-                dirToHook,
-                newRopeLength,
-                obstacleLayerMask
-            );
-            
-            if (hit.collider != null)
-            {
-                // 如果有障碍物，限制绳索长度为玩家到障碍物的距离
-                float distanceToObstacle = hit.distance;
-                newRopeLength = Mathf.Max(distanceToObstacle, minRopeLength);
-            }
-        }
-        
-        // 更新绳索长度
-        currentRopeLength = newRopeLength;
-        
-        // 重新计算绳索段长度
-        segmentLength = currentRopeLength / (segmentCount - 1);
+        newRopeLength = maxRopeLength;
     }
+    else if (newRopeLength < minRopeLength)
+    {
+        newRopeLength = minRopeLength;
+    }
+
+    // 计算需要的绳节数量
+    int newSegmentCount = Mathf.RoundToInt(newRopeLength / segmentLength);
+
+    // 确保绳节数量至少为2（玩家和钩子位置）
+    newSegmentCount = Mathf.Max(newSegmentCount, 2);
+
+    // 如果绳节数量发生变化，调整绳节列表
+    if (newSegmentCount != ropeSegments.Count)
+    {
+        List<RopeSegment> newSegments = new List<RopeSegment>();
+
+        Vector2 startPos = transform.position;
+        Vector2 endPos = hookPosition;
+
+        // 重新生成绳节
+        Vector2 segmentDelta = (endPos - startPos) / (newSegmentCount - 1);
+        for (int i = 0; i < newSegmentCount; i++)
+        {
+            Vector2 segmentPos = startPos + segmentDelta * i;
+            newSegments.Add(new RopeSegment(segmentPos));
+        }
+
+        ropeSegments = newSegments;
+    }
+
+    // 更新当前绳索长度
+    currentRopeLength = newRopeLength;
+
+    // 更新绳索物理状态
+    SimulateRope();
+}
     
     public void ReleaseRope()
+{
+    // 切换到空闲状态
+    currentState = RopeState.Idle;
+    isRopeActive = false;
+
+    // 清除钩子实例
+    if (hookInstance != null)
     {
-        currentState = RopeState.Idle;
-        isRopeActive = false;
-        
-        if (hookInstance != null)
-            hookInstance.gameObject.SetActive(false);
-            
-        // 通知玩家控制器退出钩索模式
-        playerController.ExitRopeMode();
+        hookInstance.gameObject.SetActive(false);
     }
+
+    // 清除绳索段信息
+    ropeSegments.Clear();
+
+    // 重置线渲染器
+    lineRenderer.positionCount = 0;
+
+    // 通知玩家控制器退出钩索模式
+    playerController.ExitRopeMode();
+}
 
     // 设置是否使用重力
     public void SetGravity(bool enabled)
@@ -432,6 +442,16 @@ public class RopeSystem : MonoBehaviour
     public bool IsRopeActive()
     {
         return isRopeActive;
+    }
+    public bool IsRopeShootingOrHooked()
+    {
+        return currentState == RopeState.Shooting || currentState == RopeState.Hooked;
+    }
+
+
+    public Vector3 GetHookPosition()
+    {
+        return hookPosition;
     }
     
     // 绳索段类
