@@ -1,5 +1,5 @@
+using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.UIElements;
 
 public class RopeSystem : MonoBehaviour
 {
@@ -17,6 +17,7 @@ public class RopeSystem : MonoBehaviour
     
     [Header("碰撞检测")]
     [SerializeField] private LayerMask hookableLayers; // 可以被钩住的层
+    private LayerMask obstacleLayers => hookableLayers; // 障碍物层，用于弯折检测
     [SerializeField] private float ropeFrequency = 1f; // 绳索弹性频率
     [SerializeField] private float ropeDampingRatio = 0.5f; // 绳索阻尼比率
     
@@ -27,7 +28,7 @@ public class RopeSystem : MonoBehaviour
     private Vector2 shootDirection;
     private float shootDistance = 0f;
     private float currentRopeLength;
-    private SpringJoint2D springJoint;
+    private FlexibleSpringJoint2D flexibleJoint; // 替换为自定义弹簧关节
     private Rigidbody2D playerRigidbody;
     private GameObject arrowObject; // 重命名为 arrowObject 表示这是持久的箭头对象
     private SpriteRenderer ArrowRenderer;
@@ -43,10 +44,13 @@ public class RopeSystem : MonoBehaviour
             
         playerRigidbody = playerController.GetComponent<Rigidbody2D>();
         
-        // 创建SpringJoint组件
-        springJoint = playerController.gameObject.GetComponent<SpringJoint2D>();
-        springJoint.autoConfigureDistance = false;
-        springJoint.enabled = false;
+        // 获取自定义弹簧关节组件
+        flexibleJoint = playerController.GetFlexibleJoint();
+        if (flexibleJoint == null)
+        {
+            Debug.LogError("找不到FlexibleSpringJoint2D组件");
+            return;
+        }
         
         // 初始化线渲染器
         lineRenderer.positionCount = 2;
@@ -148,19 +152,22 @@ public class RopeSystem : MonoBehaviour
         
         // 更新位置
         arrowObject.transform.position = position;
+        if (flexibleJoint != null)
+            {
+                flexibleJoint.SetConnectedAnchor(position);
+            }
         
         UpdateArrowFacing();
     }
 
-   private void UpdateArrowFacing()
-{
-    float angle = Mathf.Atan2(shootDirection.y, shootDirection.x) * Mathf.Rad2Deg;
-    if (ArrowRenderer != null)
+    private void UpdateArrowFacing()
     {
-        ArrowRenderer.flipX = isFacingLeft;
+        float angle = Mathf.Atan2(shootDirection.y, shootDirection.x) * Mathf.Rad2Deg;
+        if (ArrowRenderer != null)
+        {
+            ArrowRenderer.flipX = isFacingLeft;
+        }
     }
-}
-
     
     private void UpdateRopeShooting()
     {
@@ -201,12 +208,13 @@ public class RopeSystem : MonoBehaviour
             isShooting = false;
             currentRopeLength = Vector2.Distance(playerController.transform.position, hookPosition);
             
-            // 设置弹簧关节
-            springJoint.connectedAnchor = hookPosition;
-            springJoint.distance = currentRopeLength;
-            springJoint.frequency = ropeFrequency;
-            springJoint.dampingRatio = ropeDampingRatio;
-            springJoint.enabled = true;
+            // 设置弹簧关节 - 使用新的公共方法
+            flexibleJoint.SetConnectedAnchor(hookPosition);
+            flexibleJoint.SetDistance(currentRopeLength);
+            flexibleJoint.dampingRatio = ropeDampingRatio;
+            flexibleJoint.frequency = ropeFrequency;
+            flexibleJoint.ReconfigureJoint();
+            // 注意：不要在这里启用关节，而是在EnterRopeMode中启用
             
             // 钩中目标后隐藏箭头
             if (arrowObject != null)
@@ -237,53 +245,86 @@ public class RopeSystem : MonoBehaviour
     
     private void UpdateRopeHooked()
     {
-        // 更新线渲染器位置
-        lineRenderer.SetPosition(0, playerController.transform.position);
-        lineRenderer.SetPosition(1, hookPosition);
-        
-        // 在钩中状态下不需要更新箭头位置，因为箭头已经隐藏了
+        // 使用FlexibleSpringJoint2D的路径更新线渲染器
+        if (flexibleJoint != null && flexibleJoint.enabled)
+        {
+            List<Vector2> ropePath = flexibleJoint.GetRopePath();
+            
+            if (ropePath.Count > 0)
+            {
+                // 更新线渲染器
+                lineRenderer.positionCount = ropePath.Count;
+                for (int i = 0; i < ropePath.Count; i++)
+                {
+                    lineRenderer.SetPosition(i, ropePath[i]);
+                }
+            }
+            else
+            {
+                // 如果没有路径，至少显示从玩家到钩点的直线
+                lineRenderer.positionCount = 2;
+                lineRenderer.SetPosition(0, playerController.transform.position);
+                lineRenderer.SetPosition(1, hookPosition);
+            }
+        }
+        else
+        {
+            // 如果关节不可用，显示简单的直线
+            lineRenderer.positionCount = 2;
+            lineRenderer.SetPosition(0, playerController.transform.position);
+            lineRenderer.SetPosition(1, hookPosition);
+        }
     }
     
-public void ReleaseRope()
-{
-    // 在释放绳索前，确保玩家控制器能够获取到当前的速度和方向
-    // 这部分代码已经在PlayerController.ExitRopeMode中处理
-    
-    isShooting = false;
-    isHooked = false;
-    lineRenderer.enabled = false;
-    springJoint.enabled = false;
-    
-    // 确保箭头隐藏
-    if (arrowObject != null)
+    public void ReleaseRope()
     {
-        arrowObject.SetActive(false);
+        // 在释放绳索前，确保玩家控制器能够获取到当前的速度和方向
+        // 这部分代码已经在PlayerController.ExitRopeMode中处理
+        
+        isShooting = false;
+        isHooked = false;
+        lineRenderer.enabled = false;
+
+        // 重置线渲染器的点数和位置，防止下次激活时出现多余的点
+        lineRenderer.positionCount = 2;
+        lineRenderer.SetPosition(0, playerController.transform.position);
+        lineRenderer.SetPosition(1, playerController.transform.position);
+        
+        // 使用FlexibleSpringJoint2D的公共方法禁用关节
+        flexibleJoint.EnableJoint(false);
+        // 清理弯折节点
+        flexibleJoint.ClearBendNodes();
+        
+        // 确保箭头隐藏
+        if (arrowObject != null)
+        {
+            arrowObject.SetActive(false);
+        }
+        
+        // 通知玩家控制器退出绳索模式
+        playerController.ExitRopeMode();
     }
-    
-    // 通知玩家控制器退出绳索模式
-    playerController.ExitRopeMode();
-}
     
     public void AdjustRopeLength(float direction)
     {
         if (!isHooked)
             return;
-            
+                
         // 调整绳索长度
         currentRopeLength += direction * ropeAdjustSpeed * Time.deltaTime;
         
         // 限制长度范围
         currentRopeLength = Mathf.Clamp(currentRopeLength, minRopeLength, maxRopeLength);
         
-        // 更新弹簧关节
-        springJoint.distance = currentRopeLength;
+        // 使用FlexibleSpringJoint2D的公共方法更新距离
+        flexibleJoint.SetDistance(currentRopeLength);
     }
     
     public void Swing(float direction)
     {
         if (!isHooked)
             return;
-            
+                
         // 计算垂直于绳索的方向
         Vector2 ropeDirection = (hookPosition - (Vector2)playerController.transform.position).normalized;
         Vector2 perpendicularDirection = new Vector2(-ropeDirection.y, ropeDirection.x);

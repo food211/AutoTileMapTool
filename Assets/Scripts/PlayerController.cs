@@ -9,6 +9,7 @@ public class PlayerController : MonoBehaviour
     [SerializeField] private float jumpForce = 10f;
     
     [Header("钩索设置")]
+    [SerializeField] private FlexibleSpringJoint2D flexibleJoint;
     [SerializeField] private Transform aimIndicator;
     [SerializeField] public GameObject arrow; // 添加对箭头的引用
     [SerializeField] private float aimRotationSpeed = 120f;
@@ -37,16 +38,29 @@ public class PlayerController : MonoBehaviour
     private Collider2D playerCollider;
     
     private void Awake()
-{
-    isRopeMode = false;
-    rb = GetComponent<Rigidbody2D>();
-    playerCollider = GetComponent<Collider2D>();
-    if (ropeSystem == null)
-        ropeSystem = GetComponentInChildren<RopeSystem>();
-    
-    // 保存原始物理材质
-    originalMaterial = rb.sharedMaterial;
-}
+    {
+        isRopeMode = false;
+        rb = GetComponent<Rigidbody2D>();
+        playerCollider = GetComponent<Collider2D>();
+        if (ropeSystem == null)
+            ropeSystem = GetComponentInChildren<RopeSystem>();
+        
+        // 保存原始物理材质
+        originalMaterial = rb.sharedMaterial;
+        
+        // 获取或添加自定义弹簧关节
+        flexibleJoint = GetComponent<FlexibleSpringJoint2D>();
+        if (flexibleJoint == null)
+        {
+            flexibleJoint = gameObject.AddComponent<FlexibleSpringJoint2D>();
+        }
+        
+        // 确保初始时关节是禁用的
+        if (flexibleJoint != null)
+        {
+            flexibleJoint.EnableJoint(false);
+        }
+    }
     
     private void Update()
     {
@@ -247,25 +261,51 @@ public class PlayerController : MonoBehaviour
     
     // 进入绳索模式
 public void EnterRopeMode()
-{
-    isRopeMode = true;
-    arrow.SetActive(false);
-    
-    // 应用弹性物理材质
-    if (bouncyBallMaterial != null)
     {
-        rb.sharedMaterial = bouncyBallMaterial;
+        isRopeMode = true;
+        
+        // 隐藏箭头
+        if (arrow != null)
+        {
+            arrow.SetActive(false);
+        }
+        
+        // 应用弹性物理材质
+        if (bouncyBallMaterial != null)
+        {
+            rb.sharedMaterial = bouncyBallMaterial;
+        }
+        
+        // 确保弹簧关节已配置并启用
+        if (flexibleJoint != null)
+        {
+            // 关节的具体配置已在RopeSystem中完成，这里只需确保关节已启用
+            flexibleJoint.ReconfigureJoint();
+            flexibleJoint.EnableJoint(true);
+        }
     }
-}
     
     // 退出绳索模式
+// 退出绳索模式
 public void ExitRopeMode()
 {
     isRopeMode = false;
-    arrow.SetActive(true);
+    
+    // 显示箭头
+    if (arrow != null)
+    {
+        arrow.SetActive(true);
+    }
     
     // 恢复原始物理材质
     rb.sharedMaterial = originalMaterial;
+    
+    // 禁用弹簧关节
+    if (flexibleJoint != null)
+    {
+        flexibleJoint.EnableJoint(false);
+        flexibleJoint.ClearBendNodes(); // 清理弯折节点
+    }
 }
 
     
@@ -290,5 +330,10 @@ public void ExitRopeMode()
     public Rigidbody2D GetRigidbody()
     {
         return rb;
+    }
+    // 添加获取自定义弹簧关节的方法
+    public FlexibleSpringJoint2D GetFlexibleJoint()
+    {
+        return flexibleJoint;
     }
 }

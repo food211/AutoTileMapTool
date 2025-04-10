@@ -1529,6 +1529,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   moveSpeed: 5
   jumpForce: 30
+  flexibleJoint: {fileID: 1453988871}
   aimIndicator: {fileID: 1209569521}
   arrow: {fileID: 940384881}
   aimRotationSpeed: 250
@@ -1555,15 +1556,17 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 0e52d5073349b2f42bc1e4fe73cacf12, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  connectedBody: {fileID: 1453988869}
+  connectedBody: {fileID: 0}
   anchor: {x: 0, y: 0}
   connectedAnchor: {x: 0, y: 0}
   autoConfigureDistance: 1
   distance: 1
-  dampingRatio: 0.8
+  maxDistanceOnly: 0
+  dampingRatio: 1
   frequency: 1
   breakAction: 0
   breakForce: Infinity
+  breakTorque: Infinity
   enableBending: 1
   obstacleLayer:
     serializedVersion: 2
@@ -1572,10 +1575,8 @@ MonoBehaviour:
   minNodeDistance: 0.3
   maxNodes: 10
   nodeRadius: 0.1
-  ropeRenderer: {fileID: 628707688}
   showGizmos: 1
   ropeColor: {r: 1, g: 1, b: 1, a: 1}
-  ropeWidth: 0.05
 --- !u!1 &1668746872
 GameObject:
   m_ObjectHideFlags: 0
