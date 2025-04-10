@@ -301,10 +301,14 @@ public class RopeSystem : MonoBehaviour
             arrowObject.SetActive(false);
         }
         
+        // 重置绳索长度为默认值
+        currentRopeLength = ropeLength;
+        flexibleJoint.SetDistance(ropeLength);
+        
         // 通知玩家控制器退出绳索模式
         playerController.ExitRopeMode();
     }
-    
+        
     public void AdjustRopeLength(float direction)
     {
         if (!isHooked)

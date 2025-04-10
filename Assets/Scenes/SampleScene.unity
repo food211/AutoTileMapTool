@@ -468,7 +468,7 @@ LineRenderer:
       m_ColorSpace: -1
       m_NumColorKeys: 2
       m_NumAlphaKeys: 2
-    numCornerVertices: 1
+    numCornerVertices: 6
     numCapVertices: 10
     alignment: 0
     textureMode: 0
@@ -496,7 +496,7 @@ MonoBehaviour:
   arrowPrefab: {fileID: 2810855973482111110, guid: e848caeaa688a47479d2b54252a190ec, type: 3}
   ropeLength: 15
   ropeAdjustSpeed: 2
-  minRopeLength: 2
+  minRopeLength: 1
   maxRopeLength: 50
   ropeShootSpeed: 50
   hookableLayers:
@@ -1532,7 +1532,7 @@ MonoBehaviour:
   flexibleJoint: {fileID: 1453988871}
   aimIndicator: {fileID: 1209569521}
   arrow: {fileID: 940384881}
-  aimRotationSpeed: 250
+  aimRotationSpeed: 350
   ropeSystem: {fileID: 628707689}
   swingForce: 10
   maxSwingSpeed: 120
@@ -1562,7 +1562,7 @@ MonoBehaviour:
   autoConfigureDistance: 1
   distance: 1
   maxDistanceOnly: 0
-  dampingRatio: 1
+  dampingRatio: 0.5
   frequency: 1
   breakAction: 0
   breakForce: Infinity
@@ -1571,9 +1571,9 @@ MonoBehaviour:
   obstacleLayer:
     serializedVersion: 2
     m_Bits: 8
-  bendingDetectionRadius: 0.1
-  minNodeDistance: 0.3
-  maxNodes: 10
+  bendingDetectionRadius: 0.2
+  minNodeDistance: 0.2
+  maxNodes: 50
   nodeRadius: 0.1
   showGizmos: 1
   ropeColor: {r: 1, g: 1, b: 1, a: 1}
