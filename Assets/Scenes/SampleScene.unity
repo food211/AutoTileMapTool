@@ -1532,7 +1532,7 @@ MonoBehaviour:
   flexibleJoint: {fileID: 1453988871}
   aimIndicator: {fileID: 1209569521}
   arrow: {fileID: 940384881}
-  aimRotationSpeed: 350
+  aimRotationSpeed: 380
   ropeSystem: {fileID: 628707689}
   swingForce: 10
   maxSwingSpeed: 120
@@ -1564,19 +1564,24 @@ MonoBehaviour:
   maxDistanceOnly: 0
   dampingRatio: 0.5
   frequency: 1
-  breakAction: 0
+  breakAction: 1
   breakForce: Infinity
   breakTorque: Infinity
   enableBending: 1
   obstacleLayer:
     serializedVersion: 2
     m_Bits: 8
-  bendingDetectionRadius: 0.2
-  minNodeDistance: 0.2
-  maxNodes: 50
+  bendingDetectionRadius: 0.1
+  minNodeDistance: 0.15
+  maxNodes: 60
   nodeRadius: 0.1
+  directionDotThreshold: 0.96
+  minNodeCreationInterval: 0.1
+  minNodeLifetime: 0.5
   showGizmos: 1
   ropeColor: {r: 1, g: 1, b: 1, a: 1}
+  showDirectionVectors: 1
+  playerNoBendMultiplier: 1.5
 --- !u!1 &1668746872
 GameObject:
   m_ObjectHideFlags: 0

@@ -33,20 +33,33 @@ public class FlexibleSpringJoint2D : MonoBehaviour
     public int maxNodes = 10; // 最大节点数量
     public float nodeRadius = 0.1f; // 节点碰撞半径
     
+    [Header("方向判断设置")]
+    [Range(-1, 1)]
+    public float directionDotThreshold = 0.996f; //方向点积阈值，小于此值表示方向已经相反
+    public float minNodeCreationInterval = 0.01f; // 最小创建间隔，防止短时间内创建过多节点
+
+    [Header("节点存活保护")]
+    public float minNodeLifetime = 0.5f; // 节点最小存活时间，单位秒
+    
     [Header("可视化设置")]
     public bool showGizmos = true;
     public Color ropeColor = Color.white;
+    public bool showDirectionVectors = true; // 是否显示方向向量
     
     // 内部变量
     private Rigidbody2D rb;
     private List<BendNode> bendNodes = new List<BendNode>();
+    private List<Vector2> previousRopePath = new List<Vector2>();// 存储上一帧的绳结位置
     private GameObject bendNodeProxy;
     private Rigidbody2D bendNodeRigidbody;
+    public float playerNoBendMultiplier = 1.5f; // 玩家周围不产生弯折的区域是玩家半径的倍数
+    private float lastNodeCreationTime = 0f; // 上次创建节点的时间
 
     // 添加 DistanceJoint2D 组件
     private DistanceJoint2D distanceJoint;
     private Vector2 originalConnectedAnchor;
     private Rigidbody2D originalConnectedBody;
+    private Vector2 previousPlayerPosition;
     
     // 节点类
     [System.Serializable]
@@ -57,12 +70,33 @@ public class FlexibleSpringJoint2D : MonoBehaviour
         public bool isActive; // 是否是当前活动节点
         public float creationTime; // 创建时间，用于平滑过渡
         
+        // 新增：记录创建时的方向信息
+        public Vector2 directionToPrevNode; // 指向前一个节点的方向
+        public Vector2 directionToPlayer; // 创建时指向玩家的方向
+        public Vector2 playerMovementDirection; // 创建时玩家的移动方向
+        // 新增：记录玩家上一帧的位置，用于计算移动方向
+        
+        
         public BendNode(Vector2 pos, Vector2 norm)
         {
             position = pos;
             normal = norm;
             isActive = false;
             creationTime = Time.time;
+            directionToPrevNode = Vector2.zero;
+            directionToPlayer = Vector2.zero;
+            playerMovementDirection = Vector2.zero;
+        }
+        
+        public BendNode(Vector2 pos, Vector2 norm, Vector2 dirToPrev, Vector2 dirToPlayer, Vector2 playerMoveDir)
+        {
+            position = pos;
+            normal = norm;
+            isActive = false;
+            creationTime = Time.time;
+            directionToPrevNode = dirToPrev.normalized;
+            directionToPlayer = dirToPlayer.normalized;
+            playerMovementDirection = playerMoveDir.normalized;
         }
     }
     
@@ -81,6 +115,9 @@ public class FlexibleSpringJoint2D : MonoBehaviour
 
         // 创建弯折点代理对象
         CreateBendNodeProxy();
+        
+        // 初始化玩家位置
+        previousPlayerPosition = transform.position;
     }
 
     private void CreateBendNodeProxy()
@@ -142,13 +179,38 @@ public class FlexibleSpringJoint2D : MonoBehaviour
             DetectCollisionsAndCreateNodes();
             // 更新弯折点的物理交互
             UpdateBendNodePhysics();
+
         }
     }
-    
+    public void FixedUpdate()
+    {
+        if (enableBending)
+        {
+            // 记录当前玩家位置，用于计算移动方向
+            Vector2 currentPlayerPosition = transform.position;
+            // 更新上一帧的玩家位置
+            previousPlayerPosition = currentPlayerPosition;
+        }
+    }
+
     private void DetectCollisionsAndCreateNodes()
 {
+    // 检查是否可以创建新节点（时间间隔控制）
+    if (Time.time - lastNodeCreationTime < minNodeCreationInterval)
+    {
+        return; // 如果间隔太短，跳过本次创建
+    }
+    
     // 获取当前绳索路径
     List<Vector2> ropePath = GetRopePath();
+    
+    // 获取玩家位置和无弯折区域半径
+    Vector2 playerPos = transform.TransformPoint(anchor);
+    float noBendRadius = GetPlayerRadius() * playerNoBendMultiplier;
+    
+    // 获取起点位置（钩点）
+    Vector2 hookPos = ropePath[0];
+    float hookNoBendRadius = 0.25f; // 钩点周围范围内不创建弯折点
     
     // 检查每段绳索是否与障碍物碰撞
     for (int i = 0; i < ropePath.Count - 1; i++)
@@ -163,8 +225,20 @@ public class FlexibleSpringJoint2D : MonoBehaviour
             
         direction /= segmentLength;
         
+        // 计算该段绳索的移动方向（与上一帧比较）
+        Vector2 segmentMovementDirection = Vector2.zero;
+        if (previousRopePath.Count > i + 1)
+        {
+            // 计算绳索段的中点在当前帧和上一帧的位置
+            Vector2 currentMidpoint = (start + end) * 0.5f;
+            Vector2 previousMidpoint = (previousRopePath[i] + previousRopePath[i + 1]) * 0.5f;
+            
+            // 计算移动方向
+            segmentMovementDirection = (currentMidpoint - previousMidpoint).normalized;
+        }
+        
         // 使用更精细的步长来提高检测精度，确保步长不大于minNodeDistance
-        float stepSize = Mathf.Min(0.5f, minNodeDistance);
+        float stepSize = Mathf.Min(0.1f, minNodeDistance);
         int steps = Mathf.Max(1, Mathf.FloorToInt(segmentLength / stepSize));
         stepSize = segmentLength / steps;
         
@@ -180,6 +254,22 @@ public class FlexibleSpringJoint2D : MonoBehaviour
             RaycastHit2D hit = Physics2D.Raycast(rayStart, direction, rayLength, obstacleLayer);
             if (hit.collider != null)
             {
+                // 检查碰撞点是否在玩家无弯折区域内
+                if (Vector2.Distance(hit.point, playerPos) <= noBendRadius)
+                {
+                    continue; // 跳过这个碰撞点
+                }
+                
+                // 新增：检查碰撞点是否在钩点无弯折区域内
+                if (Vector2.Distance(hit.point, hookPos) <= hookNoBendRadius)
+                {
+                    #if UNITY_EDITOR
+                    Debug.LogFormat("碰撞点在钩点无弯折区域内，跳过创建节点。距离: {0}, 无弯折半径: {1}", 
+                        Vector2.Distance(hit.point, hookPos), hookNoBendRadius);
+                    #endif
+                    continue; // 跳过这个碰撞点
+                }
+                
                 // 检查是否已经有接近的节点，使用精确的minNodeDistance作为判断标准
                 bool nodeExists = false;
                 foreach (var node in bendNodes)
@@ -191,8 +281,27 @@ public class FlexibleSpringJoint2D : MonoBehaviour
                     }
                 }
                 
-                // 创建新节点
-                if (!nodeExists && bendNodes.Count < maxNodes)
+                // 新增：检查绳索是否正在向障碍物移动
+                bool movingTowardsObstacle = true; // 默认为true，如果没有上一帧数据
+                
+                if (segmentMovementDirection != Vector2.zero && hit.normal != Vector2.zero)
+                {
+                    // 计算移动方向与法线的点积，如果小于0，表示正在向障碍物内部移动
+                    float movementDot = Vector2.Dot(segmentMovementDirection, hit.normal);
+                    movingTowardsObstacle = movementDot < 0;
+                    
+                #if UNITY_EDITOR
+                if (!movingTowardsObstacle)
+                {
+                    // 使用预定义的字符串格式和参数，避免字符串拼接产生的GC
+                    Debug.LogFormat("绳索正在远离障碍物，跳过创建节点。移动方向: {0}, 法线: {1}, 点积: {2}", 
+                        segmentMovementDirection, hit.normal, movementDot);
+                }
+                #endif
+                }
+                
+                // 创建新节点 - 添加移动方向判断条件
+                if (!nodeExists && movingTowardsObstacle && bendNodes.Count < maxNodes)
                 {
                     // 计算插入位置 - 确保节点按照从钩点到玩家的顺序排列
                     int insertIndex = 0;
@@ -211,8 +320,38 @@ public class FlexibleSpringJoint2D : MonoBehaviour
                         insertIndex = j + 1;
                     }
                     
-                    BendNode newNode = new BendNode(hit.point, hit.normal);
+                    // 计算方向向量
+                    Vector2 dirToPrev = Vector2.zero;
+                    if (insertIndex > 0)
+                    {
+                        dirToPrev = (hit.point - bendNodes[insertIndex-1].position).normalized;
+                    }
+                    else
+                    {
+                        // 如果是第一个节点，则方向是从钩点到该节点
+                        dirToPrev = (hit.point - ropePath[0]).normalized;
+                    }
+                    
+                    Vector2 dirToPlayer = (playerPos - hit.point).normalized;
+                    Vector2 playerMoveDir = (Vector2)transform.position - previousPlayerPosition;
+
+                    // 如果移动方向太小，可能是静止状态，此时使用默认方向
+                    if (playerMoveDir.sqrMagnitude < 0.001f)
+                    {
+                        // 可以使用从节点到玩家的方向作为默认方向
+                        playerMoveDir = (playerPos - hit.point).normalized;
+                    }
+                    else
+                    {
+                        playerMoveDir = playerMoveDir.normalized;
+                    }
+                    
+                    // 在创建新节点时使用这个方向
+                    BendNode newNode = new BendNode(hit.point, hit.normal, dirToPrev, dirToPlayer, playerMoveDir);
                     bendNodes.Insert(insertIndex, newNode);
+                    
+                    // 更新最后创建节点的时间
+                    lastNodeCreationTime = Time.time;
                     
                     // 重新计算路径
                     ropePath = GetRopePath();
@@ -223,271 +362,280 @@ public class FlexibleSpringJoint2D : MonoBehaviour
         }
     }
     
-    // 添加额外的圆形检测
-    if (bendNodes.Count == 0)
-    {
-        Vector2 start = ropePath[0]; // 钩点
-        Vector2 end = ropePath[ropePath.Count - 1]; // 玩家
-        
-        // 沿着直线路径进行圆形检测，使用minNodeDistance来确定检测点间距
-        float totalDistance = Vector2.Distance(start, end);
-        int checkPoints = Mathf.Max(3, Mathf.FloorToInt(totalDistance / minNodeDistance));
-        
-        for (int i = 1; i < checkPoints; i++)
-        {
-            float t = (float)i / checkPoints;
-            Vector2 checkPoint = Vector2.Lerp(start, end, t);
-            
-            Collider2D[] colliders = Physics2D.OverlapCircleAll(checkPoint, bendingDetectionRadius, obstacleLayer);
-            foreach (var collider in colliders)
-            {
-                // 找到最近的碰撞点
-                Vector2 closestPoint = collider.ClosestPoint(checkPoint);
-                
-                // 检查是否已经有接近的节点，使用精确的minNodeDistance作为判断标准
-                bool nodeExists = false;
-                foreach (var node in bendNodes)
-                {
-                    if (Vector2.Distance(node.position, closestPoint) < minNodeDistance)
-                    {
-                        nodeExists = true;
-                        break;
-                    }
-                }
-                
-                if (!nodeExists && bendNodes.Count < maxNodes)
-                {
-                    #if UNITY_EDITOR
-                    Debug.Log($"通过圆形检测创建弯折节点: {closestPoint}");
-                    #endif
-                    BendNode newNode = new BendNode(closestPoint, (checkPoint - closestPoint).normalized);
-                    bendNodes.Add(newNode);
-                    return; // 每次只添加一个节点，避免一次添加太多
-                }
-            }
-        }
-    }
+    // 保存当前路径作为下一帧的前一帧路径
+    previousRopePath = new List<Vector2>(ropePath);
     
     // 确保所有节点之间的距离不小于minNodeDistance
     OptimizeNodeSpacing();
 }
 
-// 新增方法：优化节点间距，确保所有节点之间的距离不小于minNodeDistance
-private void OptimizeNodeSpacing()
-{
-    if (bendNodes.Count < 2)
-        return;
-        
-    // 从后向前遍历，避免因为删除节点导致索引问题
-    for (int i = bendNodes.Count - 1; i > 0; i--)
+
+    private float GetPlayerRadius()
     {
-        Vector2 currentPos = bendNodes[i].position;
-        Vector2 prevPos = bendNodes[i-1].position;
-        
-        float distance = Vector2.Distance(currentPos, prevPos);
-        
-        // 如果两个节点之间的距离小于最小节点距离，移除其中一个
-        if (distance < minNodeDistance)
+        // 尝试获取玩家碰撞体半径
+        Collider2D playerCollider = GetComponent<Collider2D>();
+        if (playerCollider != null)
         {
-            // 保留靠近钩点的节点（索引较小的节点），移除当前节点
-            bendNodes.RemoveAt(i);
+            // 根据碰撞体类型获取半径
+            if (playerCollider is CircleCollider2D)
+            {
+                return ((CircleCollider2D)playerCollider).radius * Mathf.Max(transform.localScale.x, transform.localScale.y);
+            }
+            else if (playerCollider is BoxCollider2D)
+            {
+                BoxCollider2D boxCollider = (BoxCollider2D)playerCollider;
+                // 使用盒体的半宽作为半径的近似值
+                return Mathf.Max(boxCollider.size.x, boxCollider.size.y) * 0.5f * 
+                       Mathf.Max(transform.localScale.x, transform.localScale.y);
+            }
+            else if (playerCollider is CapsuleCollider2D)
+            {
+                CapsuleCollider2D capsuleCollider = (CapsuleCollider2D)playerCollider;
+                // 使用胶囊体的半径
+                return capsuleCollider.size.x * 0.5f * Mathf.Max(transform.localScale.x, transform.localScale.y);
+            }
+        }
+        
+        // 如果没有碰撞体或不是支持的类型，返回默认值
+        return 0.5f; // 默认半径为0.5
+    }
+
+    // 新增方法：优化节点间距，确保所有节点之间的距离不小于minNodeDistance
+    private void OptimizeNodeSpacing()
+    {
+        if (bendNodes.Count < 2)
+            return;
             
-            #if UNITY_EDITOR
-            Debug.Log($"优化节点间距：移除了距离过近的节点（距离: {distance}，最小要求: {minNodeDistance}）");
-            #endif
+        // 从后向前遍历，避免因为删除节点导致索引问题
+        for (int i = bendNodes.Count - 1; i > 0; i--)
+        {
+            Vector2 currentPos = bendNodes[i].position;
+            Vector2 prevPos = bendNodes[i-1].position;
+            
+            float distance = Vector2.Distance(currentPos, prevPos);
+            
+            // 如果两个节点之间的距离小于最小节点距离，移除其中一个
+            if (distance < minNodeDistance)
+            {
+                // 保留靠近钩点的节点（索引较小的节点），移除当前节点
+                bendNodes.RemoveAt(i);
+                
+                #if UNITY_EDITOR
+                Debug.LogFormat($"优化节点间距：移除了距离过近的节点（距离: {distance}，最小要求: {minNodeDistance}");
+                #endif
+            }
         }
     }
+    
+    // 新增方法：判断是否应该基于方向删除节点
+private bool ShouldRemoveNodeBasedOnDirection(BendNode node, Vector2 currentPlayerPos)
+{
+    // 如果方向信息未初始化，返回false
+    if (node.playerMovementDirection == Vector2.zero || node.directionToPlayer == Vector2.zero)
+        return false;
+
+    // 如果节点创建时间不足最小存活时间，不删除
+    if (Time.time - node.creationTime < minNodeLifetime)
+        return false;
+        
+    // 条件1：检查指向玩家的方向是否一致
+    Vector2 currentDirToPlayer = (currentPlayerPos - node.position).normalized;
+    float playerDirDot = Vector2.Dot(node.directionToPlayer, currentDirToPlayer);
+    bool playerDirConsistent = playerDirDot > directionDotThreshold; // 方向一致（点积接近1）
+
+    // 条件2：检查玩家移动方向是否相反
+    Vector2 currentPlayerMoveDir = ((Vector2)transform.position - previousPlayerPosition).normalized;
+    
+    // 如果当前几乎没有移动，则不满足条件2
+    if (currentPlayerMoveDir.sqrMagnitude < 0.001f)
+        return false;
+    
+    float moveDirDot = Vector2.Dot(node.playerMovementDirection, currentPlayerMoveDir);
+    bool moveDirOpposite = moveDirDot < -directionDotThreshold; // 方向相反（点积接近-1）
+    
+    // 在调试日志中输出两个条件的状态
+    #if UNITY_EDITOR
+    if (playerDirConsistent || moveDirOpposite)
+    {
+        Debug.LogFormat($"节点方向判断 - 指向玩家方向一致: {playerDirConsistent} (点积: {playerDirDot:F2}), " +
+                  $"移动方向相反: {moveDirOpposite} (点积: {moveDirDot:F2})");
+    }
+    // Debug.Break();
+    #endif
+    
+    // 两个条件都满足才返回true
+    return playerDirConsistent && moveDirOpposite;
 }
+
 
     
     private void CleanupInactiveNodes()
-{
-    if (bendNodes.Count == 0)
-        return;
-            
-    // 获取当前绳索路径
-    List<Vector2> ropePath = GetRopePath();
-    Vector2 playerPos = transform.TransformPoint(anchor);
-    Vector2 hookPos;
-    
-    if (connectedBody != null)
     {
-        hookPos = connectedBody.transform.TransformPoint(connectedAnchor);
-    }
-    else
-    {
-        hookPos = originalConnectedAnchor;
-    }
-    
-    // 检查是否可以完全移除所有弯折点 - 从OptimizeBendNodes合并过来
-    bool directPathToHook = !Physics2D.Linecast(playerPos, hookPos, obstacleLayer);
-    if (directPathToHook && bendNodes.Count > 0)
-    {
-        #if UNITY_EDITOR
-        Debug.Log("优化路径：移除所有弯折点，直接连接到钩点");
-        #endif
-        bendNodes.Clear();
-        ResetToOriginalConnection();
-        return;
-    }
-    
-    // 从玩家当前连接的节点开始向前查找 - 从OptimizeBendNodes合并
-    BendNode currentNode = FindClosestBendNode();
-    if (currentNode != null)
-    {
-        int currentIndex = bendNodes.IndexOf(currentNode);
-        if (currentIndex > 0) // 不是最靠近钩点的节点
-        {
-            // 尝试跳过当前节点，直接连接到前一个节点
-            for (int i = currentIndex - 1; i >= 0; i--)
-            {
-                BendNode targetNode = bendNodes[i];
+        if (bendNodes.Count == 0)
+            return;
                 
-                // 检查玩家到目标节点之间是否有障碍物
-                bool pathClear = !Physics2D.Linecast(playerPos, targetNode.position, obstacleLayer);
-                
-                if (pathClear)
-                {
-                    #if UNITY_EDITOR
-                    Debug.Log($"优化路径：删除节点 {i+1} 到 {currentIndex}");
-                    #endif
-                    
-                    // 删除中间的节点
-                    int removeCount = currentIndex - i;
-                    bendNodes.RemoveRange(i + 1, removeCount);
-                    
-                    // 更新物理连接到新的节点
-                    UpdateBendNodePhysics();
-                    break;
-                }
-            }
-        }
-    }
+        // 获取当前绳索路径
+        List<Vector2> ropePath = GetRopePath();
+        Vector2 playerPos = transform.TransformPoint(anchor);
+        Vector2 hookPos;
         
-    // 检查每个节点是否仍然需要
-    for (int i = bendNodes.Count - 1; i >= 0; i--)
-    {
-        BendNode node = bendNodes[i];
-            
-        // 确定节点前后的点
-        Vector2 prevPoint;
-        if (i == 0) 
+        if (connectedBody != null)
         {
-            // 如果是第一个节点，前一个点是连接点
-            if (connectedBody != null)
-            {
-                prevPoint = (Vector2)connectedBody.transform.TransformPoint(connectedAnchor);
-            }
-            else if (distanceJoint.enabled)
-            {
-                // 如果关节已启用但没有连接体，使用当前设置的连接点
-                prevPoint = connectedAnchor;
-            }
-            else
-            {
-                // 如果关节未启用，使用玩家当前位置
-                prevPoint = (Vector2)transform.position;
-            }
+            hookPos = connectedBody.transform.TransformPoint(connectedAnchor);
         }
         else
         {
-            prevPoint = bendNodes[i - 1].position;
+            hookPos = originalConnectedAnchor;
         }
-                
-        Vector2 nextPoint = i == bendNodes.Count - 1 ? 
-            (Vector2)transform.TransformPoint(anchor) : 
-            bendNodes[i + 1].position;
-                
-        // 检查节点是否仍在障碍物上
-        Collider2D coll = Physics2D.OverlapCircle(node.position, nodeRadius, obstacleLayer);
             
-        // 检查直线路径是否会穿过障碍物
-        bool directPathBlocked = Physics2D.Linecast(prevPoint, nextPoint, obstacleLayer);
-            
-        // 如果节点不再需要，移除它
-        if (coll == null || !directPathBlocked)
+        // 检查每个节点是否仍然需要
+        for (int i = bendNodes.Count - 1; i >= 0; i--)
         {
-            // 使用平滑过渡，而不是立即移除
-            float nodeLifetime = Time.time - node.creationTime;
-            if (nodeLifetime > 0.5f) // 给节点一些存在时间，防止抖动
-            {
-                bendNodes.RemoveAt(i);
-            }
-        }
-    }
-}
-
-
-    // 新增方法：更新弯折点的物理交互
-    private void UpdateBendNodePhysics()
-{
-    if (bendNodes.Count == 0)
-    {
-        // 如果没有弯折点，恢复原始连接
-        ResetToOriginalConnection();
-        return;
-    }
-    
-    // 处理所有弯折点，检查是否在障碍物内部，如果是则向外推
-    for (int i = 0; i < bendNodes.Count; i++)
-    {
-        BendNode node = bendNodes[i];
-        
-        // 检查节点是否在障碍物内部
-        Collider2D[] colliders = Physics2D.OverlapCircleAll(node.position, nodeRadius, obstacleLayer);
-        foreach (var collider in colliders)
-        {
-            // 获取最近的表面点
-            Vector2 surfacePoint = collider.ClosestPoint(node.position);
-            
-            // 如果节点在碰撞体内部，最近的表面点会不同于节点位置
-            if ((surfacePoint - node.position).sqrMagnitude > 0.001f)
-            {
-                // 计算从碰撞体中心到节点的方向（用于向外推）
-                Vector2 pushDirection;
+            BendNode node = bendNodes[i];
                 
-                // 如果有法线信息，优先使用法线方向
-                if (node.normal != Vector2.zero)
+            // 确定节点前后的点
+            Vector2 prevPoint;
+            if (i == 0) 
+            {
+                // 如果是第一个节点，前一个点是连接点
+                if (connectedBody != null)
                 {
-                    pushDirection = node.normal;
+                    prevPoint = (Vector2)connectedBody.transform.TransformPoint(connectedAnchor);
+                }
+                else if (distanceJoint.enabled)
+                {
+                    // 如果关节已启用但没有连接体，使用当前设置的连接点
+                    prevPoint = connectedAnchor;
                 }
                 else
                 {
-                    // 否则使用从节点到表面点的方向
-                    pushDirection = (surfacePoint - node.position).normalized;
+                    // 如果关节未启用，使用玩家当前位置
+                    prevPoint = (Vector2)transform.position;
                 }
+            }
+            else
+            {
+                prevPoint = bendNodes[i - 1].position;
+            }
+                    
+            Vector2 nextPoint = i == bendNodes.Count - 1 ? 
+                (Vector2)transform.TransformPoint(anchor) : 
+                bendNodes[i + 1].position;
+                    
+            // 检查节点是否仍在障碍物上
+            Collider2D coll = Physics2D.OverlapCircle(node.position, nodeRadius, obstacleLayer);
                 
-                // 计算需要推动的距离（至少是节点半径）
-                float pushDistance = nodeRadius + 0.05f; // 添加一点额外距离避免卡在边缘
+            // 检查直线路径是否会穿过障碍物
+            bool directPathBlocked = Physics2D.Linecast(prevPoint, nextPoint, obstacleLayer);
                 
-                // 更新节点位置，将其推到障碍物外部
-                Vector2 newPosition = surfacePoint + pushDirection * pushDistance;
+            // 新增：基于方向判断是否应该删除节点
+            bool directionIndicatesRemoval = ShouldRemoveNodeBasedOnDirection(node, playerPos);
                 
-                #if UNITY_EDITOR
-                Debug.Log($"弯折点在障碍物内部，将其向外推: 从 {node.position} 到 {newPosition}");
-                #endif
-                
-                // 更新节点位置
-                node.position = newPosition;
-                
-                // 更新法线方向
-                node.normal = pushDirection;
-                
-                // 如果这是当前活动节点，也更新代理对象的位置
-                if (node.isActive && bendNodeProxy != null)
+            // 如果节点不再需要，移除它
+            if (coll == null || !directPathBlocked || directionIndicatesRemoval)
+            {
+                // 使用平滑过渡，而不是立即移除
+                float nodeLifetime = Time.time - node.creationTime;
+                if (nodeLifetime > 0.25f) // 给节点一些存在时间，防止抖动
                 {
-                    bendNodeProxy.transform.position = newPosition;
+                    #if UNITY_EDITOR
+                    if (directionIndicatesRemoval)
+                        Debug.LogFormat($"基于方向判断移除节点 {i}");
+                    #endif
+                    
+                    bendNodes.RemoveAt(i);
                 }
             }
         }
     }
+
+    // 更新弯折点的物理交互
+private void UpdateBendNodePhysics()
+{
+    if (bendNodes.Count == 0)
+    {
+        return;
+    }
     
-    // 找到离玩家最近的弯折点
-    BendNode closestNode = FindClosestBendNode();
-    if (closestNode != null)
+    // 遍历5次，确保所有节点都被正确推出障碍物
+    for (int iteration = 0; iteration < 5; iteration++)
+    {
+        bool anyNodeAdjusted = false;
+        
+        // 处理所有弯折点，检查是否在障碍物内部，如果是则向外推
+        for (int i = 0; i < bendNodes.Count; i++)
+        {
+            BendNode node = bendNodes[i];
+            
+            // 检查节点是否在障碍物内部
+            Collider2D[] colliders = Physics2D.OverlapCircleAll(node.position, nodeRadius, obstacleLayer);
+            foreach (var collider in colliders)
+            {
+                // 获取最近的表面点
+                Vector2 surfacePoint = collider.ClosestPoint(node.position);
+                
+                // 如果节点在碰撞体内部，最近的表面点会不同于节点位置
+                if ((surfacePoint - node.position).sqrMagnitude > 0.001f)
+                {
+                    // 计算从碰撞体中心到节点的方向（用于向外推）
+                    Vector2 pushDirection;
+                    
+                    // 如果有法线信息，优先使用法线方向
+                    if (node.normal != Vector2.zero)
+                    {
+                        pushDirection = node.normal;
+                    }
+                    else
+                    {
+                        // 否则使用从节点到表面点的方向
+                        pushDirection = (surfacePoint - node.position).normalized;
+                    }
+                    
+                    // 计算需要推动的距离（至少是节点半径）
+                    float pushDistance = nodeRadius + 0.2f; // 添加一点额外距离避免卡在边缘
+                    
+                    // 更新节点位置，将其推到障碍物外部
+                    Vector2 newPosition = surfacePoint + pushDirection * pushDistance;
+                    
+                    #if UNITY_EDITOR
+                    Debug.LogFormat($"弯折点在障碍物内部，将其向外推: 从 {node.position} 到 {newPosition}，全局迭代次数: {iteration+1}");
+                    #endif
+                    
+                    // 更新节点位置
+                    node.position = newPosition;
+                    
+                    // 更新法线方向
+                    node.normal = pushDirection;
+                    
+                    // 如果这是当前活动节点，也更新代理对象的位置
+                    if (node.isActive && bendNodeProxy != null)
+                    {
+                        bendNodeProxy.transform.position = newPosition;
+                    }
+                    
+                    anyNodeAdjusted = true;
+                    break; // 一次只处理一个碰撞体
+                }
+            }
+        }
+        
+        // 如果这次迭代没有调整任何节点位置，说明所有节点已经不在任何障碍物内部，可以提前退出循环
+        if (!anyNodeAdjusted)
+        {
+            #if UNITY_EDITOR
+            if (iteration > 0)
+                Debug.LogFormat($"所有节点已调整完毕，共迭代 {iteration+1} 次");
+            #endif
+            break;
+        }
+    }
+    
+    // 找到最新的弯折点
+    BendNode newestNode = GetNewestBendNode();
+    if (newestNode != null)
     {
         // 更新代理对象的位置
-        bendNodeProxy.transform.position = closestNode.position;
+        bendNodeProxy.transform.position = newestNode.position;
         
         // 确保代理对象激活
         if (!bendNodeProxy.activeSelf)
@@ -501,23 +649,44 @@ private void OptimizeNodeSpacing()
             distanceJoint.connectedBody = bendNodeRigidbody;
             distanceJoint.connectedAnchor = Vector2.zero; // 代理对象的中心点
             
-            // 更新距离为玩家到最近弯折点的距离
-            float newDistance = Vector2.Distance(transform.TransformPoint(anchor), closestNode.position);
+            // 更新距离为玩家到最新弯折点的距离
+            float newDistance = Vector2.Distance(transform.TransformPoint(anchor), newestNode.position);
             distanceJoint.distance = newDistance;
         }
         
-        closestNode.isActive = true;
+        newestNode.isActive = true;
         
         // 将其他节点标记为非活动
         foreach (var node in bendNodes)
         {
-            if (node != closestNode)
+            if (node != newestNode)
                 node.isActive = false;
         }
     }
 }
 
 
+    // 获取最新生成的弯折点
+    private BendNode GetNewestBendNode()
+    {
+        if (bendNodes.Count == 0)
+            return null;
+            
+        // 找到创建时间最新的节点
+        BendNode newest = bendNodes[0];
+        float newestTime = newest.creationTime;
+        
+        foreach (var node in bendNodes)
+        {
+            if (node.creationTime > newestTime)
+            {
+                newestTime = node.creationTime;
+                newest = node;
+            }
+        }
+        
+        return newest;
+    }
     
     // 新增方法：找到离玩家最近的弯折点
     private BendNode FindClosestBendNode()
@@ -542,8 +711,7 @@ private void OptimizeNodeSpacing()
         return closest;
     }
 
-    
-    // 新增方法：重置为原始连接
+    // 重置为原始连接
     private void ResetToOriginalConnection()
     {
         if (bendNodeProxy != null)
@@ -563,6 +731,7 @@ private void OptimizeNodeSpacing()
             distanceJoint.distance = Vector2.Distance(anchorWorldPos, connectedWorldPos);
         }
     }
+
     
     // 公共方法，用于获取绳索路径
     public List<Vector2> GetRopePath()
@@ -742,6 +911,57 @@ private void OptimizeNodeSpacing()
                 // 绘制法线方向
                 Gizmos.color = Color.cyan;
                 Gizmos.DrawRay(node.position, node.normal * 0.5f);
+                
+                // 新增：绘制存储的方向向量
+                if (showDirectionVectors)
+                {
+                    // 绘制指向前一个节点的方向 - 使用橙色
+                    if (node.directionToPrevNode != Vector2.zero)
+                    {
+                        Gizmos.color = new Color(1f, 0.5f, 0f); // 橙色
+                        Gizmos.DrawRay(node.position, node.directionToPrevNode * 0.4f);
+                    }
+                    
+                    // 绘制创建时指向玩家的方向 - 使用紫色
+                    if (node.directionToPlayer != Vector2.zero)
+                    {
+                        Gizmos.color = new Color(0.8f, 0f, 1f); // 紫色
+                        Gizmos.DrawRay(node.position, node.directionToPlayer * 0.4f);
+                        
+                        // 绘制当前玩家与节点之间的方向 - 使用深蓝色
+                        Vector2 playerPos = transform.TransformPoint(anchor);
+                        Vector2 currentDirToPlayer = (playerPos - node.position).normalized;
+                        Gizmos.color = new Color(0f, 0f, 0.8f); // 深蓝色
+                        Gizmos.DrawRay(node.position, currentDirToPlayer * 0.4f);
+                        
+                        // 条件1：检查指向玩家的方向是否一致
+                        float playerDirDot = Vector2.Dot(node.directionToPlayer, currentDirToPlayer);
+                        bool playerDirConsistent = playerDirDot > directionDotThreshold;
+                        
+                        // 绘制创建时的玩家移动方向 - 使用绿色
+                        Gizmos.color = Color.green;
+                        Gizmos.DrawRay(node.position, node.playerMovementDirection * 0.4f);
+                        
+                        // 绘制当前玩家移动方向 - 使用红色
+                        Vector2 currentPlayerMoveDir = ((Vector2)transform.position - previousPlayerPosition).normalized;
+                        if (currentPlayerMoveDir.sqrMagnitude > 0.001f)
+                        {
+                            Gizmos.color = Color.red;
+                            Gizmos.DrawRay(node.position, currentPlayerMoveDir * 0.4f);
+                            
+                            // 条件2：检查玩家移动方向是否相反
+                            float moveDirDot = Vector2.Dot(node.playerMovementDirection, currentPlayerMoveDir);
+                            bool moveDirOpposite = moveDirDot < -directionDotThreshold;
+                            
+                            // 如果两个条件都满足，用特殊颜色标记
+                            if (playerDirConsistent && moveDirOpposite)
+                            {
+                                Gizmos.color = Color.yellow;
+                                Gizmos.DrawWireSphere(node.position, nodeRadius * 1.5f);
+                            }
+                        }
+                    }
+                }
             }
                 
             // 绘制绳索路径
@@ -799,7 +1019,7 @@ private void OptimizeNodeSpacing()
                             
                             // 绘制碰撞法线
                             Gizmos.color = Color.magenta;
-                            Gizmos.DrawRay(hit.point, hit.normal * 0.5f);
+                            Gizmos.DrawRay(hit.point, hit.normal * 1f);
                         }
                     }
                 }
@@ -854,4 +1074,5 @@ private void OptimizeNodeSpacing()
             }
         }
     }
+
 }
