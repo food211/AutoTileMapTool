@@ -17,9 +17,6 @@ public class RopeSystem : MonoBehaviour
     
     [Header("碰撞检测")]
     [SerializeField] private LayerMask hookableLayers; // 可以被钩住的层
-    private LayerMask obstacleLayers => hookableLayers; // 障碍物层，用于弯折检测
-    [SerializeField] private float ropeFrequency = 1f; // 绳索弹性频率
-    [SerializeField] private float ropeDampingRatio = 0.5f; // 绳索阻尼比率
     
     // 内部变量
     private bool isShooting = false;
@@ -211,8 +208,6 @@ public class RopeSystem : MonoBehaviour
             // 设置弹簧关节 - 使用新的公共方法
             flexibleJoint.SetConnectedAnchor(hookPosition);
             flexibleJoint.SetDistance(currentRopeLength);
-            flexibleJoint.dampingRatio = ropeDampingRatio;
-            flexibleJoint.frequency = ropeFrequency;
             flexibleJoint.ReconfigureJoint();
             // 注意：不要在这里启用关节，而是在EnterRopeMode中启用
             

@@ -502,8 +502,6 @@ MonoBehaviour:
   hookableLayers:
     serializedVersion: 2
     m_Bits: 8
-  ropeFrequency: 1
-  ropeDampingRatio: 0.5
 --- !u!1 &632326470
 GameObject:
   m_ObjectHideFlags: 0
@@ -1557,27 +1555,25 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   connectedBody: {fileID: 0}
-  anchor: {x: 0, y: 0}
-  connectedAnchor: {x: 0, y: 0}
   autoConfigureDistance: 1
   distance: 1
   maxDistanceOnly: 0
-  dampingRatio: 0.5
-  frequency: 1
-  breakAction: 1
+  anchor: {x: 0, y: 0}
+  connectedAnchor: {x: 0, y: 0}
   breakForce: Infinity
   breakTorque: Infinity
+  breakAction: 1
   enableBending: 1
   obstacleLayer:
     serializedVersion: 2
     m_Bits: 8
-  bendingDetectionRadius: 0.1
-  minNodeDistance: 0.15
+  bendingDetectionRadius: 0.3
+  minNodeDistance: 0.25
   maxNodes: 60
   nodeRadius: 0.1
   directionDotThreshold: 0.96
   minNodeCreationInterval: 0.1
-  minNodeLifetime: 0.5
+  minNodeLifetime: 0.1
   showGizmos: 1
   ropeColor: {r: 1, g: 1, b: 1, a: 1}
   showDirectionVectors: 1
