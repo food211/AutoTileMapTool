@@ -1,5 +1,4 @@
 using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
 
 public class PlayerController : MonoBehaviour
@@ -7,6 +6,7 @@ public class PlayerController : MonoBehaviour
     [Header("移动设置")]
     [SerializeField] private float moveSpeed = 5f;
     [SerializeField] private float jumpForce = 10f;
+    private bool CanInput = true;
     
     [Header("钩索设置")]
     [SerializeField] private Transform aimIndicator;
@@ -15,6 +15,7 @@ public class PlayerController : MonoBehaviour
     
     [Header("引用")]
     [SerializeField] private RopeSystem ropeSystem;
+    [SerializeField] private StatusManager statusManager; // 添加对StatusManager的引用
     [SerializeField] private float swingForce = 5f;
     [SerializeField] private float maxSwingSpeed = 80f; // 调整这个值来设置最大速度
     
@@ -33,15 +34,28 @@ public class PlayerController : MonoBehaviour
     [SerializeField] private Vector2 headCheckSize = new Vector2(0.9f, 0.1f); // 头部检测区域的大小
     [SerializeField] private Vector2 headCheckOffset = new Vector2(0f, 0.5f); // 头部检测区域的偏移量
     [SerializeField] private bool showHeadCheck = true; // 是否在编辑器中显示头部检测区域
+
+    [Header("免疫设置")]
+    [SerializeField] private bool isInvincible = false;    // 无敌状态
+    [SerializeField] private bool isIceImmune = false;     // 冰免疫
+    [SerializeField] private bool isFireImmune = false;    // 火免疫
+    [SerializeField] private bool isElectricImmune = false; // 电免疫
+
+    [Header("免疫视觉效果")]
+    [SerializeField] private GameObject invincibleEffect;  // 无敌特效
+    [SerializeField] private Color invincibleTint = new Color(1f, 1f, 1f, 0.7f); // 无敌时的颜色
+    private SpriteRenderer playerRenderer;
+    private Color originalColor;
     
     // 内部变量
     private Rigidbody2D rb;
     private float aimAngle = 0f;
     private bool isGrounded = false;
     private bool isRopeMode = false;
+    private bool CanShootRope = true;
     private Collider2D playerCollider;
     private DistanceJoint2D distanceJoint;
-    
+    #region Unity methods
     private void Awake()
     {
         isRopeMode = false;
@@ -50,6 +64,20 @@ public class PlayerController : MonoBehaviour
         if (ropeSystem == null)
             ropeSystem = GetComponentInChildren<RopeSystem>();
         
+        if (statusManager == null)
+            statusManager = GetComponentInChildren<StatusManager>();
+        
+        // 获取SpriteRenderer组件
+        playerRenderer = GetComponent<SpriteRenderer>();
+        if (playerRenderer != null)
+        {
+            originalColor = playerRenderer.color;
+        }
+        // 确保无敌特效初始状态为关闭
+        if (invincibleEffect != null)
+        {
+            invincibleEffect.SetActive(false);
+        }
         // 保存原始物理材质
         originalMaterial = rb.sharedMaterial;
         
@@ -82,15 +110,26 @@ public class PlayerController : MonoBehaviour
         }
     }
 
-
+#endregion
+#region check head&ground collision
+    public bool wasGrounded;
     // 新的地面检测方法
     // 修改PlayerController.cs中的CheckGrounded方法
     private void CheckGrounded()
     {
+        // 保存上一帧的着地状态
+        wasGrounded = isGrounded;
+        
         // 原有的地面检测逻辑
         bool isYVelocityInRange = rb.velocity.y >= maxFallingSpeed && rb.velocity.y <= 0;
         bool isGroundDetected = CheckGroundCollision();
         isGrounded = isYVelocityInRange && isGroundDetected;
+        
+        // 如果着地状态发生变化，触发事件
+        if (wasGrounded != isGrounded)
+        {
+            GameEvents.TriggerPlayerGroundedStateChanged(isGrounded);
+        }
     }
 
 // 添加辅助方法用于旋转点
@@ -242,9 +281,13 @@ public class PlayerController : MonoBehaviour
             return colliders.Length > 0;
         }
     }
-    
+    #endregion
+    #region handle Input
     private void HandleNormalMode()
     {
+        if(!CanInput)
+        return;
+        
         // 检查绳索是否正在发射或已钩住
         bool isRopeBusy = ropeSystem.IsRopeShootingOrHooked();
         
@@ -313,7 +356,7 @@ public class PlayerController : MonoBehaviour
         }
         
         // 发射钩索 - 只在绳索未发射时
-        if (Input.GetKeyDown(KeyCode.Space) && !isRopeBusy)
+        if (Input.GetKeyDown(KeyCode.Space) && !isRopeBusy && CanShootRope)
         {
             Vector2 direction = aimIndicator.right * (aimIndicator.localScale.x > 0 ? 1 : -1);
             ropeSystem.ShootRope(direction);
@@ -322,6 +365,9 @@ public class PlayerController : MonoBehaviour
     
     private void HandleRopeMode()
     {
+        if(!CanInput)
+        return;
+
         // 左右摆动
         if (Input.GetKey(KeyCode.LeftArrow))
         {
@@ -353,7 +399,7 @@ public class PlayerController : MonoBehaviour
         // 限制最大速度
         LimitMaxVelocity();
     }
-    
+    #endregion
     // 限制最大速度的方法
     private void LimitMaxVelocity()
     {
@@ -408,7 +454,7 @@ public class PlayerController : MonoBehaviour
         }
     }
     
-    private void UseItem()
+    public void UseItem()
     {
         #if UNITY_EDITOR
         // 道具使用逻辑 - 使用0GC方式
@@ -436,4 +482,219 @@ public class PlayerController : MonoBehaviour
     {
         return distanceJoint;
     }
+#region OnCollision
+    // 碰撞检测
+private void OnCollisionEnter2D(Collision2D collision)
+{
+    // 如果处于无敌状态，直接返回
+    if (isInvincible) return;
+    
+    // 检查是否碰到冰面
+    if (collision.gameObject.CompareTag("Ice") && !isIceImmune)
+    {
+        GameEvents.TriggerPlayerStateChanged(GameEvents.PlayerState.Frozen);
+    }
+    // 检查是否碰到火焰
+    else if (collision.gameObject.CompareTag("Fire") && !isFireImmune)
+    {
+        GameEvents.TriggerPlayerStateChanged(GameEvents.PlayerState.Burning);
+    }
+    // 是否被电击
+    else if (collision.gameObject.CompareTag("Electric") && !isElectricImmune)
+    {
+        GameEvents.TriggerPlayerStateChanged(GameEvents.PlayerState.Electrified);
+    }
+}
+
+public void CheckPredictiveElementalCollision(Vector2 currentPos, Vector2 predictedPos, LayerMask collisionLayers)
+{
+    // 如果处于无敌状态，直接返回
+    if (isInvincible) return;
+    
+    // 创建射线，从当前位置到预测位置
+    RaycastHit2D hit = Physics2D.Linecast(currentPos, predictedPos, collisionLayers);
+    
+    // 如果检测到碰撞
+    if (hit.collider != null)
+    {
+        // 检查碰撞物体的标签
+        string hitTag = hit.collider.tag;
+        
+        // 根据标签触发相应状态
+        if (hitTag == "Ice" && !isIceImmune)
+        {
+            GameEvents.TriggerPlayerStateChanged(GameEvents.PlayerState.Frozen);
+        }
+        else if (hitTag == "Fire" && !isFireImmune)
+        {
+            GameEvents.TriggerPlayerStateChanged(GameEvents.PlayerState.Burning);
+        }
+        else if (hitTag == "Electric" && !isElectricImmune)
+        {
+            GameEvents.TriggerPlayerStateChanged(GameEvents.PlayerState.Electrified);
+        }
+    }
+}
+
+#endregion
+    public void SetPlayerInput(bool canInput)
+    {
+        CanInput = canInput;
+    }
+    public void SetCanShootRope(bool canShootRope)
+    {
+        CanShootRope = canShootRope;
+    }
+
+    // 添加这些公共方法
+#region 免疫控制方法
+
+/// 设置无敌状态
+
+public void SetInvincible(bool invincible, float duration = 0f)
+{
+    isInvincible = invincible;
+    
+    // 应用无敌视觉效果
+    if (playerRenderer != null)
+    {
+        playerRenderer.color = invincible ? invincibleTint : originalColor;
+    }
+    
+    // 激活/关闭无敌特效
+    if (invincibleEffect != null)
+    {
+        invincibleEffect.SetActive(invincible);
+    }
+    
+    // 如果设置了持续时间，启动协程
+    if (invincible && duration > 0f)
+    {
+        StartCoroutine(DisableInvincibleAfterDelay(duration));
+    }
+}
+
+    /// 设置冰免疫
+    
+    public void SetIceImmunity(bool immune, float duration = 0f)
+    {
+        isIceImmune = immune;
+        
+        // 如果设置了持续时间，启动协程
+        if (immune && duration > 0f)
+        {
+            StartCoroutine(DisableIceImmunityAfterDelay(duration));
+        }
+    }
+
+    
+    /// 设置火免疫
+    
+    public void SetFireImmunity(bool immune, float duration = 0f)
+    {
+        isFireImmune = immune;
+        
+        // 如果设置了持续时间，启动协程
+        if (immune && duration > 0f)
+        {
+            StartCoroutine(DisableFireImmunityAfterDelay(duration));
+        }
+    }
+
+    
+    /// 设置电免疫
+    
+    public void SetElectricImmunity(bool immune, float duration = 0f)
+    {
+        isElectricImmune = immune;
+        
+        // 如果设置了持续时间，启动协程
+        if (immune && duration > 0f)
+        {
+            StartCoroutine(DisableElectricImmunityAfterDelay(duration));
+        }
+    }
+
+    
+    /// 设置全元素免疫（但不是无敌）
+    
+    public void SetAllElementalImmunity(bool immune, float duration = 0f)
+    {
+        isIceImmune = immune;
+        isFireImmune = immune;
+        isElectricImmune = immune;
+        
+        // 如果设置了持续时间，启动协程
+        if (immune && duration > 0f)
+        {
+            StartCoroutine(DisableAllElementalImmunityAfterDelay(duration));
+        }
+    }
+
+    
+    /// 获取无敌状态
+    
+    public bool IsInvincible()
+    {
+        return isInvincible;
+    }
+
+    
+    /// 获取冰免疫状态
+    
+    public bool IsIceImmune()
+    {
+        return isIceImmune || isInvincible; // 无敌状态也包含冰免疫
+    }
+
+    
+    /// 获取火免疫状态
+    
+    public bool IsFireImmune()
+    {
+        return isFireImmune || isInvincible; // 无敌状态也包含火免疫
+    }
+
+    
+    /// 获取电免疫状态
+    
+    public bool IsElectricImmune()
+    {
+        return isElectricImmune || isInvincible; // 无敌状态也包含电免疫
+    }
+    #endregion
+
+    #region 免疫协程
+    private IEnumerator DisableInvincibleAfterDelay(float delay)
+    {
+        yield return new WaitForSeconds(delay);
+        SetInvincible(false);
+    }
+
+    private IEnumerator DisableIceImmunityAfterDelay(float delay)
+    {
+        yield return new WaitForSeconds(delay);
+        isIceImmune = false;
+    }
+
+    private IEnumerator DisableFireImmunityAfterDelay(float delay)
+    {
+        yield return new WaitForSeconds(delay);
+        isFireImmune = false;
+    }
+
+    private IEnumerator DisableElectricImmunityAfterDelay(float delay)
+    {
+        yield return new WaitForSeconds(delay);
+        isElectricImmune = false;
+    }
+
+    private IEnumerator DisableAllElementalImmunityAfterDelay(float delay)
+    {
+        yield return new WaitForSeconds(delay);
+        isIceImmune = false;
+        isFireImmune = false;
+        isElectricImmune = false;
+    }
+    #endregion
 }

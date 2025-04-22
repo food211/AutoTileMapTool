@@ -14,13 +14,14 @@ public class RopeSystem : MonoBehaviour
     [SerializeField] private float minRopeLength = 1f;
     [SerializeField] private float maxRopeLength = 100f;
     [SerializeField] private float ropeShootSpeed = 50f; // 发射速度
+    private Color originalRopeColor;
     
     [Header("碰撞检测")]
     [SerializeField] private LayerMask hookableLayers; // 可以被钩住的层
     [SerializeField] private float linecastOffset = 0.1f; // 增加偏移量，从0.01f改为0.1f
     [SerializeField] private float anchorSafetyCheck = 0.15f; // 锚点安全检查距离
     [SerializeField] private int swingCollisionSteps = 25;
-    
+
     
     // 内部变量
     private bool isShooting = false;
@@ -34,7 +35,11 @@ public class RopeSystem : MonoBehaviour
     private SpriteRenderer arrowRenderer;
     private bool isFacingLeft = false; // 玩家朝向
     
-    
+    // 当前钩中的物体标签
+    private string currentHookTag = "";
+    // 特效协程引用
+    private Coroutine currentEffectCoroutine = null;
+
     // 绳索弯曲相关
     private List<Vector2> anchors = new List<Vector2>();
     private float combinedAnchorLen = 0f;
@@ -59,7 +64,10 @@ public class RopeSystem : MonoBehaviour
             distanceJoint.autoConfigureDistance = false;
             distanceJoint.enableCollision = true;
         }
-        
+
+        // 保存原始绳索颜色
+        originalRopeColor = lineRenderer.startColor;
+
         // 初始化线渲染器
         lineRenderer.positionCount = 2;
         lineRenderer.enabled = false;
@@ -142,6 +150,14 @@ private void PredictiveCollisionCheck(Vector2 fromPos, Vector2 toPos)
         
         // 检查从当前检测点到所有锚点的路径是否有障碍物
         CheckPointToAnchors(checkPoint);
+
+        // 添加元素碰撞检测 - 调用PlayerController的预测性碰撞检测
+        if (i > 1) // 跳过第一个点，因为它太接近当前位置
+        {
+            float prevProgress = (float)(i-1) / dynamicSteps;
+            Vector2 prevPoint = fromPos + movementVector * prevProgress;
+            playerController.CheckPredictiveElementalCollision(prevPoint, checkPoint, hookableLayers);
+        }
     }
 }
 
@@ -151,6 +167,12 @@ private void CheckPointToAnchors(Vector2 checkPoint)
     RaycastHit2D hit = Physics2D.Linecast(checkPoint, anchors[0], hookableLayers);
     if (hit && Vector2.Distance(hit.point, anchors[0]) > anchorSafetyCheck)
     {
+        // 获取碰撞物体的标签
+        string hitTag = hit.collider.tag;
+        
+        // 处理特殊物体标签效果
+        HandleHookTagEffect(hitTag);
+        
         // 计算更安全的锚点位置
         Vector2 safeAnchorPoint = hit.point + (hit.normal.normalized * linecastOffset);
         
@@ -199,6 +221,8 @@ private void CheckPointToAnchors(Vector2 checkPoint)
         
         // 显示箭头并设置初始位置
         ShowArrow(playerController.transform.position);
+
+        GameEvents.TriggerRopeShoot();
     }
     
     // 显示箭头
@@ -270,14 +294,28 @@ private void CheckPointToAnchors(Vector2 checkPoint)
         
         if (hit.collider != null)
         {
+            // 获取碰撞物体的标签
+            string hitTag = hit.collider.tag;
+            // 检查是否为不可钩住的物体
+            if (hitTag == "NotHookable")
+            {
+                // 绳索弹回效果
+                ReleaseRope();
+                // 可以添加弹回的视觉或音效
+                GameEvents.TriggerHookFail();
+                return;
+            }
             // 计算更安全的锚点位置，沿法线方向偏移
             Vector2 safeAnchorPoint = hit.point + (hit.normal.normalized * linecastOffset);
             
-            // 绳索已钩住物体 - 使用Layer而不是Tag来判断
+            // 绳索已钩住物体
             hookPosition = safeAnchorPoint;
             isHooked = true;
             isShooting = false;
             
+            // 保存当前钩中的物体标签
+            currentHookTag = hitTag;
+
             // 添加第一个锚点
             AddAnchor(safeAnchorPoint);
             
@@ -289,9 +327,58 @@ private void CheckPointToAnchors(Vector2 checkPoint)
             
             // 通知玩家控制器进入绳索模式
             playerController.EnterRopeMode();
+            // 触发绳索钩住事件
+            GameEvents.TriggerRopeHooked(hookPosition);
+            HandleHookTagEffect(hitTag);
         }
     }
     
+// 处理不同标签的钩索效果
+    private void HandleHookTagEffect(string tag)
+    {
+        // 停止之前的效果协程（如果有）
+        if (currentEffectCoroutine != null)
+        {
+            StopCoroutine(currentEffectCoroutine);
+            currentEffectCoroutine = null;
+        }
+        
+        // 根据标签设置不同的效果
+        switch (tag)
+        {
+            case "Ice":
+                #if UNITY_EDITOR
+                Debug.LogFormat("钩中冰面: 玩家被冻结");
+                #endif
+                // 触发冰冻状态
+                GameEvents.TriggerPlayerStateChanged(GameEvents.PlayerState.Frozen);
+                break;
+                
+            case "Fire":
+                #if UNITY_EDITOR
+                Debug.LogFormat("钩中火焰: 绳索逐渐烧断");
+                #endif
+                // 触发燃烧状态
+                GameEvents.TriggerPlayerStateChanged(GameEvents.PlayerState.Burning);
+                break;
+                
+            case "Elect":
+                #if UNITY_EDITOR
+                Debug.LogFormat("钩中带电物体: 玩家被电击");
+                #endif
+                // 触发电击状态
+                GameEvents.TriggerPlayerStateChanged(GameEvents.PlayerState.Electrified);
+                break;
+                
+            case "Ground":
+            case "Hookable":
+            default:
+                // 默认摆动状态
+                GameEvents.TriggerPlayerStateChanged(GameEvents.PlayerState.Swinging);
+                break;
+        }
+    }
+
     // 更新已钩住状态
     private void UpdateRopeHooked()
     {
@@ -309,74 +396,80 @@ private void CheckPointToAnchors(Vector2 checkPoint)
     }
     
     private void RopeJointManager()
+{
+    // 检查从玩家到最近锚点的线检测
+    if (anchors.Count > 0)
     {
-        // 检查从玩家到最近锚点的线检测
-        if (anchors.Count > 0)
+        // 获取玩家位置
+        Vector2 playerPos = playerController.transform.position;
+        
+        // 检查是否需要添加新的锚点 - 使用Layer而不是Tag
+        RaycastHit2D hit = Physics2D.Linecast(playerPos, anchors[0], hookableLayers);
+        if (hit)
         {
-            // 获取玩家位置
-            Vector2 playerPos = playerController.transform.position;
+            // 获取碰撞物体的标签
+            string hitTag = hit.collider.tag;
             
-            // 检查是否需要添加新的锚点 - 使用Layer而不是Tag
-            RaycastHit2D hit = Physics2D.Linecast(playerPos, anchors[0], hookableLayers);
-            if (hit)
+            // 处理特殊物体标签效果
+            HandleHookTagEffect(hitTag);
+            
+            // 计算更安全的锚点位置
+            Vector2 safeAnchorPoint = hit.point + (hit.normal.normalized * linecastOffset);
+            
+            // 检查新锚点是否与现有锚点距离足够远，避免重复添加
+            if (Vector2.Distance(safeAnchorPoint, anchors[0]) > anchorSafetyCheck)
             {
-                // 计算更安全的锚点位置
-                Vector2 safeAnchorPoint = hit.point + (hit.normal.normalized * linecastOffset);
+                // 确保从玩家到新锚点的路径是通畅的
+                Vector2 dirToAnchor = (safeAnchorPoint - playerPos).normalized;
+                float distToAnchor = Vector2.Distance(playerPos, safeAnchorPoint);
                 
-                // 检查新锚点是否与现有锚点距离足够远，避免重复添加
-                if (Vector2.Distance(safeAnchorPoint, anchors[0]) > anchorSafetyCheck)
+                // 从玩家位置向新锚点方向稍微偏移一点，避免自身碰撞检测
+                Vector2 offsetStart = playerPos + dirToAnchor * 0.2f;
+                
+                // 再次检查从偏移起点到新锚点是否有障碍物
+                RaycastHit2D safetyCheck = Physics2D.Linecast(offsetStart, safeAnchorPoint, hookableLayers);
+                
+                // 如果没有障碍物或障碍物就是目标点，则添加锚点
+                if (!safetyCheck || Vector2.Distance(safetyCheck.point, safeAnchorPoint) < 0.1f)
                 {
-                    // 确保从玩家到新锚点的路径是通畅的
-                    Vector2 dirToAnchor = (safeAnchorPoint - playerPos).normalized;
-                    float distToAnchor = Vector2.Distance(playerPos, safeAnchorPoint);
-                    
-                    // 从玩家位置向新锚点方向稍微偏移一点，避免自身碰撞检测
-                    Vector2 offsetStart = playerPos + dirToAnchor * 0.2f;
-                    
-                    // 再次检查从偏移起点到新锚点是否有障碍物
-                    RaycastHit2D safetyCheck = Physics2D.Linecast(offsetStart, safeAnchorPoint, hookableLayers);
-                    
-                    // 如果没有障碍物或障碍物就是目标点，则添加锚点
-                    if (!safetyCheck || Vector2.Distance(safetyCheck.point, safeAnchorPoint) < 0.1f)
-                    {
-                        AddAnchor(safeAnchorPoint);
-                    }
+                    AddAnchor(safeAnchorPoint);
                 }
             }
+        }
+        
+        // 检查是否可以移除锚点
+        if (anchors.Count > 1)
+        {
+            // 计算玩家到第一个锚点的向量
+            Vector2 playerToFirstAnchor = (anchors[0] - playerPos).normalized;
+            // 计算第一个锚点到第二个锚点的向量
+            Vector2 firstToSecondAnchor = (anchors[1] - anchors[0]).normalized;
             
-            // 检查是否可以移除锚点
-            if (anchors.Count > 1)
+            // 计算两个向量的点积，用于判断夹角
+            float dotProduct = Vector2.Dot(playerToFirstAnchor, firstToSecondAnchor);
+            
+            // 点积接近-1表示两个向量方向几乎相反，即角度接近180度
+            // 这表明玩家-锚点1-锚点2几乎在一条直线上，可以移除第一个锚点
+            if (dotProduct < -0.75f) // 约等于角度大于143度
             {
-                // 计算玩家到第一个锚点的向量
-                Vector2 playerToFirstAnchor = (anchors[0] - playerPos).normalized;
-                // 计算第一个锚点到第二个锚点的向量
-                Vector2 firstToSecondAnchor = (anchors[1] - anchors[0]).normalized;
+                RemoveAnchor();
+            }
+            else
+            {
+                // 保留原有的检测逻辑作为备选
+                Vector2 ABVector = (anchors[0] - playerPos).normalized;
+                Vector2 shortLCStart = anchors[0] - (0.2f * ABVector);
                 
-                // 计算两个向量的点积，用于判断夹角
-                float dotProduct = Vector2.Dot(playerToFirstAnchor, firstToSecondAnchor);
-                
-                // 点积接近-1表示两个向量方向几乎相反，即角度接近180度
-                // 这表明玩家-锚点1-锚点2几乎在一条直线上，可以移除第一个锚点
-                if (dotProduct < -0.75f) // 约等于角度大于143度
+                RaycastHit2D returnHitShort = Physics2D.Linecast(shortLCStart, anchors[1], hookableLayers);
+                if (!returnHitShort)
                 {
+                    // 如果没有障碍物，可以移除第一个锚点
                     RemoveAnchor();
-                }
-                else
-                {
-                    // 保留原有的检测逻辑作为备选
-                    Vector2 ABVector = (anchors[0] - playerPos).normalized;
-                    Vector2 shortLCStart = anchors[0] - (0.2f * ABVector);
-                    
-                    RaycastHit2D returnHitShort = Physics2D.Linecast(shortLCStart, anchors[1], hookableLayers);
-                    if (!returnHitShort)
-                    {
-                        // 如果没有障碍物，可以移除第一个锚点
-                        RemoveAnchor();
-                    }
                 }
             }
         }
     }
+}
     
     // 添加锚点
     private void AddAnchor(Vector2 pos)
@@ -490,6 +583,8 @@ private void CheckPointToAnchors(Vector2 checkPoint)
         
         // 通知玩家控制器退出绳索模式
         playerController.ExitRopeMode();
+        // 触发玩家状态改变事件
+        GameEvents.TriggerPlayerStateChanged(GameEvents.PlayerState.Normal);
     }
 
     public void AdjustRopeLength(float direction)
@@ -523,7 +618,8 @@ private void CheckPointToAnchors(Vector2 checkPoint)
                 return;
             }
         }
-        
+        // 存储原来的长度
+        float previousLength = currentRopeLength;
         // 正常调整绳索长度
         currentRopeLength += direction * ropeAdjustSpeed * Time.deltaTime;
         
@@ -534,6 +630,12 @@ private void CheckPointToAnchors(Vector2 checkPoint)
         
         // 更新关节距离
         distanceJoint.distance = currentRopeLength;
+
+        // 如果长度确实发生了变化，触发事件
+        if (Mathf.Abs(previousLength - currentRopeLength) > 0.01f)
+        {
+            GameEvents.TriggerRopeLengthChanged(currentRopeLength);
+        }
     }
 
     
@@ -592,6 +694,49 @@ private void CheckPointToAnchors(Vector2 checkPoint)
         return anchors.Count > 0;
     }
     
+    // 获取当前钩中的物体标签
+    public string GetCurrentHookTag()
+    {
+        return currentHookTag;
+    }
+
+// 处理绳索颜色变化
+    public void ChangeRopeColor(GameEvents.PlayerState state)
+{
+    // 只处理Frozen状态和从Frozen恢复的情况
+    if (lineRenderer == null) return;
+    
+    // 处理冰冻状态
+    if (state == GameEvents.PlayerState.Frozen)
+    {
+        // 找到状态管理器以获取冰冻颜色
+        StatusManager statusManager = playerController.GetComponent<StatusManager>();
+        if (statusManager != null)
+        {
+            // 应用冰冻颜色 - 直接使用公共字段
+            lineRenderer.startColor = statusManager.frozenTint;
+            lineRenderer.endColor = statusManager.frozenTint;
+        }
+        else
+        {
+            // 如果无法获取状态管理器，使用默认的冰冻蓝色
+            lineRenderer.startColor = new Color(0.7f, 0.7f, 1.0f);
+            lineRenderer.endColor = new Color(0.7f, 0.7f, 1.0f);
+        }
+    }
+    else if (state != GameEvents.PlayerState.Frozen && originalRopeColor != Color.clear)
+    {
+        // 从冰冻状态恢复时，恢复原始颜色
+        lineRenderer.startColor = originalRopeColor;
+        lineRenderer.endColor = originalRopeColor;
+    }
+}
+
+    private void OnEnable() {
+        GameEvents.OnPlayerStateChanged += ChangeRopeColor;
+        GameEvents.OnRopeReleased += ReleaseRope;
+    }
+    
     // 清理资源
     private void OnDisable()
     {
@@ -600,6 +745,16 @@ private void CheckPointToAnchors(Vector2 checkPoint)
             Destroy(arrowObject);
             arrowObject = null;
         }
+        
+        // 确保协程被停止
+        if (currentEffectCoroutine != null)
+        {
+            StopCoroutine(currentEffectCoroutine);
+            currentEffectCoroutine = null;
+        }
+
+        GameEvents.OnRopeReleased -= ReleaseRope;
+        GameEvents.OnPlayerStateChanged -= ChangeRopeColor;
     }
     
     // 在编辑器中可视化锚点和绳索

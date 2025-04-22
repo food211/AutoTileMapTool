@@ -5,6 +5,11 @@ TagManager:
   serializedVersion: 2
   tags:
   - Ground
+  - Ice
+  - Fire
+  - Elect
+  - Hookable
+  - NotHookable
   layers:
   - Default
   - TransparentFX
@@ -13,7 +18,7 @@ TagManager:
   - Water
   - UI
   - PlayerLayer
-  - 
+  - DeadZone
   - 
   - 
   - 
