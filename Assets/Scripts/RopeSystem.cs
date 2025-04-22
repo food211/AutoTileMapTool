@@ -6,6 +6,7 @@ public class RopeSystem : MonoBehaviour
     [Header("引用")]
     [SerializeField] private LineRenderer lineRenderer;
     [SerializeField] private PlayerController playerController;
+    [SerializeField] private StatusManager statusManager;
     [SerializeField] private GameObject arrowPrefab; // 箭头预制体引用
     
     [Header("绳索设置")]
@@ -15,13 +16,24 @@ public class RopeSystem : MonoBehaviour
     [SerializeField] private float maxRopeLength = 100f;
     [SerializeField] private float ropeShootSpeed = 50f; // 发射速度
     private Color originalRopeColor;
+    private float originalStartWidth;
+    private float originalEndWidth;
+    private AnimationCurve originalWithCurve;
     
     [Header("碰撞检测")]
     [SerializeField] private LayerMask hookableLayers; // 可以被钩住的层
     [SerializeField] private float linecastOffset = 0.1f; // 增加偏移量，从0.01f改为0.1f
     [SerializeField] private float anchorSafetyCheck = 0.15f; // 锚点安全检查距离
     [SerializeField] private int swingCollisionSteps = 25;
+    [Header("燃烧效果设置")]
+    [SerializeField] private float burnPropagationSpeed = 2.0f; // 燃烧传播速度
+    [SerializeField] private float burnBreakThreshold = 0.8f; // 燃烧到多少程度时绳索断开
+    [SerializeField] private GameObject fireParticlePrefab; // 火焰粒子效果预制体
 
+    // 燃烧状态相关变量
+    private int burningAnchorIndex = -1; // 开始燃烧的锚点索引
+    private GameObject fireParticleInstance; // 火焰粒子实例
+    private Color burnColor = new Color(1.0f, 0.3f, 0.1f); // 燃烧颜色
     
     // 内部变量
     private bool isShooting = false;
@@ -67,6 +79,9 @@ public class RopeSystem : MonoBehaviour
 
         // 保存原始绳索颜色
         originalRopeColor = lineRenderer.startColor;
+        originalStartWidth = lineRenderer.startWidth;
+        originalEndWidth = lineRenderer.endWidth;
+        originalWithCurve = lineRenderer.widthCurve;
 
         // 初始化线渲染器
         lineRenderer.positionCount = 2;
@@ -211,6 +226,19 @@ private void CheckPointToAnchors(Vector2 checkPoint)
         // 清空锚点列表
         anchors.Clear();
         combinedAnchorLen = 0f;
+
+        // 重置线渲染器的颜色和宽度到原始状态
+        if (lineRenderer != null)
+        {
+            // 恢复原始颜色
+            lineRenderer.startColor = originalRopeColor;
+            lineRenderer.endColor = originalRopeColor;
+            
+            // 恢复原始宽度 - 使用Inspector中设置的默认值
+            // 如果这些值在运行时会变化，可以考虑在Awake中保存原始宽度
+            lineRenderer.startWidth = originalStartWidth;
+            lineRenderer.endWidth = originalEndWidth;
+        }
         
         // 启用线渲染器
         lineRenderer.enabled = true;
@@ -337,15 +365,12 @@ private void CheckPointToAnchors(Vector2 checkPoint)
     private void HandleHookTagEffect(string tag)
 {
     // 获取状态管理器
-    StatusManager statusManager = playerController.GetComponent<StatusManager>();
-    if (statusManager == null) return;
-    
-    // 停止之前的效果协程（如果有）
-    if (currentEffectCoroutine != null)
-    {
-        StopCoroutine(currentEffectCoroutine);
-        currentEffectCoroutine = null;
+    if (statusManager == null) {
+        Debug.LogError("没有找到statusManager");
+        return;
     }
+    // 保存当前钩中的物体标签
+    currentHookTag = tag;
     
     // 根据标签设置不同的效果，但增加状态检查
     switch (tag)
@@ -363,16 +388,24 @@ private void CheckPointToAnchors(Vector2 checkPoint)
             break;
             
         case "Fire":
-            // 燃烧状态不需要冷却检查，但避免重复触发
-            if (!statusManager.IsInState(GameEvents.PlayerState.Burning))
+        // 燃烧状态不需要冷却检查，但避免重复触发
+        if (!statusManager.IsInState(GameEvents.PlayerState.Burning))
+        {
+            #if UNITY_EDITOR
+            Debug.LogFormat("钩中火焰: 绳索逐渐烧断");
+            #endif
+            
+            // 最新创建的碰撞节点是放在索引0的，所以从这里开始燃烧。
+            if (burningAnchorIndex == -1 && anchors.Count > 0)
             {
-                #if UNITY_EDITOR
-                Debug.LogFormat("钩中火焰: 绳索逐渐烧断");
-                #endif
-                // 触发燃烧状态
-                GameEvents.TriggerPlayerStateChanged(GameEvents.PlayerState.Burning);
+                // 默认为第一个锚点
+                burningAnchorIndex = 0;
             }
-            break;
+            
+            // 触发燃烧状态
+            GameEvents.TriggerPlayerStateChanged(GameEvents.PlayerState.Burning);
+        }
+        break;
             
         case "Elect":
             // 检查是否在电击冷却中，如果是则不触发
@@ -525,8 +558,39 @@ private void CheckPointToAnchors(Vector2 checkPoint)
         combinedAnchorLen -= Vector2.Distance(anchors[0], anchors[1]);
         combinedAnchorLen = Mathf.Round(combinedAnchorLen * 100f) / 100f;
         
+        // 检查是否正在移除燃烧节点
+        bool removingBurningAnchor = (burningAnchorIndex == 0);
+        
         // 移除第一个锚点
         anchors.RemoveAt(0);
+        
+        // 如果移除的是燃烧节点，更新燃烧状态
+        if (removingBurningAnchor)
+        {
+            // 更新燃烧锚点索引
+            burningAnchorIndex = -1;
+            
+            // 如果玩家处于燃烧状态，恢复正常状态
+            if (statusManager != null && statusManager.IsInState(GameEvents.PlayerState.Burning))
+            {
+                // 恢复绳索外观
+                if (lineRenderer != null)
+                {
+                    lineRenderer.startColor = originalRopeColor;
+                    lineRenderer.endColor = originalRopeColor;
+                    lineRenderer.startWidth = originalStartWidth;
+                    lineRenderer.endWidth = originalEndWidth;
+                }
+                
+                // 触发状态变化事件
+                GameEvents.TriggerPlayerStateChanged(GameEvents.PlayerState.Swinging);
+            }
+        }
+        else if (burningAnchorIndex > 0)
+        {
+            // 如果删除的锚点在燃烧锚点之前，需要更新燃烧锚点索引
+            burningAnchorIndex--;
+        }
         
         // 更新关节
         SetJoint();
@@ -573,11 +637,24 @@ private void CheckPointToAnchors(Vector2 checkPoint)
         }
     }
     
-    // 释放绳索
     public void ReleaseRope()
     {
         isShooting = false;
         isHooked = false;
+        
+        // 重置线渲染器的颜色和宽度到原始状态
+        if (lineRenderer != null)
+        {
+            // 恢复原始颜色
+            lineRenderer.startColor = originalRopeColor;
+            lineRenderer.endColor = originalRopeColor;
+            
+            // 恢复原始宽度 - 确保清除宽度曲线
+            lineRenderer.widthCurve = originalWithCurve; // 清除宽度曲线
+            lineRenderer.startWidth = originalStartWidth;
+            lineRenderer.endWidth = originalEndWidth;
+        }
+        
         lineRenderer.enabled = false;
 
         // 清空锚点
@@ -604,10 +681,23 @@ private void CheckPointToAnchors(Vector2 checkPoint)
         // 重置绳索长度
         currentRopeLength = ropeLength;
         
+        // 重置燃烧状态
+        burningAnchorIndex = -1;
+        currentHookTag = "";
+        
         // 通知玩家控制器退出绳索模式
         playerController.ExitRopeMode();
+        
         // 触发玩家状态改变事件
-        GameEvents.TriggerPlayerStateChanged(GameEvents.PlayerState.Normal);
+        // 如果玩家当前处于燃烧状态，先恢复正常状态
+        if (statusManager != null && statusManager.IsInState(GameEvents.PlayerState.Burning))
+        {
+            GameEvents.TriggerPlayerStateChanged(GameEvents.PlayerState.Normal);
+        }
+        else
+        {
+            GameEvents.TriggerPlayerStateChanged(GameEvents.PlayerState.Normal);
+        }
     }
 
     public void AdjustRopeLength(float direction)
@@ -733,7 +823,6 @@ private void CheckPointToAnchors(Vector2 checkPoint)
     if (state == GameEvents.PlayerState.Frozen)
     {
         // 找到状态管理器以获取冰冻颜色
-        StatusManager statusManager = playerController.GetComponent<StatusManager>();
         if (statusManager != null)
         {
             // 应用冰冻颜色 - 直接使用公共字段
@@ -779,6 +868,103 @@ private void CheckPointToAnchors(Vector2 checkPoint)
         GameEvents.OnRopeReleased -= ReleaseRope;
         GameEvents.OnPlayerStateChanged -= ChangeRopeColor;
     }
+
+
+    // 获取燃烧锚点索引
+public int GetBurningAnchorIndex()
+{
+    return burningAnchorIndex;
+}
+
+// 获取燃烧传播速度
+public float GetBurnPropagationSpeed()
+{
+    return burnPropagationSpeed;
+}
+
+// 获取燃烧断开阈值
+public float GetBurnBreakThreshold()
+{
+    return burnBreakThreshold;
+}
+
+// 获取锚点列表
+public List<Vector2> GetAnchors()
+{
+    return new List<Vector2>(anchors);
+}
+
+public AnimationCurve getOriginalCurve()
+{
+    return originalWithCurve;
+}
+
+// 创建火焰粒子
+public GameObject CreateFireParticle()
+{
+    if (fireParticleInstance != null)
+    {
+        Destroy(fireParticleInstance);
+    }
+    
+    if (fireParticlePrefab != null)
+    {
+        // 在燃烧锚点位置创建火焰粒子
+        Vector3 firePosition = Vector3.zero;
+        if (anchors.Count > burningAnchorIndex && burningAnchorIndex >= 0)
+        {
+            firePosition = anchors[burningAnchorIndex];
+        }
+        else if (anchors.Count > 0)
+        {
+            firePosition = anchors[0];
+        }
+        
+        fireParticleInstance = Instantiate(fireParticlePrefab, firePosition, Quaternion.identity);
+        return fireParticleInstance;
+    }
+    
+    return null;
+}
+
+// 在燃烧点断开绳索
+public void BreakRopeAtBurningPoint()
+{
+    if (burningAnchorIndex < 0 || burningAnchorIndex >= anchors.Count)
+        return;
+    
+    // 保留从玩家到燃烧点的部分，移除燃烧点之后的部分
+    if (burningAnchorIndex > 0)
+    {
+        // 移除从燃烧点开始的所有锚点
+        int countToRemove = anchors.Count - burningAnchorIndex;
+        anchors.RemoveRange(burningAnchorIndex, countToRemove);
+        
+        // 重新计算锚点间距离
+        RecalculateAnchorLength();
+        
+        // 更新关节
+        SetJoint();
+    }
+    else
+    {
+        // 如果燃烧点是第一个锚点，直接释放绳索
+        ReleaseRope();
+    }
+}
+
+// 重新计算锚点间总距离
+private void RecalculateAnchorLength()
+{
+    combinedAnchorLen = 0f;
+    
+    for (int i = 0; i < anchors.Count - 1; i++)
+    {
+        combinedAnchorLen += Vector2.Distance(anchors[i], anchors[i + 1]);
+    }
+    
+    combinedAnchorLen = Mathf.Round(combinedAnchorLen * 100f) / 100f;
+}
     
     // 在编辑器中可视化锚点和绳索
     private void OnDrawGizmos()

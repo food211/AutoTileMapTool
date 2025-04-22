@@ -689,6 +689,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   lineRenderer: {fileID: 628707688}
   playerController: {fileID: 1453988870}
+  statusManager: {fileID: 968670220}
   arrowPrefab: {fileID: 2810855973482111110, guid: e848caeaa688a47479d2b54252a190ec, type: 3}
   ropeLength: 15
   ropeAdjustSpeed: 2
@@ -701,6 +702,9 @@ MonoBehaviour:
   linecastOffset: 0.01
   anchorSafetyCheck: 0.15
   swingCollisionSteps: 25
+  burnPropagationSpeed: 2
+  burnBreakThreshold: 0.8
+  fireParticlePrefab: {fileID: 0}
 --- !u!1 &632326470
 GameObject:
   m_ObjectHideFlags: 0

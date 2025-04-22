@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 
 
@@ -8,6 +9,7 @@ public class StatusManager : MonoBehaviour
 {
     [Header("引用")]
     [SerializeField] private PlayerController playerController;
+    [SerializeField] private RopeSystem ropeSystem;
     [SerializeField] private Rigidbody2D playerRigidbody;
     [SerializeField] private SpriteRenderer playerRenderer;
     
@@ -59,6 +61,9 @@ public class StatusManager : MonoBehaviour
             
         if (playerRenderer == null)
             playerRenderer = GetComponent<SpriteRenderer>();
+
+        if (ropeSystem == null)
+        ropeSystem = playerController.GetComponentInChildren<RopeSystem>();
             
         // 保存原始值
         if (playerRenderer != null)
@@ -221,65 +226,245 @@ public class StatusManager : MonoBehaviour
     
     /// 应用燃烧状态
     
-    private IEnumerator ApplyBurningState()
+   private IEnumerator ApplyBurningState()
+{
+    // 应用燃烧视觉效果
+    if (playerRenderer != null)
+        playerRenderer.color = burningTint;
+        
+    // 激活燃烧特效
+    if (burningEffect != null)
+        burningEffect.SetActive(true);
+        
+    // 应用燃烧物理效果
+    if (playerRigidbody != null)
     {
-        // 应用燃烧视觉效果
-        if (playerRenderer != null)
-            playerRenderer.color = burningTint;
-            
-        // 激活燃烧特效
-        if (burningEffect != null)
-            burningEffect.SetActive(true);
-            
-        // 应用燃烧物理效果
-        if (playerRigidbody != null)
+        playerRigidbody.drag = burningDrag;
+    }
+    
+    // 获取绳索系统组件
+    
+    bool ropeIsBurning = false;
+    
+    if (ropeSystem != null && ropeSystem.HasAnchors())
+    {
+        // 开始绳索燃烧效果
+        ropeIsBurning = true;
+        StartCoroutine(BurnRopeEffect(ropeSystem));
+    }
+    
+    // 燃烧持续伤害
+    float elapsedTime = 0f;
+    float nextDamageTime = 0f;
+    
+    while (currentState == GameEvents.PlayerState.Burning)
+    {
+        elapsedTime += Time.deltaTime;
+        
+        // 定期造成伤害
+        if (elapsedTime >= nextDamageTime)
         {
-            playerRigidbody.drag = burningDrag;
-        }
-        
-        // 播放燃烧音效
-        // PlaySound(burningSound);
-        
-        // 燃烧持续伤害
-        float elapsedTime = 0f;
-        float nextDamageTime = 0f;
-        
-        while (currentState == GameEvents.PlayerState.Burning)
-        {
-            elapsedTime += Time.deltaTime;
+            // 造成伤害
+            ApplyDamage(burningDamage);
             
-            // 定期造成伤害
-            if (elapsedTime >= nextDamageTime)
+            // 闪烁效果
+            if (playerRenderer != null)
             {
-                // 造成伤害
-                ApplyDamage(burningDamage);
-                
-                // 闪烁效果
-                if (playerRenderer != null)
-                {
-                    playerRenderer.color = Color.red;
-                    yield return new WaitForSeconds(0.1f);
-                    playerRenderer.color = burningTint;
-                }
-                
-                // 设置下一次伤害时间
-                nextDamageTime = elapsedTime + burningDamageInterval;
+                playerRenderer.color = Color.red;
+                yield return new WaitForSeconds(0.1f);
+                playerRenderer.color = burningTint;
             }
             
-            yield return null;
+            // 设置下一次伤害时间
+            nextDamageTime = elapsedTime + burningDamageInterval;
         }
         
-        // 如果状态仍然是燃烧，恢复正常状态
-        if (currentState == GameEvents.PlayerState.Burning)
+        yield return null;
+    }
+    
+    // 如果状态仍然是燃烧，恢复正常状态
+    if (currentState == GameEvents.PlayerState.Burning)
+    {
+        // 触发状态变化事件，断开绳子回到正常状态
+        if (playerController != null && playerController.IsInRopeMode() && !ropeIsBurning)
         {
-            // 触发状态变化事件，断开绳子回到正常状态
-            if (playerController != null && playerController.IsInRopeMode())
-            {
-                GameEvents.TriggerRopeReleased();
-                GameEvents.TriggerPlayerStateChanged(GameEvents.PlayerState.Normal);
-            }
+            GameEvents.TriggerRopeReleased();
+            GameEvents.TriggerPlayerStateChanged(GameEvents.PlayerState.Normal);
         }
     }
+}
+
+// 绳索燃烧效果协程
+private IEnumerator BurnRopeEffect(RopeSystem ropeSystem)
+{
+    // 初始化燃烧效果
+    LineRenderer lineRenderer = ropeSystem.GetComponent<LineRenderer>();
+    if (lineRenderer == null) yield break;
+    
+    // 保存原始宽度和颜色
+    float originalStartWidth = lineRenderer.startWidth;
+    float originalEndWidth = lineRenderer.endWidth;
+    Color originalColor = lineRenderer.startColor;
+    
+    // 获取燃烧起始锚点索引
+    int burnAnchorIndex = ropeSystem.GetBurningAnchorIndex();
+    if (burnAnchorIndex < 0) burnAnchorIndex = 0;
+    
+    // 创建火焰粒子效果
+    GameObject fireParticle = ropeSystem.CreateFireParticle();
+    
+    // 燃烧进度
+    float burnProgress = 0f;
+    float burnSpeed = ropeSystem.GetBurnPropagationSpeed();
+    float burnThreshold = ropeSystem.GetBurnBreakThreshold();
+    
+    // 获取锚点列表
+    List<Vector2> anchors = ropeSystem.GetAnchors();
+    
+    while (burnProgress < 1.0f && currentState == GameEvents.PlayerState.Burning && ropeSystem.HasAnchors())
+    {
+        burnProgress += Time.deltaTime * burnSpeed / 10f; // 调整为适当的燃烧速度
+        
+        // 更新线渲染器颜色和宽度
+        if (lineRenderer != null)
+        {
+            // 从燃烧点开始向两端传播
+            int pointCount = lineRenderer.positionCount;
+            
+            // 创建颜色数组
+            Color[] colors = new Color[pointCount];
+            
+            // 计算燃烧点在线渲染器中的索引
+            int burnPointIndex = burnAnchorIndex + 1;
+            
+            // 创建一个新的宽度曲线
+            AnimationCurve widthCurve = new AnimationCurve();
+            
+            // 先设置所有点的默认宽度为原始宽度
+            for (int i = 0; i < pointCount; i++)
+            {
+                float normalizedPosition = (float)i / (pointCount - 1);
+                widthCurve.AddKey(normalizedPosition, originalEndWidth);
+            }
+            
+            // 计算每个点的燃烧程度和颜色
+            for (int i = 0; i < pointCount; i++)
+            {
+                // 计算该点到燃烧起始点的距离比例
+                float distanceRatio;
+                
+                if (i <= burnPointIndex)
+                {
+                    // 从燃烧点向玩家方向
+                    distanceRatio = (float)(burnPointIndex - i) / (burnPointIndex);
+                }
+                else
+                {
+                    // 从燃烧点向远端
+                    distanceRatio = (float)(i - burnPointIndex) / (pointCount - burnPointIndex);
+                }
+                
+                // 计算该点的燃烧程度
+                float pointBurnProgress = Mathf.Max(0, 1 - distanceRatio * 2 + burnProgress * 2);
+                pointBurnProgress = Mathf.Clamp01(pointBurnProgress);
+                
+                // 设置颜色 - 从原始颜色到燃烧颜色的渐变
+                colors[i] = Color.Lerp(originalColor, new Color(1.0f, 0.3f, 0.1f), pointBurnProgress);
+                
+                // 只修改燃烧点的宽度
+                if (i == burnPointIndex)
+                {
+                    // 燃烧点宽度从0.25逐渐变细到0.01
+                    float minWidth = 0.01f;
+                    float burnWidth = Mathf.Lerp(originalEndWidth, minWidth, burnProgress * 0.8f);
+                    
+                    // 更新燃烧点的宽度
+                    float normalizedPosition = (float)i / (pointCount - 1);
+                    Keyframe keyframe = new Keyframe(normalizedPosition, burnWidth);
+                    // 设置较高的权重以确保曲线在该点有明确的变化
+                    keyframe.weightedMode = WeightedMode.Both;
+                    keyframe.inWeight = 0;
+                    keyframe.outWeight = 0;
+                    
+                    // 替换该点的关键帧
+                    widthCurve.MoveKey(widthCurve.AddKey(keyframe), keyframe);
+                }
+            }
+            
+            // 应用颜色
+            lineRenderer.colorGradient = CreateGradient(colors);
+            
+            // 应用宽度曲线
+            lineRenderer.widthCurve = widthCurve;
+            
+            // 更新火焰粒子位置
+            if (fireParticle != null)
+            {
+                // 计算火焰位置 - 在燃烧最严重的部分
+                Vector3 firePosition = lineRenderer.GetPosition(burnPointIndex);
+                fireParticle.transform.position = firePosition;
+            }
+        }
+        
+        // 检查是否达到断开阈值
+        if (burnProgress >= burnThreshold)
+        {
+            // 从燃烧点断开绳索
+            ropeSystem.BreakRopeAtBurningPoint();
+            
+            // 触发绳索释放事件
+            GameEvents.TriggerRopeReleased();
+            GameEvents.TriggerPlayerStateChanged(GameEvents.PlayerState.Normal);
+            
+            // 销毁火焰粒子
+            if (fireParticle != null)
+            {
+                Destroy(fireParticle, 1.0f); // 1秒后销毁，让效果自然消失
+            }
+            
+            break;
+        }
+        
+        yield return null;
+    }
+    
+    // 恢复原始外观
+    if (lineRenderer != null && ropeSystem.HasAnchors())
+    {
+        // 重置宽度 - 使用原始宽度曲线
+        lineRenderer.widthCurve = ropeSystem.getOriginalCurve(); // 先清除宽度曲线
+        lineRenderer.startWidth = originalStartWidth;
+        lineRenderer.endWidth = originalEndWidth;
+        
+        // 恢复原始颜色
+        lineRenderer.startColor = originalColor;
+        lineRenderer.endColor = originalColor;
+    }
+    
+    // 销毁火焰粒子
+    if (fireParticle != null)
+    {
+        Destroy(fireParticle);
+    }
+}
+
+// 创建颜色渐变
+private Gradient CreateGradient(Color[] colors)
+{
+    Gradient gradient = new Gradient();
+    GradientColorKey[] colorKeys = new GradientColorKey[colors.Length];
+    GradientAlphaKey[] alphaKeys = new GradientAlphaKey[colors.Length];
+    
+    for (int i = 0; i < colors.Length; i++)
+    {
+        float time = (float)i / (colors.Length - 1);
+        colorKeys[i] = new GradientColorKey(colors[i], time);
+        alphaKeys[i] = new GradientAlphaKey(colors[i].a, time);
+    }
+    
+    gradient.SetKeys(colorKeys, alphaKeys);
+    return gradient;
+}
     
     
     /// 应用电击状态
