@@ -1306,7 +1306,7 @@ MonoBehaviour:
   playerRigidbody: {fileID: 1453988869}
   playerRenderer: {fileID: 1453988867}
   frozenDuration: 5
-  electrifiedDuration: 1.5
+  electrifiedDuration: 2
   burningDamage: 1
   burningDrag: 0.8
   burningDamageInterval: 1.5

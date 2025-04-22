@@ -335,49 +335,72 @@ private void CheckPointToAnchors(Vector2 checkPoint)
     
 // 处理不同标签的钩索效果
     private void HandleHookTagEffect(string tag)
+{
+    // 获取状态管理器
+    StatusManager statusManager = playerController.GetComponent<StatusManager>();
+    if (statusManager == null) return;
+    
+    // 停止之前的效果协程（如果有）
+    if (currentEffectCoroutine != null)
     {
-        // 停止之前的效果协程（如果有）
-        if (currentEffectCoroutine != null)
-        {
-            StopCoroutine(currentEffectCoroutine);
-            currentEffectCoroutine = null;
-        }
-        
-        // 根据标签设置不同的效果
-        switch (tag)
-        {
-            case "Ice":
+        StopCoroutine(currentEffectCoroutine);
+        currentEffectCoroutine = null;
+    }
+    
+    // 根据标签设置不同的效果，但增加状态检查
+    switch (tag)
+    {
+        case "Ice":
+            // 检查是否在冰冻冷却中，如果是则不触发
+            if (!statusManager.IsFrozenOnCooldown() && !statusManager.IsInState(GameEvents.PlayerState.Frozen))
+            {
                 #if UNITY_EDITOR
                 Debug.LogFormat("钩中冰面: 玩家被冻结");
                 #endif
                 // 触发冰冻状态
                 GameEvents.TriggerPlayerStateChanged(GameEvents.PlayerState.Frozen);
-                break;
-                
-            case "Fire":
+            }
+            break;
+            
+        case "Fire":
+            // 燃烧状态不需要冷却检查，但避免重复触发
+            if (!statusManager.IsInState(GameEvents.PlayerState.Burning))
+            {
                 #if UNITY_EDITOR
                 Debug.LogFormat("钩中火焰: 绳索逐渐烧断");
                 #endif
                 // 触发燃烧状态
                 GameEvents.TriggerPlayerStateChanged(GameEvents.PlayerState.Burning);
-                break;
-                
-            case "Elect":
+            }
+            break;
+            
+        case "Elect":
+            // 检查是否在电击冷却中，如果是则不触发
+            if (!statusManager.IsElectrifiedOnCooldown() && !statusManager.IsInState(GameEvents.PlayerState.Electrified))
+            {
                 #if UNITY_EDITOR
                 Debug.LogFormat("钩中带电物体: 玩家被电击");
                 #endif
                 // 触发电击状态
                 GameEvents.TriggerPlayerStateChanged(GameEvents.PlayerState.Electrified);
-                break;
-                
-            case "Ground":
-            case "Hookable":
-            default:
+            }
+            break;
+            
+        case "Ground":
+        case "Hookable":
+        default:
+            // 只有当前不是摆动状态时才触发
+            if (!statusManager.IsInState(GameEvents.PlayerState.Swinging) && 
+                !statusManager.IsInState(GameEvents.PlayerState.Frozen) && 
+                !statusManager.IsInState(GameEvents.PlayerState.Electrified) &&
+                !statusManager.IsInState(GameEvents.PlayerState.Burning))
+            {
                 // 默认摆动状态
                 GameEvents.TriggerPlayerStateChanged(GameEvents.PlayerState.Swinging);
-                break;
-        }
+            }
+            break;
     }
+}
 
     // 更新已钩住状态
     private void UpdateRopeHooked()

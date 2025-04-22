@@ -500,7 +500,7 @@ private void OnCollisionEnter2D(Collision2D collision)
         GameEvents.TriggerPlayerStateChanged(GameEvents.PlayerState.Burning);
     }
     // 是否被电击
-    else if (collision.gameObject.CompareTag("Electric") && !isElectricImmune)
+    else if (collision.gameObject.CompareTag("Elect") && !isElectricImmune)
     {
         GameEvents.TriggerPlayerStateChanged(GameEvents.PlayerState.Electrified);
     }

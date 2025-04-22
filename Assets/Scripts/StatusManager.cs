@@ -322,8 +322,8 @@ public class StatusManager : MonoBehaviour
             {
                 // 添加随机力模拟抖动
                 Vector2 randomForce = new Vector2(
-                    Random.Range(-10f, 10f),
-                    Random.Range(-10f, 10f)
+                    Random.Range(-5f, 5),
+                    Random.Range(-5f, 5f)
                 );
                 playerRigidbody.AddForce(randomForce, ForceMode2D.Impulse);
             }
