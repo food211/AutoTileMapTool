@@ -701,6 +701,7 @@ private void CheckPointToAnchors(Vector2 checkPoint)
             GameEvents.TriggerPlayerStateChanged(GameEvents.PlayerState.Normal);
         }
     }
+    
 #endregion
     public void AdjustRopeLength(float direction)
     {

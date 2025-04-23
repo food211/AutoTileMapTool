@@ -432,25 +432,67 @@ public class PlayerController : MonoBehaviour
     }
     
     // 退出绳索模式
-    public void ExitRopeMode()
+public void ExitRopeMode()
+{
+    isRopeMode = false;
+    
+    // 保存当前速度，用于松开绳索后的惯性
+    Vector2 releaseVelocity = rb.velocity;
+    float currentSpeed = releaseVelocity.magnitude;
+    
+    // 显示箭头
+    if (arrow != null)
     {
-        isRopeMode = false;
-        
-        // 显示箭头
-        if (arrow != null)
-        {
-            arrow.SetActive(true);
-        }
-        
-        // 恢复原始物理材质
-        rb.sharedMaterial = originalMaterial;
-        
-        // 禁用DistanceJoint2D
-        if (distanceJoint != null)
-        {
-            distanceJoint.enabled = false;
-        }
+        arrow.SetActive(true);
     }
+    
+    // 恢复原始物理材质
+    rb.sharedMaterial = originalMaterial;
+    
+    // 禁用DistanceJoint2D
+    if (distanceJoint != null)
+    {
+        distanceJoint.enabled = false;
+    }
+    
+    // 应用松开时的速度调整
+    if (!isGrounded && currentSpeed > 0)
+    {
+        // 保留速度的百分比 - 可以根据需要调整
+        float velocityRetention = 1.05f; 
+        
+        // 应用保留的速度
+        rb.velocity = releaseVelocity * velocityRetention;
+        
+        // 启动空中控制限制协程 - 高速时锁定控制
+        StartCoroutine(LimitAirControl(currentSpeed));
+    }
+}
+private IEnumerator LimitAirControl(float releaseSpeed)
+{
+    // 保存原始状态
+    bool originalCanInput = CanInput;
+    
+    // 计算禁止输入的时间 - 速度越快，禁止输入时间越长
+    float controlLockTime = Mathf.Clamp(releaseSpeed / 20f, 0f, 0.8f);
+    
+    if (releaseSpeed > 10f) // 只有当速度足够快时才限制控制
+    {
+        // 完全禁止玩家输入，保持惯性移动
+        CanInput = false;
+        
+        // 等待锁定时间或直到玩家着地
+        float elapsedTime = 0f;
+        while (elapsedTime < controlLockTime && !isGrounded)
+        {
+            elapsedTime += Time.deltaTime;
+            yield return null;
+        }
+        
+        // 恢复玩家输入能力
+        CanInput = originalCanInput;
+    }
+}
     
     public void UseItem()
     {
