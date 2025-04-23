@@ -48,6 +48,7 @@ public class PlayerController : MonoBehaviour
     private Color originalColor;
     
     // 内部变量
+    private GameEvents.PlayerState currentState = GameEvents.PlayerState.Normal;
     private Rigidbody2D rb;
     private float aimAngle = 0f;
     private bool isGrounded = false;
@@ -365,33 +366,30 @@ public class PlayerController : MonoBehaviour
     
     private void HandleRopeMode()
     {
-        if(!CanInput)
-        return;
-
         // 左右摆动
-        if (Input.GetKey(KeyCode.LeftArrow))
+        if (Input.GetKey(KeyCode.LeftArrow) && CanInput)
         {
             ropeSystem.Swing(1 * swingForce);
         }
-        else if (Input.GetKey(KeyCode.RightArrow))
+        else if (Input.GetKey(KeyCode.RightArrow) && CanInput)
         {
             ropeSystem.Swing(-1 * swingForce);
         }
         
         // 收缩绳索 - 检查头部是否有障碍物
-        if (Input.GetKey(KeyCode.UpArrow) && !CheckHeadCollision())
+        if (Input.GetKey(KeyCode.UpArrow) && !CheckHeadCollision() && CanInput)
         {
             ropeSystem.AdjustRopeLength(-5f);
         }
         
         // 伸长绳索 - 检查脚下是否有障碍物
-        if (Input.GetKey(KeyCode.DownArrow) && !CheckGroundCollision())
+        if (Input.GetKey(KeyCode.DownArrow) && !CheckGroundCollision() && CanInput)
         {
             ropeSystem.AdjustRopeLength(5f);
         }
         
         // 释放绳索
-        if (Input.GetKeyDown(KeyCode.Space))
+        if (Input.GetKeyDown(KeyCode.Space) && CanShootRope)
         {
             ropeSystem.ReleaseRope();
         }
@@ -497,6 +495,7 @@ private void OnCollisionEnter2D(Collision2D collision)
     // 检查是否碰到火焰
     else if (collision.gameObject.CompareTag("Fire") && !isFireImmune)
     {
+        GameEvents.TriggerSetPlayerBurning(true);
         GameEvents.TriggerPlayerStateChanged(GameEvents.PlayerState.Burning);
     }
     // 是否被电击
@@ -505,6 +504,34 @@ private void OnCollisionEnter2D(Collision2D collision)
         GameEvents.TriggerPlayerStateChanged(GameEvents.PlayerState.Electrified);
     }
 }
+
+private void OnCollisionExit2D(Collision2D collision)
+{
+    // 检查是否离开了特殊属性物体
+    if (collision.gameObject.CompareTag("Elect") || 
+        collision.gameObject.CompareTag("Fire") || 
+        collision.gameObject.CompareTag("Ice"))
+    {
+        // 如果不在绳索模式下，开始恢复正常状态
+        if (!IsInRopeMode())
+        {
+            // 根据当前状态启动相应的恢复协程
+            if (currentState == GameEvents.PlayerState.Burning)
+            {
+                StartCoroutine(statusManager.RecoverFromBurningState());
+            }
+            else if (currentState == GameEvents.PlayerState.Frozen)
+            {
+                StartCoroutine(statusManager.RecoverFromFrozenState());
+            }
+            else if (currentState == GameEvents.PlayerState.Electrified)
+            {
+                StartCoroutine(statusManager.RecoverFromElectrifiedState());
+            }
+        }
+    }
+}
+
 
 public void CheckPredictiveElementalCollision(Vector2 currentPos, Vector2 predictedPos, LayerMask collisionLayers)
 {
@@ -537,19 +564,59 @@ public void CheckPredictiveElementalCollision(Vector2 currentPos, Vector2 predic
 }
 
 #endregion
+#region PlayerControll Switch
     public void SetPlayerInput(bool canInput)
     {
         CanInput = canInput;
     }
-    public void SetCanShootRope(bool canShootRope)
+
+    private void HandleCanShootRopeChanged(bool canShoot)
     {
-        CanShootRope = canShootRope;
+    CanShootRope = canShoot;
     }
 
-    // 添加这些公共方法
-#region 免疫控制方法
+#endregion
 
-/// 设置无敌状态
+#region 公共方法
+
+public bool IsHookingElectrifiedObject()
+{
+    // 首先检查是否在绳索模式
+    if (!isRopeMode || ropeSystem == null || !ropeSystem.HasAnchors())
+    {
+        return false;
+    }
+    
+    // 获取当前钩中的锚点位置
+    Vector2 anchorPosition = ropeSystem.GetCurrentAnchorPosition();
+    
+    // 检查锚点位置是否有带电物体
+    Collider2D[] colliders = Physics2D.OverlapCircleAll(anchorPosition, 0.1f);
+    
+    foreach (Collider2D collider in colliders)
+    {
+        // 检查碰撞体是否带有"Elect"标签
+        if (collider.CompareTag("Elect"))
+        {
+            return true;
+        }
+    }
+    
+    // 检查绳索路径上是否有带电物体
+    Vector2 playerPosition = transform.position;
+    RaycastHit2D[] hits = Physics2D.LinecastAll(playerPosition, anchorPosition);
+    
+    foreach (RaycastHit2D hit in hits)
+    {
+        // 检查碰撞体是否带有"Electric"或"Elect"标签
+        if (hit.collider != null && hit.collider.CompareTag("Elect"))
+        {
+            return true;
+        }
+    }
+    
+    return false;
+}
 
 public void SetInvincible(bool invincible, float duration = 0f)
 {
@@ -696,5 +763,18 @@ public void SetInvincible(bool invincible, float duration = 0f)
         isFireImmune = false;
         isElectricImmune = false;
     }
+    #endregion
+
+    #region Event methods
+    public void OnEnable()
+    {
+        GameEvents.OnCanShootRopeChanged += HandleCanShootRopeChanged;
+    }
+    private void OnDisable()
+    {
+        // 移除事件监听
+        GameEvents.OnCanShootRopeChanged -= HandleCanShootRopeChanged;
+    }
+    
     #endregion
 }

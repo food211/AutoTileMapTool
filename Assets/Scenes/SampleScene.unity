@@ -133,8 +133,8 @@ GameObject:
   m_Component:
   - component: {fileID: 228200429}
   - component: {fileID: 228200432}
-  - component: {fileID: 228200431}
   - component: {fileID: 228200430}
+  - component: {fileID: 228200431}
   m_Layer: 3
   m_Name: Fire
   m_TagString: Fire
@@ -702,7 +702,7 @@ MonoBehaviour:
   linecastOffset: 0.01
   anchorSafetyCheck: 0.15
   swingCollisionSteps: 25
-  burnPropagationSpeed: 2
+  burnPropagationSpeed: 5
   burnBreakThreshold: 0.8
   fireParticlePrefab: {fileID: 0}
 --- !u!1 &632326470
@@ -834,7 +834,7 @@ MonoBehaviour:
   reflectivity: 0.5
   tintColor: {r: 0.8, g: 0.95, b: 1, a: 0.8}
   freezePower: 5
-  isTrigger: 1
+  isTrigger: 0
   friction: 0.05
 --- !u!212 &692979885
 SpriteRenderer:
@@ -1307,6 +1307,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   playerController: {fileID: 1453988870}
+  ropeSystem: {fileID: 0}
   playerRigidbody: {fileID: 1453988869}
   playerRenderer: {fileID: 1453988867}
   frozenDuration: 5
@@ -1321,6 +1322,7 @@ MonoBehaviour:
   burningTint: {r: 1, g: 0.4509804, b: 0.14117648, a: 1}
   frozenCooldown: 2
   electrifiedCooldown: 1.5
+  isPlayerBurn: 0
 --- !u!4 &968670221
 Transform:
   m_ObjectHideFlags: 0
@@ -2038,7 +2040,7 @@ MonoBehaviour:
   glowIntensity: 1.5
   electricColor: {r: 1, g: 0.931037, b: 0.2980392, a: 0.9}
   electricPower: 0.5
-  isTrigger: 1
+  isTrigger: 0
   shockInterval: 0.5
   continuousShock: 1
 --- !u!1 &1668746872

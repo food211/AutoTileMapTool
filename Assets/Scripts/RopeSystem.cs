@@ -19,6 +19,7 @@ public class RopeSystem : MonoBehaviour
     private float originalStartWidth;
     private float originalEndWidth;
     private AnimationCurve originalWithCurve;
+    private Gradient originalColorGradient;
     
     [Header("碰撞检测")]
     [SerializeField] private LayerMask hookableLayers; // 可以被钩住的层
@@ -26,14 +27,13 @@ public class RopeSystem : MonoBehaviour
     [SerializeField] private float anchorSafetyCheck = 0.15f; // 锚点安全检查距离
     [SerializeField] private int swingCollisionSteps = 25;
     [Header("燃烧效果设置")]
-    [SerializeField] private float burnPropagationSpeed = 2.0f; // 燃烧传播速度
+    [SerializeField] private float burnPropagationSpeed = 0.25f; // 燃烧传播速度
     [SerializeField] private float burnBreakThreshold = 0.8f; // 燃烧到多少程度时绳索断开
     [SerializeField] private GameObject fireParticlePrefab; // 火焰粒子效果预制体
 
     // 燃烧状态相关变量
     private int burningAnchorIndex = -1; // 开始燃烧的锚点索引
     private GameObject fireParticleInstance; // 火焰粒子实例
-    private Color burnColor = new Color(1.0f, 0.3f, 0.1f); // 燃烧颜色
     
     // 内部变量
     private bool isShooting = false;
@@ -82,6 +82,7 @@ public class RopeSystem : MonoBehaviour
         originalStartWidth = lineRenderer.startWidth;
         originalEndWidth = lineRenderer.endWidth;
         originalWithCurve = lineRenderer.widthCurve;
+        originalColorGradient = lineRenderer.colorGradient;
 
         // 初始化线渲染器
         lineRenderer.positionCount = 2;
@@ -636,7 +637,7 @@ private void CheckPointToAnchors(Vector2 checkPoint)
             lineRenderer.SetPosition(i + 1, anchors[i]);
         }
     }
-    
+    #region release rope
     public void ReleaseRope()
     {
         isShooting = false;
@@ -653,6 +654,7 @@ private void CheckPointToAnchors(Vector2 checkPoint)
             lineRenderer.widthCurve = originalWithCurve; // 清除宽度曲线
             lineRenderer.startWidth = originalStartWidth;
             lineRenderer.endWidth = originalEndWidth;
+            lineRenderer.colorGradient = originalColorGradient; // 恢复原始颜色渐变
         }
         
         lineRenderer.enabled = false;
@@ -699,7 +701,7 @@ private void CheckPointToAnchors(Vector2 checkPoint)
             GameEvents.TriggerPlayerStateChanged(GameEvents.PlayerState.Normal);
         }
     }
-
+#endregion
     public void AdjustRopeLength(float direction)
     {
         if (!isHooked || distanceJoint == null || !distanceJoint.enabled || anchors.Count == 0)
@@ -899,6 +901,10 @@ public AnimationCurve getOriginalCurve()
     return originalWithCurve;
 }
 
+public Gradient getOriginalColorGradiant()
+{
+    return originalColorGradient;
+}
 // 创建火焰粒子
 public GameObject CreateFireParticle()
 {

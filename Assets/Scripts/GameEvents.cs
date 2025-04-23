@@ -13,7 +13,10 @@ public static class GameEvents
     // 绳索相关事件
     public static event Action OnRopeShoot;
     public static event Action HookFail;
-    public static event Action canShootRope;
+    public delegate void CanShootRopeEvent(bool canShoot);
+    public delegate void SetPlayerBurningEvent(bool isBurning);
+    public static event CanShootRopeEvent OnCanShootRopeChanged;
+    public static event SetPlayerBurningEvent OnPlayerBurningStateChanged;
     public static event Action<Vector2> OnRopeHooked; // 包含钩点位置
     public static event Action OnRopeReleased;
     public static event Action<float> OnRopeLengthChanged; // 包含新长度
@@ -85,8 +88,12 @@ public static class GameEvents
         OnPlayerDamaged?.Invoke(damage);
     }
 
-    public static void TriggerCanShootRope()
+    public static void TriggerCanShootRopeChanged(bool canShoot)
     {
-        canShootRope?.Invoke();
+        OnCanShootRopeChanged?.Invoke(canShoot);
+    }
+    public static void TriggerSetPlayerBurning(bool isBurning)
+    {
+        OnPlayerBurningStateChanged?.Invoke(isBurning);
     }
 }

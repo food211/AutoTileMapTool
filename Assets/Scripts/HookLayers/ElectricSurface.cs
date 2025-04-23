@@ -16,7 +16,7 @@ public class ElectricSurface : MonoBehaviour
     
     [Header("电击属性")]
     [SerializeField] private float electricPower = 10f; // 电击能力
-    [SerializeField] private bool isTrigger = true; // 是否为触发器
+    [SerializeField] private bool isTrigger = false; // 是否为触发器
     [SerializeField] private float shockInterval = 0.5f; // 电击间隔时间（秒）
     [SerializeField] private bool continuousShock = true; // 是否持续电击
     
