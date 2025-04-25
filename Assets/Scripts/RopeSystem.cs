@@ -50,7 +50,6 @@ public class RopeSystem : MonoBehaviour
     // 当前钩中的物体标签
     private string currentHookTag = "";
     // 特效协程引用
-    private Coroutine currentEffectCoroutine = null;
 
     // 绳索弯曲相关
     private List<Vector2> anchors = new List<Vector2>();
@@ -363,76 +362,16 @@ private void CheckPointToAnchors(Vector2 checkPoint)
     }
     
 // 处理不同标签的钩索效果
-    private void HandleHookTagEffect(string tag)
+private void HandleHookTagEffect(string tag)
 {
-    // 获取状态管理器
-    if (statusManager == null) {
-        Debug.LogError("没有找到statusManager");
-        return;
-    }
     // 保存当前钩中的物体标签
     currentHookTag = tag;
     
-    // 根据标签设置不同的效果，但增加状态检查
-    switch (tag)
-    {
-        case "Ice":
-            // 检查是否在冰冻冷却中，如果是则不触发
-            if (!statusManager.IsFrozenOnCooldown() && !statusManager.IsInState(GameEvents.PlayerState.Frozen))
-            {
-                #if UNITY_EDITOR
-                Debug.LogFormat("钩中冰面: 玩家被冻结");
-                #endif
-                // 触发冰冻状态
-                GameEvents.TriggerPlayerStateChanged(GameEvents.PlayerState.Frozen);
-            }
-            break;
-            
-        case "Fire":
-        // 燃烧状态不需要冷却检查，但避免重复触发
-        if (!statusManager.IsInState(GameEvents.PlayerState.Burning))
-        {
-            #if UNITY_EDITOR
-            Debug.LogFormat("钩中火焰: 绳索逐渐烧断");
-            #endif
-            
-            // 最新创建的碰撞节点是放在索引0的，所以从这里开始燃烧。
-            if (burningAnchorIndex == -1 && anchors.Count > 0)
-            {
-                // 默认为第一个锚点
-                burningAnchorIndex = 0;
-            }
-            
-            // 触发燃烧状态
-            GameEvents.TriggerPlayerStateChanged(GameEvents.PlayerState.Burning);
-        }
-        break;
-            
-        case "Elect":
-            // 检查是否在电击冷却中，如果是则不触发
-            if (!statusManager.IsElectrifiedOnCooldown() && !statusManager.IsInState(GameEvents.PlayerState.Electrified))
-            {
-                #if UNITY_EDITOR
-                Debug.LogFormat("钩中带电物体: 玩家被电击");
-                #endif
-                // 触发电击状态
-                GameEvents.TriggerPlayerStateChanged(GameEvents.PlayerState.Electrified);
-            }
-            break;
-            
-        case "Ground":
-        case "Hookable":
-        default:
-            // 只有当前不是摆动状态时才触发
-            if (!statusManager.IsInState(GameEvents.PlayerState.Swinging) && 
-                !statusManager.IsInState(GameEvents.PlayerState.Frozen) && 
-                !statusManager.IsInState(GameEvents.PlayerState.Electrified) &&
-                !statusManager.IsInState(GameEvents.PlayerState.Burning))
-            {
-                // 默认摆动状态
-                GameEvents.TriggerPlayerStateChanged(GameEvents.PlayerState.Swinging);
-            }
-            break;
+    // 调用StatusManager中的方法处理效果
+    if (statusManager != null) {
+        statusManager.HandleHookTagEffect(tag);
+    } else {
+        Debug.LogError("没有找到statusManager");
     }
 }
 
@@ -689,17 +628,6 @@ private void CheckPointToAnchors(Vector2 checkPoint)
         
         // 通知玩家控制器退出绳索模式
         playerController.ExitRopeMode();
-        
-        // 触发玩家状态改变事件
-        // 如果玩家当前处于燃烧状态，先恢复正常状态
-        if (statusManager != null && statusManager.IsInState(GameEvents.PlayerState.Burning))
-        {
-            GameEvents.TriggerPlayerStateChanged(GameEvents.PlayerState.Normal);
-        }
-        else
-        {
-            GameEvents.TriggerPlayerStateChanged(GameEvents.PlayerState.Normal);
-        }
     }
 
 #endregion
@@ -817,39 +745,8 @@ private void CheckPointToAnchors(Vector2 checkPoint)
         return currentHookTag;
     }
 
-// 处理绳索颜色变化
-    public void ChangeRopeColor(GameEvents.PlayerState state)
-{
-    // 只处理Frozen状态和从Frozen恢复的情况
-    if (lineRenderer == null) return;
-    
-    // 处理冰冻状态
-    if (state == GameEvents.PlayerState.Frozen)
-    {
-        // 找到状态管理器以获取冰冻颜色
-        if (statusManager != null)
-        {
-            // 应用冰冻颜色 - 直接使用公共字段
-            lineRenderer.startColor = statusManager.frozenTint;
-            lineRenderer.endColor = statusManager.frozenTint;
-        }
-        else
-        {
-            // 如果无法获取状态管理器，使用默认的冰冻蓝色
-            lineRenderer.startColor = new Color(0.7f, 0.7f, 1.0f);
-            lineRenderer.endColor = new Color(0.7f, 0.7f, 1.0f);
-        }
-    }
-    else if (state != GameEvents.PlayerState.Frozen && originalRopeColor != Color.clear)
-    {
-        // 从冰冻状态恢复时，恢复原始颜色
-        lineRenderer.startColor = originalRopeColor;
-        lineRenderer.endColor = originalRopeColor;
-    }
-}
 
     private void OnEnable() {
-        GameEvents.OnPlayerStateChanged += ChangeRopeColor;
         GameEvents.OnRopeReleased += ReleaseRope;
     }
     
@@ -861,16 +758,8 @@ private void CheckPointToAnchors(Vector2 checkPoint)
             Destroy(arrowObject);
             arrowObject = null;
         }
-        
-        // 确保协程被停止
-        if (currentEffectCoroutine != null)
-        {
-            StopCoroutine(currentEffectCoroutine);
-            currentEffectCoroutine = null;
-        }
 
         GameEvents.OnRopeReleased -= ReleaseRope;
-        GameEvents.OnPlayerStateChanged -= ChangeRopeColor;
     }
 
 
