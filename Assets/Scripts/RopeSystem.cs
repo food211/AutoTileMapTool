@@ -701,7 +701,7 @@ private void CheckPointToAnchors(Vector2 checkPoint)
             GameEvents.TriggerPlayerStateChanged(GameEvents.PlayerState.Normal);
         }
     }
-    
+
 #endregion
     public void AdjustRopeLength(float direction)
     {
@@ -734,6 +734,7 @@ private void CheckPointToAnchors(Vector2 checkPoint)
                 return;
             }
         }
+        
         // 存储原来的长度
         float previousLength = currentRopeLength;
         // 正常调整绳索长度

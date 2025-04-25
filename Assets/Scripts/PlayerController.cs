@@ -48,20 +48,19 @@ public class PlayerController : MonoBehaviour
     private Color originalColor;
     
     // 内部变量
-    private GameEvents.PlayerState currentState = GameEvents.PlayerState.Normal;
+
     private Rigidbody2D rb;
     private float aimAngle = 0f;
     private bool isGrounded = false;
     private bool isRopeMode = false;
     private bool CanShootRope = true;
-    private Collider2D playerCollider;
     private DistanceJoint2D distanceJoint;
     #region Unity methods
     private void Awake()
     {
         isRopeMode = false;
         rb = GetComponent<Rigidbody2D>();
-        playerCollider = GetComponent<Collider2D>();
+
         if (ropeSystem == null)
             ropeSystem = GetComponentInChildren<RopeSystem>();
         
@@ -73,6 +72,10 @@ public class PlayerController : MonoBehaviour
         if (playerRenderer != null)
         {
             originalColor = playerRenderer.color;
+        }
+        if (arrow != null)
+        {
+        arrow.SetActive(CanShootRope);
         }
         // 确保无敌特效初始状态为关闭
         if (invincibleEffect != null)
@@ -100,6 +103,10 @@ public class PlayerController : MonoBehaviour
     
     private void Update()
     {
+        if (arrow != null && arrow.activeSelf != (CanShootRope && !isRopeMode))
+        {
+        arrow.SetActive(CanShootRope && !isRopeMode);
+        }
         if (isRopeMode)
         {
             HandleRopeMode();
@@ -443,7 +450,7 @@ public void ExitRopeMode()
     // 显示箭头
     if (arrow != null)
     {
-        arrow.SetActive(true);
+        arrow.SetActive(CanShootRope);
     }
     
     // 恢复原始物理材质
@@ -459,7 +466,7 @@ public void ExitRopeMode()
     if (!isGrounded && currentSpeed > 0)
     {
         // 保留速度的百分比 - 可以根据需要调整
-        float velocityRetention = 1.05f; 
+        float velocityRetention = 0.98f; 
         
         // 应用保留的速度
         rb.velocity = releaseVelocity * velocityRetention;
@@ -549,28 +556,12 @@ private void OnCollisionEnter2D(Collision2D collision)
 
 private void OnCollisionExit2D(Collision2D collision)
 {
-    // 检查是否离开了特殊属性物体
-    if (collision.gameObject.CompareTag("Elect") || 
-        collision.gameObject.CompareTag("Fire") || 
-        collision.gameObject.CompareTag("Ice"))
+    // 检查是否离开火焰
+    if (collision.gameObject.CompareTag("Fire"))
     {
-        // 如果不在绳索模式下，开始恢复正常状态
-        if (!IsInRopeMode())
-        {
-            // 根据当前状态启动相应的恢复协程
-            if (currentState == GameEvents.PlayerState.Burning)
-            {
-                StartCoroutine(statusManager.RecoverFromBurningState());
-            }
-            else if (currentState == GameEvents.PlayerState.Frozen)
-            {
-                StartCoroutine(statusManager.RecoverFromFrozenState());
-            }
-            else if (currentState == GameEvents.PlayerState.Electrified)
-            {
-                StartCoroutine(statusManager.RecoverFromElectrifiedState());
-            }
-        }
+        // 当玩家离开火物体时，设置 isPlayerBurn 为 false
+        // 但不要改变状态，让状态管理器处理持续燃烧效果
+        GameEvents.TriggerSetPlayerBurning(false);
     }
 }
 
@@ -614,12 +605,28 @@ public void CheckPredictiveElementalCollision(Vector2 currentPos, Vector2 predic
 
     private void HandleCanShootRopeChanged(bool canShoot)
     {
-    CanShootRope = canShoot;
+        CanShootRope = canShoot;
+        
+        // 更新箭头显示状态
+        if (arrow != null && !isRopeMode)
+        {
+            arrow.SetActive(canShoot);
+        }
     }
 
 #endregion
 
 #region 公共方法
+
+public float GetMoveSpeed()
+{
+    return moveSpeed;
+}
+
+public void SetMoveSpeed(float speed)
+{
+    moveSpeed = speed;
+}
 
 public bool IsHookingElectrifiedObject()
 {

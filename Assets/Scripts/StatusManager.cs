@@ -19,6 +19,7 @@ public class StatusManager : MonoBehaviour
     [SerializeField] private int burningDamage = 1;
     [SerializeField] private float burningDrag = 0.8f;
     [SerializeField] private float burningDamageInterval = 1.5f;
+    [SerializeField] private int struggletimes = 20;
     
     [Header("视觉效果")]
     [SerializeField] private GameObject frozenEffect;
@@ -41,6 +42,7 @@ public class StatusManager : MonoBehaviour
     private Vector2 originalVelocity;
     private bool isFrozenOnCooldown = false;
     private bool isElectrifiedOnCooldown = false;
+    public bool ropeIsBurning = false;
     [SerializeField] [Tooltip("玩家是否燃烧")] private bool isPlayerBurn = false;
     
     // 协程引用
@@ -230,7 +232,7 @@ public class StatusManager : MonoBehaviour
     
    #region 应用燃烧状态
     
-   private IEnumerator ApplyBurningState()
+private IEnumerator ApplyBurningState()
 {
     // 应用燃烧视觉效果
     if (playerRenderer != null && isPlayerBurn)
@@ -238,7 +240,7 @@ public class StatusManager : MonoBehaviour
 
     // 禁用玩家松开绳子
     if (playerController != null)
-    GameEvents.TriggerCanShootRopeChanged(false);
+        GameEvents.TriggerCanShootRopeChanged(false);
         
     // 激活燃烧特效
     if (burningEffect != null)
@@ -251,9 +253,6 @@ public class StatusManager : MonoBehaviour
     }
     
     // 获取绳索系统组件
-    
-    bool ropeIsBurning = false;
-    
     if (ropeSystem != null && ropeSystem.HasAnchors())
     {
         // 开始绳索燃烧效果
@@ -265,12 +264,54 @@ public class StatusManager : MonoBehaviour
     float elapsedTime = 0f;
     float nextDamageTime = 0f;
     
-    while (currentState == GameEvents.PlayerState.Burning && isPlayerBurn)
+    // 玩家离开火物体后的燃烧计时器
+    float playerBurnTimer = 0f;
+    float maxPlayerBurnTime = 4.0f; // 最大燃烧时间，4秒
+    bool wasPlayerBurning = false;
+    
+    // 只要玩家处于燃烧状态或绳索在燃烧，就继续循环
+    while (currentState == GameEvents.PlayerState.Burning && 
+           (isPlayerBurn || wasPlayerBurning || ropeIsBurning))
     {
         elapsedTime += Time.deltaTime;
         
-        // 定期造成伤害
-        if (elapsedTime >= nextDamageTime)
+        // 检查玩家燃烧状态变化
+        if (isPlayerBurn)
+        {
+            // 玩家正在接触火物体，重置计时器
+            playerBurnTimer = 0f;
+            wasPlayerBurning = true;
+            
+            // 应用燃烧视觉效果（确保在接触火物体时始终显示燃烧效果）
+            if (playerRenderer != null)
+                playerRenderer.color = burningTint;
+                
+            // 激活燃烧特效
+            if (burningEffect != null && !burningEffect.activeSelf)
+                burningEffect.SetActive(true);
+        }
+        else if (wasPlayerBurning)
+        {
+            // 玩家不再接触火物体，但之前在燃烧
+            playerBurnTimer += Time.deltaTime;
+            
+            // 如果超过最大燃烧时间，停止玩家燃烧
+            if (playerBurnTimer >= maxPlayerBurnTime)
+            {
+                wasPlayerBurning = false;
+                
+                // 关闭燃烧特效
+                if (burningEffect != null)
+                    burningEffect.SetActive(false);
+                    
+                // 恢复原始颜色
+                if (playerRenderer != null)
+                    playerRenderer.color = originalTint;
+            }
+        }
+        
+        // 定期造成伤害 - 只在玩家燃烧时造成伤害
+        if ((isPlayerBurn || wasPlayerBurning) && elapsedTime >= nextDamageTime)
         {
             // 造成伤害
             ApplyDamage(burningDamage);
@@ -280,11 +321,17 @@ public class StatusManager : MonoBehaviour
             {
                 playerRenderer.color = Color.red;
                 yield return new WaitForSeconds(0.1f);
-                playerRenderer.color = burningTint;
+                playerRenderer.color = isPlayerBurn || wasPlayerBurning ? burningTint : originalTint;
             }
             
             // 设置下一次伤害时间
             nextDamageTime = elapsedTime + burningDamageInterval;
+        }
+        
+        // 检查是否应该退出循环 - 玩家不再燃烧且绳索也不再燃烧
+        if (!isPlayerBurn && !wasPlayerBurning && !ropeIsBurning)
+        {
+            break;
         }
         
         yield return null;
@@ -293,14 +340,19 @@ public class StatusManager : MonoBehaviour
     // 如果状态仍然是燃烧，恢复正常状态
     if (currentState == GameEvents.PlayerState.Burning)
     {
+        // 重置绳索燃烧状态
+        ropeIsBurning = false;
+        
         // 触发状态变化事件，断开绳子回到正常状态
-        if (playerController != null && playerController.IsInRopeMode() && !ropeIsBurning)
+        if (playerController != null && playerController.IsInRopeMode())
         {
-            GameEvents.TriggerCanShootRopeChanged(true);
             GameEvents.TriggerRopeReleased();
-            GameEvents.TriggerSetPlayerBurning(false);
-            GameEvents.TriggerPlayerStateChanged(GameEvents.PlayerState.Normal);
         }
+        
+        // 无论是否在绳索模式，都重置玩家燃烧状态
+        GameEvents.TriggerCanShootRopeChanged(true);
+        GameEvents.TriggerSetPlayerBurning(false);
+        GameEvents.TriggerPlayerStateChanged(GameEvents.PlayerState.Normal);
     }
 }
 
@@ -533,8 +585,8 @@ private Gradient CreateGradient(Color[] colors)
 }
 #endregion    
 #region 应用电击状态
- 
-    
+
+private Coroutine electrifiedBlinkCoroutine;
 private IEnumerator ApplyElectrifiedState()
 {
     // 保存当前速度
@@ -569,11 +621,15 @@ private IEnumerator ApplyElectrifiedState()
     // 记录开始时间，而不是累加时间
     float startTime = Time.time;
     float lastDamageTime = startTime;
+    float lastVisualUpdateTime = startTime;
     
     // 挣脱计数器 - 仅在直接钩中带电物体时使用
     int struggleCount = 0;
-    int requiredStruggles = 2; // 需要按4次空格键才能挣脱
-    bool spaceWasPressed = false; // 用于检测空格键的按下和释放
+    int requiredStruggles = struggletimes; // 需要按10次空格键才能挣脱
+    bool keyWasPressed = false; // 用于跟踪上一帧是否按下了空格键
+    
+    // 启动单独的视觉效果协程
+    StartCoroutine(ElectrifiedVisualEffects());
     
     // 如果是直接钩中带电物体，则持续电击直到挣脱；否则持续到electrifiedDuration结束
     while (((isHookingElectrified && struggleCount < requiredStruggles) || 
@@ -583,15 +639,11 @@ private IEnumerator ApplyElectrifiedState()
         // 检测空格键输入 - 仅在直接钩中带电物体时
         if (isHookingElectrified)
         {
-            // 检测空格键按下和释放的完整周期
-            if (Input.GetKeyDown(KeyCode.Space) && !spaceWasPressed)
+            // 使用GetKeyDown而不是GetKeyUp，提高响应性
+            if (Input.GetKeyDown(KeyCode.Space) && !keyWasPressed)
             {
-                spaceWasPressed = true;
-            }
-            else if (Input.GetKeyUp(KeyCode.Space) && spaceWasPressed)
-            {
+                keyWasPressed = true;
                 struggleCount++;
-                spaceWasPressed = false;
                 
                 // 显示挣脱进度提示
                 Debug.LogFormat($"挣脱进度: {struggleCount}/{requiredStruggles}");
@@ -601,42 +653,38 @@ private IEnumerator ApplyElectrifiedState()
                 {
                     // 挣脱时闪烁一下白色
                     playerRenderer.color = Color.white;
-                    // 不需要等待，下一帧会恢复正常颜色
                 }
+            }
+            else if (!Input.GetKey(KeyCode.Space))
+            {
+                keyWasPressed = false;
             }
         }
         
-        // 随机抖动效果
-        if (playerRigidbody != null)
+        // 随机抖动效果 - 降低频率以减少性能开销
+        if (Time.time - lastVisualUpdateTime > 0.05f)
         {
-            // 添加随机力模拟抖动
-            Vector2 randomForce = new Vector2(
-                Random.Range(-5f, 5f),
-                Random.Range(-5f, 5f)
-            );
-            playerRigidbody.AddForce(randomForce, ForceMode2D.Impulse);
+            if (playerRigidbody != null)
+            {
+                // 添加随机力模拟抖动
+                Vector2 randomForce = new Vector2(
+                    Random.Range(-5f, 5f),
+                    Random.Range(-5f, 5f)
+                );
+                playerRigidbody.AddForce(randomForce, ForceMode2D.Impulse);
+            }
+            else
+            {
+                // 如果没有Rigidbody，直接移动Transform
+                transform.position = originalPosition + new Vector3(
+                    Random.Range(-0.1f, 0.1f),
+                    Random.Range(-0.1f, 0.1f),
+                    0
+                );
+            }
+            
+            lastVisualUpdateTime = Time.time;
         }
-        else
-        {
-            // 如果没有Rigidbody，直接移动Transform
-            transform.position = originalPosition + new Vector3(
-                Random.Range(-0.1f, 0.1f),
-                Random.Range(-0.1f, 0.1f),
-                0
-            );
-        }
-        
-        // 闪烁效果
-        if (playerRenderer != null)
-        {
-            // 普通闪烁效果
-            playerRenderer.color = new Color(1.0f, 1.0f, 0.3f);
-            yield return new WaitForSeconds(0.05f);
-            playerRenderer.color = electrifiedTint;            
-        }
-        
-        // 减少等待时间，使循环更频繁检查条件
-        yield return new WaitForSeconds(0.03f);
         
         // 更新原始位置（如果玩家在移动）
         originalPosition = new Vector3(transform.position.x, transform.position.y, originalPosition.z);
@@ -648,6 +696,9 @@ private IEnumerator ApplyElectrifiedState()
             ApplyDamage(1);
             lastDamageTime = currentTime;
         }
+        
+        // 使用非常短的等待时间，以保持输入检测的高频率
+        yield return new WaitForSeconds(0.01f);
     }
     
     // 如果状态仍然是电击，恢复正常状态
@@ -674,11 +725,11 @@ private IEnumerator ApplyElectrifiedState()
                 GameEvents.TriggerRopeReleased();
                 GameEvents.TriggerPlayerStateChanged(GameEvents.PlayerState.Normal);
                 
-                // 启动一个新的协程来等待玩家落地后恢复发射绳索能力
-                StartCoroutine(WaitForGroundedThenEnableRope());
+                // 启动麻痹状态协程，持续一段时间后恢复
+                StartCoroutine(ApplyParalyzedState());
                 
                 // 可以添加一个成功挣脱的视觉或音效反馈
-                Debug.LogFormat("成功挣脱电击！");
+                Debug.LogFormat("成功挣脱电击！进入麻痹状态");
             }
             else if (!isHookingElectrified)
             {
@@ -706,14 +757,34 @@ private IEnumerator ApplyElectrifiedState()
             // 如果不在绳索模式，回到正常状态
             GameEvents.TriggerPlayerStateChanged(GameEvents.PlayerState.Normal);
             
-            // 启动一个新的协程来等待玩家落地后恢复发射绳索能力
-            StartCoroutine(WaitForGroundedThenEnableRope());
+            // 启动麻痹状态协程，持续一段时间后恢复
+            StartCoroutine(ApplyParalyzedState());
         }
     }
 }
 
-// 新增方法：等待玩家落地后恢复发射绳索能力
-private IEnumerator WaitForGroundedThenEnableRope()
+// 新增方法：电击视觉效果协程 - 将视觉效果分离出来
+private IEnumerator ElectrifiedVisualEffects()
+{
+    if (playerRenderer == null) yield break;
+    
+    // 闪烁颜色
+    Color blinkColor1 = new Color(1.0f, 1.0f, 0.3f);
+    Color blinkColor2 = electrifiedTint;
+    
+    // 持续闪烁直到状态改变
+    while (currentState == GameEvents.PlayerState.Electrified)
+    {
+        // 闪烁效果
+        playerRenderer.color = blinkColor1;
+        yield return new WaitForSeconds(0.05f);
+        playerRenderer.color = blinkColor2;
+        yield return new WaitForSeconds(0.05f);
+    }
+}
+
+// 新增方法：应用麻痹状态 - 取代等待落地的逻辑
+private IEnumerator ApplyParalyzedState()
 {
     // 设置电击冷却状态
     isElectrifiedOnCooldown = true;
@@ -724,37 +795,57 @@ private IEnumerator WaitForGroundedThenEnableRope()
         playerController.SetElectricImmunity(true);
     }
     
-    // 等待玩家落地
-    bool wasInAir = true;
-    float timeoutCounter = 0f;
-    float maxTimeout = 5f; // 最长等待5秒，防止永远不落地的情况
-    
-    while (wasInAir && timeoutCounter < maxTimeout)
+    // 启动闪烁效果协程
+    if (electrifiedBlinkCoroutine != null)
     {
-        // 检查玩家是否在地面上
-        if (playerController.wasGrounded)
-        {
-            // 玩家已落地，等待一小段时间以确保稳定
-            yield return new WaitForSeconds(0.2f);
-            
-            // 再次检查，确保玩家真的在地面上
-            if (playerController.wasGrounded)
-            {
-                wasInAir = false;
-            }
-        }
-        
-        timeoutCounter += Time.deltaTime;
+        StopCoroutine(electrifiedBlinkCoroutine);
+    }
+    electrifiedBlinkCoroutine = StartCoroutine(ElectrifiedBlinkRoutine());
+    
+    // 应用麻痹效果 - 降低移动速度
+    float originalMoveSpeed = 0f;
+    if (playerController != null)
+    {
+        originalMoveSpeed = playerController.GetMoveSpeed();
+        playerController.SetMoveSpeed(originalMoveSpeed * 0.5f); // 降低为原来的50%
+    }
+    
+    // 禁用发射绳索能力
+    GameEvents.TriggerCanShootRopeChanged(false);
+    
+    // 麻痹持续时间
+    float paralysisDuration = 3.0f;
+    float elapsedTime = 0f;
+    
+    Debug.LogFormat("玩家进入麻痹状态，持续 {0} 秒", paralysisDuration);
+    
+    // 等待麻痹时间结束
+    while (elapsedTime < paralysisDuration)
+    {
+        elapsedTime += Time.deltaTime;
         yield return null;
     }
     
-    // 等待额外的冷却时间
-    yield return new WaitForSeconds(2f);
-    
-    // 冷却结束，恢复发射绳索能力
+    // 麻痹结束，恢复正常状态
     if (playerController != null)
     {
-        GameEvents.TriggerCanShootRopeChanged(true);
+        playerController.SetMoveSpeed(originalMoveSpeed); // 恢复原始移动速度
+    }
+    
+    // 恢复发射绳索能力
+    GameEvents.TriggerCanShootRopeChanged(true);
+    
+    // 停止闪烁效果
+    if (electrifiedBlinkCoroutine != null)
+    {
+        StopCoroutine(electrifiedBlinkCoroutine);
+        electrifiedBlinkCoroutine = null;
+    }
+    
+    // 恢复原始颜色
+    if (playerRenderer != null)
+    {
+        playerRenderer.color = originalTint;
     }
     
     // 冷却结束
@@ -766,123 +857,29 @@ private IEnumerator WaitForGroundedThenEnableRope()
         playerController.SetElectricImmunity(false);
     }
     
-    Debug.LogFormat("玩家已落地，恢复发射绳索能力");
+    Debug.LogFormat("麻痹状态结束，玩家恢复正常");
 }
 
-public IEnumerator RecoverFromBurningState()
+private IEnumerator ElectrifiedBlinkRoutine()
 {
-    // 设置恢复标志
-    bool isRecovering = true;
-    float recoveryTime = 2.0f; // 恢复需要的时间
-    float elapsedTime = 0f;
+    if (playerRenderer == null) yield break;
     
-    // 获取原始颜色和当前颜色
-    Color originalColor = originalTint;
-    Color burningColor = burningTint;
+    Color blinkColor1 = new Color(1.0f, 1.0f, 0.6f, 1.0f); // 淡黄色
+    Color blinkColor2 = new Color(0.8f, 0.8f, 0.8f, 1.0f); // 淡灰色
     
-    // 通知系统玩家不再燃烧
-    GameEvents.TriggerSetPlayerBurning(false);
+    float blinkSpeed = 0.15f; // 闪烁速度
     
-    // 逐渐恢复
-    while (isRecovering && elapsedTime < recoveryTime)
+    while (true)
     {
-        elapsedTime += Time.deltaTime;
-        
-        // 计算恢复进度
-        float progress = elapsedTime / recoveryTime;
-        
-        // 更新视觉效果 - 颜色渐变回正常
-        if (playerRenderer != null)
-        {
-            playerRenderer.color = Color.Lerp(burningColor, originalColor, progress);
-        }
-        
-        // 更新物理效果 - 阻力逐渐恢复
-        if (playerRigidbody != null)
-        {
-            playerRigidbody.drag = Mathf.Lerp(burningDrag, originalDrag, progress);
-        }
-        
-        // 逐渐减弱燃烧特效
-        if (burningEffect != null)
-        {
-            // 可以调整粒子系统的发射率或透明度
-            ParticleSystem ps = burningEffect.GetComponent<ParticleSystem>();
-            if (ps != null)
-            {
-                var emission = ps.emission;
-                emission.rateOverTimeMultiplier = Mathf.Lerp(1f, 0f, progress);
-            }
-        }
-        
-        yield return null;
+        // 在两种颜色之间交替
+        playerRenderer.color = blinkColor1;
+        yield return new WaitForSeconds(blinkSpeed);
+        playerRenderer.color = blinkColor2;
+        yield return new WaitForSeconds(blinkSpeed);
     }
-    
-    // 完全恢复正常状态
-    if (playerRenderer != null)
-        playerRenderer.color = originalColor;
-        
-    if (playerRigidbody != null)
-        playerRigidbody.drag = originalDrag;
-        
-    if (burningEffect != null)
-        burningEffect.SetActive(false);
-    
-    // 恢复正常状态
-    GameEvents.TriggerPlayerStateChanged(GameEvents.PlayerState.Normal);
 }
+#endregion
 
-// 从冰冻状态恢复的协程
-public IEnumerator RecoverFromFrozenState()
-{
-    // 类似的恢复逻辑...
-    // 可以包括解冻动画、颜色渐变等
-    
-    float recoveryTime = 1.5f;
-    float elapsedTime = 0f;
-    
-    while (elapsedTime < recoveryTime)
-    {
-        elapsedTime += Time.deltaTime;
-        float progress = elapsedTime / recoveryTime;
-        
-        // 更新视觉效果
-        if (playerRenderer != null)
-        {
-            playerRenderer.color = Color.Lerp(frozenTint, originalTint, progress);
-        }
-        
-        yield return null;
-    }
-    
-    // 完全恢复
-    GameEvents.TriggerPlayerStateChanged(GameEvents.PlayerState.Normal);
-}
-
-// 从电击状态恢复的协程
-public IEnumerator RecoverFromElectrifiedState()
-{
-    // 类似的恢复逻辑...
-    float recoveryTime = 1.0f;
-    float elapsedTime = 0f;
-    
-    while (elapsedTime < recoveryTime)
-    {
-        elapsedTime += Time.deltaTime;
-        float progress = elapsedTime / recoveryTime;
-        
-        // 更新视觉效果
-        if (playerRenderer != null)
-        {
-            playerRenderer.color = Color.Lerp(electrifiedTint, originalTint, progress);
-        }
-        
-        yield return null;
-    }
-    
-    // 完全恢复
-    GameEvents.TriggerPlayerStateChanged(GameEvents.PlayerState.Normal);
-}
 
 #endregion
 #region COOLDOWN
@@ -922,6 +919,13 @@ private IEnumerator ElectrifiedCooldownRoutine()
         playerController.SetElectricImmunity(true);
     }
     
+    // 启动闪烁效果协程
+    if (electrifiedBlinkCoroutine != null)
+    {
+        StopCoroutine(electrifiedBlinkCoroutine);
+    }
+    electrifiedBlinkCoroutine = StartCoroutine(ElectrifiedBlinkRoutine());
+    
     // 等待冷却时间
     yield return new WaitForSeconds(electrifiedCooldown);
     
@@ -929,6 +933,19 @@ private IEnumerator ElectrifiedCooldownRoutine()
     if (playerController != null)
     {
         GameEvents.TriggerCanShootRopeChanged(true);
+    }
+    
+    // 停止闪烁效果
+    if (electrifiedBlinkCoroutine != null)
+    {
+        StopCoroutine(electrifiedBlinkCoroutine);
+        electrifiedBlinkCoroutine = null;
+    }
+    
+    // 恢复原始颜色
+    if (playerRenderer != null)
+    {
+        playerRenderer.color = originalTint;
     }
     
     // 冷却结束
@@ -1005,4 +1022,3 @@ private IEnumerator ElectrifiedCooldownRoutine()
             return currentState == state;
         }
     }
-#endregion
