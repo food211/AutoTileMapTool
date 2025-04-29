@@ -21,6 +21,8 @@ public static class GameEvents
     public static event Action<Vector2> OnRopeHooked; // 包含钩点位置
     public static event Action OnRopeReleased;
     public static event Action<float> OnRopeLengthChanged; // 包含新长度
+    // 绳索切断事件
+public static event System.Action<Vector2> OnRopeCut;
     
     // 碰撞相关事件
     public static event System.Action<int> OnPlayerDamaged;
@@ -153,5 +155,11 @@ public static class GameEvents
     public static void TriggerPointsOfInterestSequenceCompleted(string sequenceId)
     {
         OnPointsOfInterestSequenceCompleted?.Invoke(sequenceId);
+    }
+    // 触发绳索切断事件
+    public static void TriggerRopeCut(Vector2 cutPosition)
+    {
+        if (OnRopeCut != null)
+            OnRopeCut(cutPosition);
     }
 }

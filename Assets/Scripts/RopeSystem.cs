@@ -708,7 +708,92 @@ private void HandleHookTagEffect(string tag)
         // 应用力
         playerRigidbody.AddForce(perpendicularDirection * direction * 10f);
     }
+    #region Public Methods
+    // 在指定位置切断绳索
+public bool CutRope(Vector2 cutPosition, float cutRadius = 0.5f)
+{
+    // 如果没有钩住或者没有锚点，则无法切断
+    if (!isHooked || anchors.Count == 0)
+        return false;
     
+    // 检查玩家位置和所有锚点之间的线段是否与切割点相交
+    Vector2 playerPos = playerController.transform.position;
+    Vector2 prevPoint = playerPos;
+    
+    // 创建一个新的锚点列表，用于存储切割后保留的锚点
+    List<Vector2> remainingAnchors = new List<Vector2>();
+    bool ropeCut = false;
+    
+    // 检查玩家到第一个锚点的线段
+    if (IsPointNearLineSegment(playerPos, anchors[0], cutPosition, cutRadius))
+    {
+        // 如果切割点靠近玩家和第一个锚点之间的线段，直接释放绳索
+        ReleaseRope();
+        return true;
+    }
+    
+    // 检查锚点之间的线段
+    for (int i = 0; i < anchors.Count - 1; i++)
+    {
+        if (IsPointNearLineSegment(anchors[i], anchors[i + 1], cutPosition, cutRadius))
+        {
+            // 如果切割点靠近当前锚点和下一个锚点之间的线段
+            ropeCut = true;
+            
+            // 保留切割点之前的锚点
+            remainingAnchors = new List<Vector2>(anchors.GetRange(0, i + 1));
+            break;
+        }
+    }
+    
+    // 如果绳索被切断
+    if (ropeCut)
+    {
+        // 更新锚点列表
+        anchors = remainingAnchors;
+        
+        // 重新计算锚点间距离
+        RecalculateAnchorLength();
+        
+        // 更新关节
+        SetJoint();
+        
+        // 更新线渲染器
+        UpdateLineRenderer();
+        
+        // 触发绳索切断事件
+        GameEvents.TriggerRopeCut(cutPosition);
+        
+        // 可以在这里添加切断效果，如粒子效果或声音
+        
+        return true;
+    }
+    
+    return false;
+}
+
+// 检查点是否靠近线段
+private bool IsPointNearLineSegment(Vector2 lineStart, Vector2 lineEnd, Vector2 point, float maxDistance)
+{
+    // 计算点到线段的距离
+    Vector2 line = lineEnd - lineStart;
+    float lineLength = line.magnitude;
+    Vector2 lineDirection = line.normalized;
+    Vector2 pointVector = point - lineStart;
+    
+    // 计算点在线段上的投影长度
+    float projection = Vector2.Dot(pointVector, lineDirection);
+    
+    // 如果投影在线段外，返回false
+    if (projection < 0 || projection > lineLength)
+        return false;
+    
+    // 计算点到线段的垂直距离
+    float distance = Vector2.Distance(point, lineStart + lineDirection * projection);
+    
+    // 如果距离小于最大距离，返回true
+    return distance <= maxDistance;
+}
     // 检查绳索状态
     public bool IsRopeShootingOrHooked()
     {
@@ -862,7 +947,8 @@ private void RecalculateAnchorLength()
     
     combinedAnchorLen = Mathf.Round(combinedAnchorLen * 100f) / 100f;
 }
-    
+#endregion
+#region OnGizmos    
     // 在编辑器中可视化锚点和绳索
     private void OnDrawGizmos()
     {
@@ -901,3 +987,4 @@ private void RecalculateAnchorLength()
         }
     }
 }
+#endregion
