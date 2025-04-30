@@ -111,6 +111,7 @@ public class StatusManager : MonoBehaviour
         GameEvents.OnPlayerBurningStateChanged += SetPlayerBurn;
         GameEvents.OnRopeHooked += OnRopeHooked;
         GameEvents.OnRopeReleased += OnRopeReleased;
+        GameEvents.OnPlayerDied += OnPlayerDied;
         
         // 添加对绳索颜色变化的监听
         GameEvents.OnPlayerStateChanged += ChangeRopeColor;
@@ -123,6 +124,7 @@ public class StatusManager : MonoBehaviour
         GameEvents.OnPlayerBurningStateChanged -= SetPlayerBurn;
         GameEvents.OnRopeHooked -= OnRopeHooked;
         GameEvents.OnRopeReleased -= OnRopeReleased;
+        GameEvents.OnPlayerDied -= OnPlayerDied;
         
         // 取消对绳索颜色变化的监听
         GameEvents.OnPlayerStateChanged -= ChangeRopeColor;
@@ -139,6 +141,68 @@ public class StatusManager : MonoBehaviour
             StopCoroutine(currentRopeStatusCoroutine);
             currentRopeStatusCoroutine = null;
         }
+    }
+
+    private void OnPlayerDied()
+    {
+        // 停止所有协程 - 这只会停止StatusManager上的协程，不会影响其他脚本
+        StopAllCoroutines();
+        
+        // 重置所有状态
+        currentPlayerState = PlayerState.Normal;
+        currentRopeState = RopeState.Normal;
+        
+        // 清除所有状态效果
+        if (frozenEffect != null) frozenEffect.SetActive(false);
+        if (burningEffect != null) burningEffect.SetActive(false);
+        if (electrifiedEffect != null) electrifiedEffect.SetActive(false);
+        
+        // 重置玩家物理属性
+        if (playerRigidbody != null)
+        {
+            playerRigidbody.drag = originalDrag;
+            playerRigidbody.gravityScale = originalGravityScale;
+            playerRigidbody.isKinematic = originalKinematic;
+        }
+        
+        // 恢复玩家原始颜色
+        if (playerRenderer != null)
+        {
+            playerRenderer.color = originalTint;
+        }
+        
+        // 重置绳索状态和外观
+        if (ropeSystem != null && ropeSystem.GetComponent<LineRenderer>() != null)
+        {
+            LineRenderer lineRenderer = ropeSystem.GetComponent<LineRenderer>();
+            lineRenderer.startColor = ropeSystem.getOriginalColorGradiant().colorKeys[0].color;
+            lineRenderer.endColor = ropeSystem.getOriginalColorGradiant().colorKeys[1].color;
+            lineRenderer.colorGradient = ropeSystem.getOriginalColorGradiant();
+            lineRenderer.widthCurve = ropeSystem.getOriginalCurve();
+        }
+        
+        // 清除所有状态标志
+        isFireImmuneAfterFrozen = false;
+        isFrozenElectrifiedVulnerable = false;
+        isFrozenOnCooldown = false;
+        isElectrifiedOnCooldown = false;
+        isPlayerBurn = false;
+        
+        // 清除协程引用
+        currentPlayerStatusCoroutine = null;
+        currentRopeStatusCoroutine = null;
+        electrifiedBlinkCoroutine = null;
+        fireImmuneCoroutine = null;
+        
+        // 确保绳索释放
+        isRopeActive = false;
+        
+        // 通知GameEvents系统状态已重置
+        GameEvents.TriggerPlayerStateChanged(GameEvents.PlayerState.Normal);
+        
+        #if UNITY_EDITOR
+        Debug.LogFormat("玩家死亡: 所有状态效果已清除");
+        #endif
     }
 
     // 绳索钩住事件处理
@@ -485,11 +549,11 @@ public class StatusManager : MonoBehaviour
     }
 
     // 重置玩家到默认状态
-    private void ResetPlayerToDefault()
+    public void ResetPlayerToDefault()
     {
         // 恢复玩家输入控制
         if (playerController != null)
-            playerController.SetPlayerInput(true);
+            playerController.SetPlayerMove(true);
             
         // 恢复原始物理属性
         if (playerRigidbody != null)
@@ -531,7 +595,7 @@ public class StatusManager : MonoBehaviour
         // 禁用玩家输入
         if (playerController != null)
         {
-            playerController.SetPlayerInput(false);
+            playerController.SetPlayerMove(false);
             GameEvents.TriggerCanShootRopeChanged(false);
         }
             
@@ -682,7 +746,7 @@ public class StatusManager : MonoBehaviour
             // 恢复玩家输入控制
             if (playerController != null)
             {
-                playerController.SetPlayerInput(true);
+                playerController.SetPlayerMove(true);
                 GameEvents.TriggerCanShootRopeChanged(true);
             }
             
@@ -774,7 +838,7 @@ public class StatusManager : MonoBehaviour
         // 禁用玩家输入和发射绳索能力
         if (playerController != null)
         {
-            playerController.SetPlayerInput(false);
+            playerController.SetPlayerMove(false);
             GameEvents.TriggerCanShootRopeChanged(false);
         }
             
@@ -880,7 +944,7 @@ public class StatusManager : MonoBehaviour
             {
                 // 冰冻后电击伤害加倍
                 int damageAmount = isFrozenElectrifiedVulnerable ? 2 : 1;
-                ApplyDamage(damageAmount);
+                GameEvents.TriggerPlayerDamaged(damageAmount);
                 lastDamageTime = currentTime;
             }
             
@@ -1010,7 +1074,7 @@ public class StatusManager : MonoBehaviour
             if ((isPlayerBurn || wasPlayerBurning) && elapsedTime >= nextDamageTime)
             {
                 // 造成伤害
-                ApplyDamage(burningDamage);
+                GameEvents.TriggerPlayerDamaged(burningDamage);
                 
                 // 闪烁效果
                 if (playerRenderer != null)
@@ -1499,23 +1563,6 @@ public void ChangeRopeColor(GameEvents.PlayerState state)
             yield return new WaitForSeconds(blinkSpeed);
         }
     }
-
-    // 伤害闪烁效果
-    private IEnumerator DamageFlashRoutine()
-    {
-        if (playerRenderer == null) yield break;
-        
-        Color originalColor = playerRenderer.color;
-        
-        // 闪烁3次
-        for (int i = 0; i < 3; i++)
-        {
-            playerRenderer.color = Color.red;
-            yield return new WaitForSeconds(0.1f);
-            playerRenderer.color = originalColor;
-            yield return new WaitForSeconds(0.1f);
-        }
-    }
     #endregion
 
     #region Cooldown Routines
@@ -1664,16 +1711,6 @@ public void ChangeRopeColor(GameEvents.PlayerState state)
         
         // 如果没有特殊环境，设置为正常状态
         SetPlayerState(PlayerState.Normal);
-    }
-
-    // 应用伤害
-    private void ApplyDamage(int damage)
-    {
-        // 触发伤害事件
-        GameEvents.TriggerPlayerDamaged(damage);
-        
-        // 视觉反馈
-        StartCoroutine(DamageFlashRoutine());
     }
 
     // 设置玩家燃烧状态

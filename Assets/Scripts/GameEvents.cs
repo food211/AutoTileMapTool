@@ -22,7 +22,7 @@ public static class GameEvents
     public static event Action OnRopeReleased;
     public static event Action<float> OnRopeLengthChanged; // 包含新长度
     // 绳索切断事件
-public static event System.Action<Vector2> OnRopeCut;
+    public static event System.Action<Vector2> OnRopeCut;
     
     // 碰撞相关事件
     public static event System.Action<int> OnPlayerDamaged;
@@ -44,6 +44,13 @@ public static event System.Action<Vector2> OnRopeCut;
     public static event Action<List<PointOfInterest>, string> OnFollowPointsOfInterest; // 包含兴趣点列表和序列ID
     public static event Action OnStopFollowingPointsOfInterest; // 停止跟随兴趣点
     public static event Action<string> OnPointsOfInterestSequenceCompleted; // 兴趣点序列完成事件，包含序列ID
+
+
+    // 玩家生命值相关事件
+    public static event Action<int, int> OnPlayerHealthChanged; // 当前生命值, 最大生命值
+    public static event Action OnPlayerDied;
+    public static event Action OnPlayerRespawn;
+    public static event Action OnPlayerRespawnCompleted;
     
     // 定义玩家状态枚举（可以移到单独的文件中）
     public enum PlayerState
@@ -161,5 +168,33 @@ public static event System.Action<Vector2> OnRopeCut;
     {
         if (OnRopeCut != null)
             OnRopeCut(cutPosition);
+    }
+    // 存档点相关事件
+    public static event Action<Transform> OnCheckpointActivated;
+
+    // 触发方法
+    public static void TriggerPlayerHealthChanged(int currentHealth, int maxHealth)
+    {
+        OnPlayerHealthChanged?.Invoke(currentHealth, maxHealth);
+    }
+
+    public static void TriggerPlayerDied()
+    {
+        OnPlayerDied?.Invoke();
+    }
+
+    public static void TriggerPlayerRespawn()
+    {
+        OnPlayerRespawn?.Invoke();
+    }
+
+    public static void TriggerPlayerRespawnCompleted()
+    {
+        OnPlayerRespawnCompleted?.Invoke();
+    }
+
+    public static void TriggerCheckpointActivated(Transform checkpoint)
+    {
+        OnCheckpointActivated?.Invoke(checkpoint);
     }
 }

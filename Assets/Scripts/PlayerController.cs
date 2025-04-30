@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using UnityEngine;
 
@@ -470,37 +471,10 @@ public void ExitRopeMode()
         
         // 应用保留的速度
         rb.velocity = releaseVelocity * velocityRetention;
-        
-        // 启动空中控制限制协程 - 高速时锁定控制
-        StartCoroutine(LimitAirControl(currentSpeed));
     }
 }
-private IEnumerator LimitAirControl(float releaseSpeed)
-{
-    // 保存原始状态
-    bool originalCanInput = CanInput;
-    
-    // 计算禁止输入的时间 - 速度越快，禁止输入时间越长
-    float controlLockTime = Mathf.Clamp(releaseSpeed / 20f, 0f, 0.8f);
-    
-    if (releaseSpeed > 10f) // 只有当速度足够快时才限制控制
-    {
-        // 完全禁止玩家输入，保持惯性移动
-        CanInput = false;
-        
-        // 等待锁定时间或直到玩家着地
-        float elapsedTime = 0f;
-        while (elapsedTime < controlLockTime && !isGrounded)
-        {
-            elapsedTime += Time.deltaTime;
-            yield return null;
-        }
-        
-        // 恢复玩家输入能力
-        CanInput = originalCanInput;
-    }
-}
-    
+
+
     public void UseItem()
     {
         #if UNITY_EDITOR
@@ -598,12 +572,17 @@ public void CheckPredictiveElementalCollision(Vector2 currentPos, Vector2 predic
 
 #endregion
 #region PlayerControll Switch
-    public void SetPlayerInput(bool canInput)
+    public void SetPlayerInput(bool Input)
+    {
+        SetPlayerMove(Input);
+        HandleCanShootRopeChanged(Input);
+    }
+    public void SetPlayerMove(bool canInput)
     {
         CanInput = canInput;
     }
 
-    private void HandleCanShootRopeChanged(bool canShoot)
+    public void HandleCanShootRopeChanged(bool canShoot)
     {
         CanShootRope = canShoot;
         
@@ -777,6 +756,14 @@ public void SetInvincible(bool invincible, float duration = 0f)
     public bool IsElectricImmune()
     {
         return isElectricImmune || isInvincible; // 无敌状态也包含电免疫
+    }
+
+    public void ResetAllImmunities()
+    {
+        isIceImmune = false;
+        isFireImmune = false;
+        isElectricImmune = false;
+        isInvincible = false;
     }
     #endregion
 
