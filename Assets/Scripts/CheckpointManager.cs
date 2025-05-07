@@ -11,7 +11,6 @@ public class CheckpointManager : MonoBehaviour
     [SerializeField] private Transform initialSpawnPoint; // 初始出生点
     [SerializeField] private List<Checkpoint> checkpoints = new List<Checkpoint>(); // 场景中的所有存档点
     [SerializeField] private bool autoFindCheckpoints = true; // 是否自动查找场景中的所有存档点
-    [SerializeField] private float respawnDelay = 1.0f; // 重生延迟
     
     [Header("玩家引用")]
     [SerializeField] private PlayerController playerController;
@@ -37,19 +36,23 @@ public class CheckpointManager : MonoBehaviour
         
         // 初始化存档点状态
         InitializeCheckpoints();
+        
+        // 设置健康管理器的初始出生点引用
+        if (healthManager != null)
+        {
+            healthManager.SetCheckpointManager(this);
+        }
     }
     
     private void OnEnable()
     {
         // 订阅事件
-        GameEvents.OnPlayerRespawn += RespawnPlayer;
         GameEvents.OnCheckpointActivated += ActivateCheckpoint;
     }
     
     private void OnDisable()
     {
         // 取消订阅事件
-        GameEvents.OnPlayerRespawn -= RespawnPlayer;
         GameEvents.OnCheckpointActivated -= ActivateCheckpoint;
     }
     
@@ -161,87 +164,19 @@ public class CheckpointManager : MonoBehaviour
     }
     
     /// <summary>
-    /// 重生玩家
-    /// </summary>
-    private void RespawnPlayer()
-    {
-        StartCoroutine(RespawnSequence());
-    }
-    
-    /// <summary>
-    /// 重生序列
-    /// </summary>
-    private IEnumerator RespawnSequence()
-    {
-        // 等待短暂延迟
-        yield return new WaitForSeconds(respawnDelay);
-        
-        // 确定重生位置
-        Vector3 respawnPosition;
-        
-        if (activeCheckpoint != null)
-        {
-            // 使用当前激活的存档点的重生点
-            respawnPosition = activeCheckpoint.RespawnPoint.position;
-        }
-        else if (initialSpawnPoint != null)
-        {
-            // 使用初始出生点
-            respawnPosition = initialSpawnPoint.position;
-        }
-        else
-        {
-            Debug.LogError("没有设置重生点！");
-            yield break;
-        }
-        
-        // 重置玩家位置
-        if (playerController != null)
-        {
-            // 确保玩家处于正常状态
-            playerController.SetPlayerInput(false); // 暂时禁用输入
-            
-            // 重置玩家位置
-            playerController.transform.position = respawnPosition;
-            
-            // 如果玩家有刚体组件，重置速度
-            Rigidbody2D rb = playerController.GetRigidbody();
-            if (rb != null)
-            {
-                rb.velocity = Vector2.zero;
-            }
-            
-            // 如果绳索系统处于活跃状态，释放绳索
-            GameEvents.TriggerRopeReleased();
-            
-            // 如果存档点设置为重生时恢复生命值，则恢复玩家生命值
-            if (activeCheckpoint != null && activeCheckpoint.HealOnActivate && healthManager != null)
-            {
-                healthManager.FullHeal();
-            }
-            
-            // 给玩家短暂的无敌时间
-            playerController.SetInvincible(true, 2.0f);
-            
-            // 延迟一下再启用输入，让玩家有时间适应
-            yield return new WaitForSeconds(0.5f);
-            
-            // 重新启用玩家输入
-            playerController.SetPlayerInput(true);
-        }
-        
-        // 触发重生完成事件
-        GameEvents.TriggerPlayerRespawnCompleted();
-        
-        Debug.Log($"玩家在位置 {respawnPosition} 重生");
-    }
-    
-    /// <summary>
     /// 获取当前激活的存档点
     /// </summary>
     public Checkpoint GetActiveCheckpoint()
     {
         return activeCheckpoint;
+    }
+    
+    /// <summary>
+    /// 获取初始出生点
+    /// </summary>
+    public Transform GetInitialSpawnPoint()
+    {
+        return initialSpawnPoint;
     }
     
     /// <summary>
@@ -258,5 +193,28 @@ public class CheckpointManager : MonoBehaviour
     public void SetInitialSpawnPoint(Transform spawnPoint)
     {
         initialSpawnPoint = spawnPoint;
+    }
+    
+    /// <summary>
+    /// 获取适合的重生位置
+    /// </summary>
+    public Vector3 GetRespawnPosition()
+    {
+        // 优先使用激活的存档点
+        if (activeCheckpoint != null && activeCheckpoint.RespawnPoint != null)
+        {
+            return activeCheckpoint.RespawnPoint.position;
+        }
+        // 其次使用初始出生点
+        else if (initialSpawnPoint != null)
+        {
+            return initialSpawnPoint.position;
+        }
+        // 如果都没有，返回原点
+        else
+        {
+            Debug.LogWarning("没有设置任何重生点，使用原点(0,0,0)");
+            return Vector3.zero;
+        }
     }
 }

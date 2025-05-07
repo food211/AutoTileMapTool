@@ -7,6 +7,7 @@ public class PlayerController : MonoBehaviour
     [Header("移动设置")]
     [SerializeField] private float moveSpeed = 5f;
     [SerializeField] private float jumpForce = 10f;
+    private float currentSlopeAngle = 0f;
     private bool CanInput = true;
     
     [Header("钩索设置")]
@@ -130,9 +131,9 @@ public class PlayerController : MonoBehaviour
         wasGrounded = isGrounded;
         
         // 原有的地面检测逻辑
-        bool isYVelocityInRange = rb.velocity.y >= maxFallingSpeed && rb.velocity.y <= 0;
+        bool isYVelocityInRange = rb.velocity.y >= maxFallingSpeed && rb.velocity.y <= 1f;
         bool isGroundDetected = CheckGroundCollision();
-        isGrounded = isYVelocityInRange && isGroundDetected;
+        isGrounded = isGroundDetected;
         
         // 如果着地状态发生变化，触发事件
         if (wasGrounded != isGrounded)
@@ -262,23 +263,85 @@ public class PlayerController : MonoBehaviour
         }
         else
         {
-            // 普通模式下的地面检测逻辑
+            // 普通模式下的地面检测逻辑 - 优化斜坡检测
             Vector2 position = transform.position;
-            Vector2 center = position + groundCheckOffset;
-            Collider2D[] colliders = Physics2D.OverlapBoxAll(center, groundCheckSize, 0f, groundLayers);
             
-            // 在编辑器中可视化检测区域
+            // 增加检测范围，使用更宽的检测框
+            Vector2 center = position + groundCheckOffset;
+            Vector2 enlargedSize = new Vector2(groundCheckSize.x, groundCheckSize.y * 1.2f); // 稍微增加高度以适应斜坡
+            
+            // 使用射线检测来处理斜坡
+            bool raycastHit = false;
+            bool isSteepSlope = false; // 是否是陡峭斜坡
+            float rayDistance = groundCheckSize.y + 0.1f; // 射线长度稍微长于检测框高度
+            
+            // 发射多条射线以检测斜坡
+            int rayCount = 5; // 射线数量
+            for (int i = 0; i < rayCount; i++)
+            {
+                float xOffset = ((float)i / (rayCount - 1) - 0.5f) * groundCheckSize.x;
+                Vector2 rayStart = new Vector2(position.x + xOffset, position.y);
+                RaycastHit2D hit = Physics2D.Raycast(rayStart, Vector2.down, rayDistance, groundLayers);
+                
+                if (hit.collider != null)
+                {
+                    // 计算斜坡角度
+                    float slopeAngle = Vector2.Angle(hit.normal, Vector2.up);
+                    
+                    // 如果斜坡角度大于45度，标记为陡峭斜坡
+                    if (slopeAngle > 45f)
+                    {
+                        isSteepSlope = true;
+                        
+                        #if UNITY_EDITOR
+                        if (showGroundCheck)
+                        {
+                            // 陡峭斜坡显示为黄色
+                            Debug.DrawRay(rayStart, Vector2.down * rayDistance, Color.yellow);
+                            // 显示法线方向
+                            Debug.DrawRay(hit.point, hit.normal, Color.cyan);
+                        }
+                        #endif
+                    }
+                    else
+                    {
+                        raycastHit = true;
+                        
+                        #if UNITY_EDITOR
+                        if (showGroundCheck)
+                        {
+                            // 可攀爬斜坡显示为绿色
+                            Debug.DrawRay(rayStart, Vector2.down * rayDistance, Color.green);
+                            // 显示法线方向
+                            Debug.DrawRay(hit.point, hit.normal, Color.white);
+                        }
+                        #endif
+                    }
+                }
+                else
+                {
+                    #if UNITY_EDITOR
+                    if (showGroundCheck)
+                    {
+                        // 未检测到地面显示为红色
+                        Debug.DrawRay(rayStart, Vector2.down * rayDistance, Color.red);
+                    }
+                    #endif
+                }
+            }
+            
+            // 常规的盒检测
+            Collider2D[] colliders = Physics2D.OverlapBoxAll(center, enlargedSize, 0f, groundLayers);
+            
             #if UNITY_EDITOR
             if (showGroundCheck)
             {
-                // 预先计算点位置以避免重复创建Vector3
                 Color debugColor = colliders.Length > 0 ? Color.green : Color.red;
-                Vector3 bottomLeft = new Vector3(center.x - groundCheckSize.x/2, center.y - groundCheckSize.y/2);
-                Vector3 bottomRight = new Vector3(center.x + groundCheckSize.x/2, center.y - groundCheckSize.y/2);
-                Vector3 topRight = new Vector3(center.x + groundCheckSize.x/2, center.y + groundCheckSize.y/2);
-                Vector3 topLeft = new Vector3(center.x - groundCheckSize.x/2, center.y + groundCheckSize.y/2);
+                Vector3 bottomLeft = new Vector3(center.x - enlargedSize.x/2, center.y - enlargedSize.y/2);
+                Vector3 bottomRight = new Vector3(center.x + enlargedSize.x/2, center.y - enlargedSize.y/2);
+                Vector3 topRight = new Vector3(center.x + enlargedSize.x/2, center.y + enlargedSize.y/2);
+                Vector3 topLeft = new Vector3(center.x - enlargedSize.x/2, center.y + enlargedSize.y/2);
                 
-                // 使用预先计算的点绘制线条
                 Debug.DrawLine(bottomLeft, bottomRight, debugColor);
                 Debug.DrawLine(bottomRight, topRight, debugColor);
                 Debug.DrawLine(topRight, topLeft, debugColor);
@@ -286,8 +349,34 @@ public class PlayerController : MonoBehaviour
             }
             #endif
             
-            // 如果检测到任何碰撞体，则认为有地面支撑
-            return colliders.Length > 0;
+            // 检查当前是否站在斜坡上，并获取斜坡角度
+            RaycastHit2D centerHit = Physics2D.Raycast(position, Vector2.down, rayDistance, groundLayers);
+            if (centerHit.collider != null)
+            {
+                float slopeAngle = Vector2.Angle(centerHit.normal, Vector2.up);
+                
+                // 存储当前斜坡角度供其他方法使用
+                currentSlopeAngle = slopeAngle;
+                
+                // 如果斜坡角度大于45度，认为是陡峭斜坡
+                if (slopeAngle > 45f)
+                {
+                    isSteepSlope = true;
+                }
+            }
+            else
+            {
+                currentSlopeAngle = 0f;
+            }
+            
+            // 如果是陡峭斜坡，则不认为玩家站在地面上
+            if (isSteepSlope)
+            {
+                return false;
+            }
+            
+            // 如果射线检测或盒检测有任一检测到碰撞，则认为有地面支撑
+            return raycastHit || colliders.Length > 0;
         }
     }
     #endregion
@@ -306,7 +395,41 @@ public class PlayerController : MonoBehaviour
         if (isGrounded)
         {
             // 在地面上时完全控制移动
-            rb.velocity = new Vector2(horizontalInput * moveSpeed, rb.velocity.y);
+            
+            // 检查是否在斜坡上，以及移动方向是否是上坡
+            bool isMovingUpSlope = false;
+            
+            // 如果有斜坡角度，检查移动方向
+            if (currentSlopeAngle > 0f)
+            {
+                // 获取当前站立的斜坡法线
+                RaycastHit2D hit = Physics2D.Raycast(transform.position, Vector2.down, 0.5f, groundLayers);
+                if (hit.collider != null)
+                {
+                    Vector2 slopeNormal = hit.normal;
+                    
+                    // 计算斜坡方向（垂直于法线）
+                    Vector2 slopeDirection = new Vector2(slopeNormal.y, -slopeNormal.x);
+                    
+                    // 判断玩家移动方向是否与斜坡上坡方向一致
+                    // 如果斜坡向右上倾斜，slopeDirection.x > 0，向左上倾斜则 < 0
+                    if ((slopeDirection.x > 0 && horizontalInput > 0) || 
+                        (slopeDirection.x < 0 && horizontalInput < 0))
+                    {
+                        isMovingUpSlope = true;
+                    }
+                }
+            }
+            
+            // 如果斜坡角度大于45度且正在尝试上坡，阻止水平移动
+            if (currentSlopeAngle > 45f && isMovingUpSlope)
+            {
+                rb.velocity = new Vector2(0, rb.velocity.y);
+            }
+            else
+            {
+                rb.velocity = new Vector2(horizontalInput * moveSpeed, rb.velocity.y);
+            }
         }
         else
         {
@@ -359,7 +482,7 @@ public class PlayerController : MonoBehaviour
         }
         
         // 使用道具 - 只在绳索未发射时
-        if (Input.GetKeyDown(KeyCode.Z) && !isRopeBusy)
+        if (Input.GetKeyDown(KeyCode.Z) && !ropeSystem.IsShooting())
         {
             UseItem();
         }
@@ -372,7 +495,7 @@ public class PlayerController : MonoBehaviour
         }
     }
     
-    private void HandleRopeMode()
+        private void HandleRopeMode()
     {
         // 左右摆动
         if (Input.GetKey(KeyCode.LeftArrow) && CanInput)
@@ -402,10 +525,18 @@ public class PlayerController : MonoBehaviour
             ropeSystem.ReleaseRope();
         }
         
+        // 添加使用道具的逻辑 - 只在绳索不处于发射状态时
+        if (Input.GetKeyDown(KeyCode.Z) && !ropeSystem.IsShooting() && CanInput)
+        {
+            UseItem();
+        }
+        
         // 限制最大速度
         LimitMaxVelocity();
     }
+
     #endregion
+    
     // 限制最大速度的方法
     private void LimitMaxVelocity()
     {
@@ -478,12 +609,7 @@ public void ExitRopeMode()
     public void UseItem()
     {
         #if UNITY_EDITOR
-        // 道具使用逻辑 - 使用0GC方式
-        if (UnityEngine.Profiling.Profiler.enabled)
-        {
-            UnityEngine.Profiling.Profiler.BeginSample("使用道具");
-            UnityEngine.Profiling.Profiler.EndSample();
-        }
+        Debug.LogFormat("使用道具");
         #endif
     }
     

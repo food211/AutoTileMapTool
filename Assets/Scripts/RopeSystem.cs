@@ -23,6 +23,7 @@ public class RopeSystem : MonoBehaviour
     
     [Header("碰撞检测")]
     [SerializeField] private LayerMask hookableLayers; // 可以被钩住的层
+    [SerializeField] private LayerMask collisionOnlyLayers; // 可以碰撞但不可钩住的层
     [SerializeField] private float linecastOffset = 0.1f; // 增加偏移量，从0.01f改为0.1f
     [SerializeField] private float anchorSafetyCheck = 0.15f; // 锚点安全检查距离
     [SerializeField] private int swingCollisionSteps = 25;
@@ -288,77 +289,96 @@ private void CheckPointToAnchors(Vector2 checkPoint)
     // 更新绳索发射状态
     private void UpdateRopeShooting()
     {
-        // 隐藏玩家控制器中的箭头（如果有）
-        if (playerController.arrow != null)
-            playerController.arrow.SetActive(false);
-            
-        // 增加绳索长度
-        shootDistance += Time.deltaTime * ropeShootSpeed;
+    // 隐藏玩家控制器中的箭头（如果有）
+    if (playerController.arrow != null)
+        playerController.arrow.SetActive(false);
         
-        // 检查是否达到最大长度
-        if (shootDistance >= ropeLength)
+    // 增加绳索长度
+    shootDistance += Time.deltaTime * ropeShootSpeed;
+
+    // 检查是否达到最大长度
+    if (shootDistance >= ropeLength)
+    {
+        ReleaseRope();
+        return;
+    }
+
+    // 计算当前绳索末端位置
+    Vector2 endPosition = (Vector2)playerController.transform.position + shootDirection * shootDistance;
+
+    // 更新线渲染器
+    lineRenderer.SetPosition(0, playerController.transform.position);
+    lineRenderer.SetPosition(1, endPosition);
+
+    // 更新箭头位置
+    UpdateArrowPosition(endPosition);
+
+    // 检测可钩住层的碰撞
+    RaycastHit2D hookHit = Physics2D.Raycast(
+        playerController.transform.position,
+        shootDirection,
+        shootDistance,
+        hookableLayers
+    );
+
+    // 检测仅碰撞层的碰撞
+    RaycastHit2D collisionHit = Physics2D.Raycast(
+        playerController.transform.position,
+        shootDirection,
+        shootDistance,
+        collisionOnlyLayers
+    );
+
+    // 如果碰到了仅碰撞层，立即结束发射但不钩住
+    if (collisionHit.collider != null)
+    {
+        // 绳索弹回效果
+        ReleaseRope();
+        // 可以添加弹回的视觉或音效
+        GameEvents.TriggerHookFail();
+        return;
+    }
+
+    // 如果碰到了可钩住层
+    if (hookHit.collider != null)
+    {
+        // 获取碰撞物体的标签
+        string hitTag = hookHit.collider.tag;
+        // 检查是否为不可钩住的物体
+        if (hitTag == "NotHookable")
         {
+            // 绳索弹回效果
             ReleaseRope();
+            // 可以添加弹回的视觉或音效
+            GameEvents.TriggerHookFail();
             return;
         }
+        // 计算更安全的锚点位置，沿法线方向偏移
+        Vector2 safeAnchorPoint = hookHit.point + (hookHit.normal.normalized * linecastOffset);
         
-        // 计算当前绳索末端位置
-        Vector2 endPosition = (Vector2)playerController.transform.position + shootDirection * shootDistance;
+        // 绳索已钩住物体
+        hookPosition = safeAnchorPoint;
+        isHooked = true;
+        isShooting = false;
         
-        // 更新线渲染器
-        lineRenderer.SetPosition(0, playerController.transform.position);
-        lineRenderer.SetPosition(1, endPosition);
-        
-        // 更新箭头位置
-        UpdateArrowPosition(endPosition);
-        
-        // 检测碰撞
-        RaycastHit2D hit = Physics2D.Raycast(
-            playerController.transform.position,
-            shootDirection,
-            shootDistance,
-            hookableLayers
-        );
-        
-        if (hit.collider != null)
-        {
-            // 获取碰撞物体的标签
-            string hitTag = hit.collider.tag;
-            // 检查是否为不可钩住的物体
-            if (hitTag == "NotHookable")
-            {
-                // 绳索弹回效果
-                ReleaseRope();
-                // 可以添加弹回的视觉或音效
-                GameEvents.TriggerHookFail();
-                return;
-            }
-            // 计算更安全的锚点位置，沿法线方向偏移
-            Vector2 safeAnchorPoint = hit.point + (hit.normal.normalized * linecastOffset);
-            
-            // 绳索已钩住物体
-            hookPosition = safeAnchorPoint;
-            isHooked = true;
-            isShooting = false;
-            
-            // 保存当前钩中的物体标签
-            currentHookTag = hitTag;
+        // 保存当前钩中的物体标签
+        currentHookTag = hitTag;
 
-            // 添加第一个锚点
-            AddAnchor(safeAnchorPoint);
-            
-            // 钩中目标后隐藏箭头
-            if (arrowObject != null)
-            {
-                arrowObject.SetActive(false);
-            }
-            
-            // 通知玩家控制器进入绳索模式
-            playerController.EnterRopeMode();
-            // 触发绳索钩住事件
-            GameEvents.TriggerRopeHooked(hookPosition);
-            HandleHookTagEffect(hitTag);
+        // 添加第一个锚点
+        AddAnchor(safeAnchorPoint);
+        
+        // 钩中目标后隐藏箭头
+        if (arrowObject != null)
+        {
+            arrowObject.SetActive(false);
         }
+        
+        // 通知玩家控制器进入绳索模式
+        playerController.EnterRopeMode();
+        // 触发绳索钩住事件
+        GameEvents.TriggerRopeHooked(hookPosition);
+        HandleHookTagEffect(hitTag);
+    }
     }
     
 // 处理不同标签的钩索效果
@@ -709,6 +729,11 @@ private void HandleHookTagEffect(string tag)
         playerRigidbody.AddForce(perpendicularDirection * direction * 10f);
     }
     #region Public Methods
+
+    public void SetCollisionOnlyLayers(LayerMask layers)
+{
+    collisionOnlyLayers = layers;
+}
     // 在指定位置切断绳索
 public bool CutRope(Vector2 cutPosition, float cutRadius = 0.5f)
 {
@@ -795,6 +820,11 @@ private bool IsPointNearLineSegment(Vector2 lineStart, Vector2 lineEnd, Vector2 
     return distance <= maxDistance;
 }
     // 检查绳索状态
+    // 添加这个新方法来单独检查绳索是否处于发射状态
+    public bool IsShooting()
+    {
+        return isShooting;
+    }
     public bool IsRopeShootingOrHooked()
     {
         return isShooting || isHooked;

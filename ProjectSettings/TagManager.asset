@@ -17,10 +17,10 @@ TagManager:
   - CollisionMask
   - Water
   - UI
-  - PlayerLayer
+  - EnemyLayer
   - DeadZone
-  - 
-  - 
+  - NotHookableWall
+  - BackGround
   - 
   - 
   - 

@@ -24,13 +24,14 @@ public class PlayerHealthManager : MonoBehaviour
     [Header("引用")]
     [SerializeField] private PlayerController playerController;
     [SerializeField] private SpriteRenderer arrow;
-    [SerializeField] private Transform respawnPoint; // 重生点
+    [SerializeField] private CheckpointManager checkpointManager; // 存档点管理器
+    [SerializeField] private float respawnDelay = 1.0f; // 重生延迟
     
     // 内部变量
     private Color originalColor;
     private Coroutine invincibilityCoroutine;
     private Coroutine flashCoroutine;
-    private Vector3 initialPosition; // 初始位置
+    private Vector3 initialPosition; // 初始位置（仅作为备用）
     
     private void Awake()
     {
@@ -44,11 +45,14 @@ public class PlayerHealthManager : MonoBehaviour
         if (playerController == null)
             playerController = GetComponent<PlayerController>();
             
+        if (checkpointManager == null)
+            checkpointManager = FindObjectOfType<CheckpointManager>();
+            
         // 保存原始颜色
         if (playerRenderer != null)
             originalColor = playerRenderer.color;
             
-        // 保存初始位置（如果没有设置重生点）
+        // 保存初始位置（仅作为最后的备用）
         initialPosition = transform.position;
     }
     
@@ -356,12 +360,34 @@ public class PlayerHealthManager : MonoBehaviour
         if (arrow != null)
             arrow.color = new Color(arrow.color.r, arrow.color.g, arrow.color.b, 0f);
             
-        // 重置玩家位置
-        if (respawnPoint != null)
-            transform.position = respawnPoint.position;
-        else
-            transform.position = initialPosition;
+        // 等待短暂延迟
+        yield return new WaitForSeconds(respawnDelay);
+        
+        // 确定重生位置
+        Vector3 respawnPosition;
+        
+        // 通过CheckpointManager获取适合的重生位置
+        if (checkpointManager != null)
+        {
+            respawnPosition = checkpointManager.GetRespawnPosition();
             
+            // 如果有激活的存档点，并且设置为重生时恢复生命值
+            Checkpoint activeCheckpoint = checkpointManager.GetActiveCheckpoint();
+            if (activeCheckpoint != null && activeCheckpoint.HealOnActivate)
+            {
+                FullHeal();
+            }
+        }
+        // 如果没有CheckpointManager，使用初始位置
+        else
+        {
+            respawnPosition = initialPosition;
+            Debug.LogWarning("没有找到CheckpointManager，使用初始位置作为重生点");
+        }
+        
+        // 重置玩家位置
+        transform.position = respawnPosition;
+        
         // 重置物理状态
         if (GetComponent<Rigidbody2D>() != null)
         {
@@ -370,9 +396,15 @@ public class PlayerHealthManager : MonoBehaviour
             rb.angularVelocity = 0f;
         }
         
-        // 恢复生命值
-        currentHealth = maxHealth;
-        GameEvents.TriggerPlayerHealthChanged(currentHealth, maxHealth);
+        // 如果绳索系统处于活跃状态，释放绳索
+        GameEvents.TriggerRopeReleased();
+        
+        // 恢复生命值（如果没有通过存档点恢复）
+        if (currentHealth <= 0)
+        {
+            currentHealth = maxHealth;
+            GameEvents.TriggerPlayerHealthChanged(currentHealth, maxHealth);
+        }
         
         // 等待短暂时间
         yield return new WaitForSeconds(0.5f);
@@ -411,11 +443,20 @@ public class PlayerHealthManager : MonoBehaviour
         
         // 设置短暂无敌时间
         SetInvincible(true, respawnInvincibilityDuration);
+        
+        // 给玩家控制器也设置无敌状态
+        if (playerController != null)
+        {
+            playerController.SetInvincible(true, respawnInvincibilityDuration);
+        }
    
         // 触发状态重置事件
         GameEvents.TriggerPlayerStateChanged(GameEvents.PlayerState.Normal);
         
-        Debug.Log("玩家已重生");
+        // 触发重生完成事件
+        GameEvents.TriggerPlayerRespawnCompleted();
+        
+        Debug.Log($"玩家在位置 {respawnPosition} 重生");
     }
     
     /// <summary>
@@ -440,5 +481,13 @@ public class PlayerHealthManager : MonoBehaviour
     public bool IsInvincible()
     {
         return isInvincible || playerController.IsInvincible();
+    }
+    
+    /// <summary>
+    /// 设置CheckpointManager引用
+    /// </summary>
+    public void SetCheckpointManager(CheckpointManager manager)
+    {
+        checkpointManager = manager;
     }
 }
