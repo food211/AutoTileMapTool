@@ -6,9 +6,15 @@ public class PlayerController : MonoBehaviour
 {
     [Header("移动设置")]
     [SerializeField] private float moveSpeed = 5f;
-    [SerializeField] private float jumpForce = 10f;
+    [SerializeField] private float jumpHeight = 2.5f; // 跳跃高度
+    [SerializeField] private float jumpCutMultiplier = 0.5f; // 松开跳跃键时的速度减少系数
+    [SerializeField] private float fallMultiplier = 1.5f; // 下落时的重力倍增系数
+    [SerializeField] private float maxFallSpeed = 15f; // 最大下落速度
+    private float initialJumpVelocity; // 计算得出的初始跳跃速度
+    private bool isJumping = false; // 是否正在跳跃
     private float currentSlopeAngle = 0f;
     private bool CanInput = true;
+    private float originalgravityscale;
     
     [Header("钩索设置")]
     [SerializeField] private Transform aimIndicator;
@@ -62,6 +68,12 @@ public class PlayerController : MonoBehaviour
     {
         isRopeMode = false;
         rb = GetComponent<Rigidbody2D>();
+        if (rb != null)
+        {
+            originalgravityscale = rb.gravityScale;
+        }
+        // 计算跳跃所需的速度和重力
+        CalculateJumpParameters();
 
         if (ropeSystem == null)
             ropeSystem = GetComponentInChildren<RopeSystem>();
@@ -117,7 +129,18 @@ public class PlayerController : MonoBehaviour
         {
             HandleNormalMode();
             CheckGrounded();
+            // 处理下落加速
+            HandleFallingGravity();
         }
+    }
+
+    private void CalculateJumpParameters()
+    {
+        // 使用物理公式计算跳跃初始速度
+        // 公式: v = sqrt(2 * h * g)
+        // 其中 h 是跳跃高度，g 是重力加速度
+        float gravity = Physics2D.gravity.magnitude * rb.gravityScale;
+        initialJumpVelocity = Mathf.Sqrt(2 * jumpHeight * gravity);
     }
 
 #endregion
@@ -430,16 +453,25 @@ public class PlayerController : MonoBehaviour
             {
                 rb.velocity = new Vector2(horizontalInput * moveSpeed, rb.velocity.y);
             }
+            
+            // 如果刚刚落地，重置跳跃状态
+            if (isJumping)
+            {
+                isJumping = false;
+                
+                // 可以在这里添加落地音效或动画触发
+                // 例如: AudioManager.Instance.PlayLandSound();
+            }
         }
         else
         {
             // 在空中时，只施加少量力以微调方向，但保持惯性
-            rb.AddForce(new Vector2(horizontalInput * moveSpeed * 0.5f, 0), ForceMode2D.Force);
+            rb.AddForce(new Vector2(horizontalInput * moveSpeed * 5f, 0), ForceMode2D.Force);
             
             // 可选：限制最大水平速度
-            if (Mathf.Abs(rb.velocity.x) > moveSpeed * 1.5f)
+            if (Mathf.Abs(rb.velocity.x) > moveSpeed * 1f)
             {
-                float clampedXVelocity = Mathf.Clamp(rb.velocity.x, -moveSpeed * 1.5f, moveSpeed * 1.5f);
+                float clampedXVelocity = Mathf.Clamp(rb.velocity.x, -moveSpeed * 1f, moveSpeed * 1f);
                 rb.velocity = new Vector2(clampedXVelocity, rb.velocity.y);
             }
         }
@@ -475,10 +507,19 @@ public class PlayerController : MonoBehaviour
             aimIndicator.rotation = Quaternion.Euler(0, 0, aimAngle * flipMultiplier);
         }
             
-        // 跳跃 - 只在绳索未发射时
-        if (Input.GetKeyDown(KeyCode.X) && isGrounded && !isRopeBusy)
+        // 跳跃 - 只在绳索未发射时且在地面上
+        if (Input.GetKeyDown(KeyCode.X) && isGrounded && !isRopeBusy && !isJumping)
         {
-            rb.AddForce(Vector2.up * jumpForce, ForceMode2D.Impulse);
+            // 使用计算好的跳跃速度
+            rb.velocity = new Vector2(rb.velocity.x, initialJumpVelocity);
+            isJumping = true;
+        }
+        
+        // 跳跃高度控制 - 如果松开跳跃键，减小上升速度
+        if (isJumping && !Input.GetKey(KeyCode.X) && rb.velocity.y > 0)
+        {
+            // 减小上升速度，实现可变跳跃高度
+            rb.velocity = new Vector2(rb.velocity.x, rb.velocity.y * jumpCutMultiplier);
         }
         
         // 使用道具 - 只在绳索未发射时
@@ -605,6 +646,27 @@ public void ExitRopeMode()
     }
 }
 
+    // 处理下落时的重力加速
+    private void HandleFallingGravity()
+    {
+        // 只在非绳索模式下处理
+        if (!isRopeMode)
+        {
+            // 当玩家下落时（Y轴速度为负）
+            if (rb.velocity.y < 0)
+            {
+                // 应用额外的向下力，使下落更快
+                rb.AddForce(Vector2.down * fallMultiplier * Physics2D.gravity.magnitude, ForceMode2D.Force);
+                
+                // 限制最大下落速度
+                if (rb.velocity.y < -maxFallSpeed)
+                {
+                    rb.velocity = new Vector2(rb.velocity.x, -maxFallSpeed);
+                }
+            }
+        }
+    }
+
 
     public void UseItem()
     {
@@ -695,6 +757,52 @@ public void CheckPredictiveElementalCollision(Vector2 currentPos, Vector2 predic
         }
     }
 }
+
+#endregion
+
+#region HandlePlayerDeadth
+private void HandlePlayerDied()
+{
+    SetPlayerInput(false);
+    // 如果在绳索模式，强制退出绳索模式
+    if (isRopeMode && ropeSystem != null)
+    {
+        ropeSystem.ReleaseRope();
+    }
+    
+    // 停止所有移动
+    if (rb != null)
+    {
+        rb.velocity = Vector2.zero;
+        rb.angularVelocity = 0f;
+        
+        // 可选：禁用重力，完全冻结玩家
+        rb.gravityScale = 0f;
+        rb.constraints = RigidbodyConstraints2D.FreezeAll;
+    }
+    
+    // 隐藏箭头
+    if (arrow != null)
+    {
+        arrow.SetActive(false);
+    }
+    
+    #if UNITY_EDITOR
+    Debug.Log("玩家死亡，已禁用所有输入和移动");
+    #endif
+}
+
+    private void HandlePlayerRespawn()
+    {
+        SetPlayerInput(true);
+        ResetAllImmunities();
+        if(rb != null)
+        {
+            rb.gravityScale = originalgravityscale;
+            rb.constraints = RigidbodyConstraints2D.FreezeRotation;
+        }
+        isJumping = false;
+    }
 
 #endregion
 #region PlayerControll Switch
@@ -931,11 +1039,15 @@ public void SetInvincible(bool invincible, float duration = 0f)
     public void OnEnable()
     {
         GameEvents.OnCanShootRopeChanged += HandleCanShootRopeChanged;
+        GameEvents.OnPlayerDied += HandlePlayerDied;
+        GameEvents.OnPlayerRespawnCompleted += HandlePlayerRespawn;
     }
     private void OnDisable()
     {
         // 移除事件监听
         GameEvents.OnCanShootRopeChanged -= HandleCanShootRopeChanged;
+        GameEvents.OnPlayerDied -= HandlePlayerDied;
+        GameEvents.OnPlayerRespawnCompleted -= HandlePlayerRespawn;
     }
     
     #endregion

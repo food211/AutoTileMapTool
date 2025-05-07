@@ -109,9 +109,6 @@ public class Checkpoint : MonoBehaviour
         {
             activationParticle.Play();
         }
-        
-        // 可以在这里添加更多激活效果，如屏幕闪烁、相机震动等
-        GameEvents.TriggerCameraShake(0.3f);
     }
     
     /// <summary>

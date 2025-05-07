@@ -32,6 +32,7 @@ public class PlayerHealthManager : MonoBehaviour
     private Coroutine invincibilityCoroutine;
     private Coroutine flashCoroutine;
     private Vector3 initialPosition; // 初始位置（仅作为备用）
+    private bool isRespawning = false; // 标记玩家是否正在重生
     
     private void Awake()
     {
@@ -78,8 +79,8 @@ public class PlayerHealthManager : MonoBehaviour
     /// <param name="damage">伤害值</param>
     public void TakeDamage(int damage)
     {
-        // 如果处于无敌状态，不受伤害
-        if (isInvincible || playerController.IsInvincible())
+        // 如果处于无敌状态或正在重生，不受伤害
+        if (isInvincible || playerController.IsInvincible() || isRespawning)
             return;
             
         // 减少生命值
@@ -117,8 +118,11 @@ public class PlayerHealthManager : MonoBehaviour
         // 触发生命值变化事件
         GameEvents.TriggerPlayerHealthChanged(currentHealth, maxHealth);
         
-        // 可以添加恢复生命值的视觉效果
-        StartCoroutine(HealVisualEffect());
+        // 如果不在重生过程中，才播放恢复特效
+        if (!isRespawning)
+        {
+            StartCoroutine(HealVisualEffect());
+        }
     }
     
     /// <summary>
@@ -132,8 +136,11 @@ public class PlayerHealthManager : MonoBehaviour
         // 触发生命值变化事件
         GameEvents.TriggerPlayerHealthChanged(currentHealth, maxHealth);
         
-        // 播放恢复效果
-        StartCoroutine(HealVisualEffect());
+        // 如果不在重生过程中，才播放恢复特效
+        if (!isRespawning)
+        {
+            StartCoroutine(HealVisualEffect());
+        }
     }
     
     /// <summary>
@@ -143,10 +150,6 @@ public class PlayerHealthManager : MonoBehaviour
     {
         // 触发玩家死亡事件
         GameEvents.TriggerPlayerDied();
-        
-        // 禁用玩家输入
-        if (playerController != null)
-            playerController.SetPlayerMove(false);
             
         // 播放死亡动画或效果
         StartCoroutine(DeathSequence());
@@ -200,8 +203,11 @@ public class PlayerHealthManager : MonoBehaviour
         // 设置无敌状态
         isInvincible = true;
         
-        // 开始闪烁效果
-        StartCoroutine(InvincibilityFlashEffect(duration));
+        // 如果不在重生过程中，才播放闪烁效果
+        if (!isRespawning)
+        {
+            StartCoroutine(InvincibilityFlashEffect(duration));
+        }
         
         // 等待无敌时间
         yield return new WaitForSeconds(duration);
@@ -238,7 +244,7 @@ public class PlayerHealthManager : MonoBehaviour
         float flashInterval = 0.1f;
         
         // 在无敌时间内闪烁
-        while (elapsed < duration)
+        while (elapsed < duration && !isRespawning)
         {
             // 切换透明度
             playerRenderer.color = new Color(
@@ -264,18 +270,21 @@ public class PlayerHealthManager : MonoBehaviour
             elapsed += flashInterval;
         }
         
-        // 恢复原始颜色
-        playerRenderer.color = originalColor;
-        
-        // 恢复箭头颜色
-        if (arrow != null)
+        // 如果不在重生过程中，恢复原始颜色
+        if (!isRespawning)
         {
-            arrow.color = new Color(
-                arrow.color.r,
-                arrow.color.g,
-                arrow.color.b,
-                1f
-            );
+            playerRenderer.color = originalColor;
+            
+            // 恢复箭头颜色
+            if (arrow != null)
+            {
+                arrow.color = new Color(
+                    arrow.color.r,
+                    arrow.color.g,
+                    arrow.color.b,
+                    1f
+                );
+            }
         }
     }
     
@@ -342,7 +351,7 @@ public class PlayerHealthManager : MonoBehaviour
     /// <summary>
     /// 玩家重生处理
     /// </summary>
-    private void RespawnPlayer()
+    public void RespawnPlayer()
     {
         // 开始重生序列
         StartCoroutine(RespawnSequence());
@@ -353,6 +362,9 @@ public class PlayerHealthManager : MonoBehaviour
     /// </summary>
     private IEnumerator RespawnSequence()
     {
+        // 设置重生标志
+        isRespawning = true;
+        
         // 确保玩家不可见
         if (playerRenderer != null)
             playerRenderer.color = new Color(originalColor.r, originalColor.g, originalColor.b, 0f);
@@ -375,7 +387,9 @@ public class PlayerHealthManager : MonoBehaviour
             Checkpoint activeCheckpoint = checkpointManager.GetActiveCheckpoint();
             if (activeCheckpoint != null && activeCheckpoint.HealOnActivate)
             {
-                FullHeal();
+                // 恢复生命值但不显示特效
+                currentHealth = maxHealth;
+                GameEvents.TriggerPlayerHealthChanged(currentHealth, maxHealth);
             }
         }
         // 如果没有CheckpointManager，使用初始位置
@@ -402,6 +416,7 @@ public class PlayerHealthManager : MonoBehaviour
         // 恢复生命值（如果没有通过存档点恢复）
         if (currentHealth <= 0)
         {
+            // 恢复生命值但不显示特效
             currentHealth = maxHealth;
             GameEvents.TriggerPlayerHealthChanged(currentHealth, maxHealth);
         }
@@ -433,13 +448,6 @@ public class PlayerHealthManager : MonoBehaviour
             
         if (arrow != null)
             arrow.color = new Color(arrow.color.r, arrow.color.g, arrow.color.b, 1f);
-            
-        // 启用玩家输入
-        if (playerController != null)
-        {
-            playerController.SetPlayerInput(true);
-            playerController.ResetAllImmunities(); // 重置所有免疫状态
-        }
         
         // 设置短暂无敌时间
         SetInvincible(true, respawnInvincibilityDuration);
@@ -448,10 +456,15 @@ public class PlayerHealthManager : MonoBehaviour
         if (playerController != null)
         {
             playerController.SetInvincible(true, respawnInvincibilityDuration);
+            // 重新启用玩家输入
+            playerController.SetPlayerInput(true);
         }
    
         // 触发状态重置事件
         GameEvents.TriggerPlayerStateChanged(GameEvents.PlayerState.Normal);
+        
+        // 重生完成，取消重生标志
+        isRespawning = false;
         
         // 触发重生完成事件
         GameEvents.TriggerPlayerRespawnCompleted();

@@ -47,13 +47,20 @@ public class CheckpointManager : MonoBehaviour
     private void OnEnable()
     {
         // 订阅事件
-        GameEvents.OnCheckpointActivated += ActivateCheckpoint;
+        GameEvents.OnCheckpointActivated += HandleCheckpointActivated;
     }
     
     private void OnDisable()
     {
         // 取消订阅事件
-        GameEvents.OnCheckpointActivated -= ActivateCheckpoint;
+        GameEvents.OnCheckpointActivated -= HandleCheckpointActivated;
+    }
+    
+    // 事件处理适配器方法 - 将事件转发到带两个参数的ActivateCheckpoint方法
+    private void HandleCheckpointActivated(Transform checkpointTransform)
+    {
+        // 当通过事件触发时，我们希望触发治疗效果
+        ActivateCheckpoint(checkpointTransform, true);
     }
     
     /// <summary>
@@ -91,8 +98,8 @@ public class CheckpointManager : MonoBehaviour
             {
                 if (checkpoint.CheckpointID == lastCheckpointID)
                 {
-                    // 激活该存档点
-                    ActivateCheckpoint(checkpoint.transform);
+                    // 激活该存档点，但不触发恢复生命值效果，因为这只是游戏启动
+                    ActivateCheckpoint(checkpoint.transform, false);
                     return;
                 }
             }
@@ -105,7 +112,8 @@ public class CheckpointManager : MonoBehaviour
             Checkpoint initialCheckpoint = initialSpawnPoint.GetComponent<Checkpoint>();
             if (initialCheckpoint != null)
             {
-                ActivateCheckpoint(initialCheckpoint.transform);
+                // 激活该存档点，但不触发恢复生命值效果，因为这只是游戏启动
+                ActivateCheckpoint(initialCheckpoint.transform, false);
             }
             else
             {
@@ -119,7 +127,7 @@ public class CheckpointManager : MonoBehaviour
     /// 激活存档点
     /// </summary>
     /// <param name="checkpointTransform">要激活的存档点Transform</param>
-    public void ActivateCheckpoint(Transform checkpointTransform)
+    public void ActivateCheckpoint(Transform checkpointTransform, bool triggerHeal = true)
     {
         Checkpoint checkpoint = checkpointTransform.GetComponent<Checkpoint>();
         if (checkpoint == null)
@@ -145,8 +153,8 @@ public class CheckpointManager : MonoBehaviour
         // 保存存档点ID
         SaveCheckpointID(checkpoint.CheckpointID);
         
-        // 如果存档点设置为恢复生命值，则恢复玩家生命值
-        if (checkpoint.HealOnActivate && healthManager != null)
+        // 如果存档点设置为恢复生命值，且triggerHeal为true，则恢复玩家生命值
+        if (triggerHeal && checkpoint.HealOnActivate && healthManager != null)
         {
             healthManager.FullHeal();
         }
