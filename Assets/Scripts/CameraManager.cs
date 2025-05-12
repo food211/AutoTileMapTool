@@ -1,6 +1,8 @@
 using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
+using Unity.VisualScripting;
+using Unity.Mathematics;
 
 public class CameraManager : MonoBehaviour
 {
@@ -28,7 +30,15 @@ public class CameraManager : MonoBehaviour
     [SerializeField] private float maxShakeRotation = 10f; // 最大震动旋转角度
     [SerializeField] private float traumaDecayRate = 0.25f; // trauma衰减速率
     [SerializeField] private float traumaPower = 2f; // trauma强度指数(2=平方，3=立方)
-    
+    [Header("下落偏移调整")]
+    [SerializeField] private bool enableFallingOffsetAdjustment = true; // 是否启用下落偏移调整
+    [SerializeField] private float maxPositiveYOffset;
+    [SerializeField] private float maxNegativeYOffset;
+    [SerializeField] private float offsetTransitionSpeed = 0.25f; // 偏移过渡速度
+    [SerializeField] private float fallingThreshold = -0.5f; // 下落速度阈值，低于此值视为下落
+    private Vector3 lastTargetPosition; // 上一帧目标位置
+    private float currentYOffset; // 当前Y轴偏移量
+    private bool wasTargetFalling; // 上一帧目标是否在下落
     // 保存摄像机的初始Z位置和旋转
     private float initialZ;
     private Quaternion initialRotation;
@@ -51,8 +61,15 @@ public class CameraManager : MonoBehaviour
         // 确保有目标可以跟随
         if (target == null)
         {
-            Debug.LogWarning("摄像机没有设置跟随目标！请在Inspector中设置Target。");
+            Debug.LogWarning("摄像机没有设置跟随目标!请在Inspector中设置Target。");
         }
+        if (target != null)
+        {
+            lastTargetPosition = target.position;
+        }
+        currentYOffset = offset.y;
+        maxPositiveYOffset = math.abs(offset.y);
+        maxNegativeYOffset = -math.abs(offset.y);
         
         // 保存初始Z位置和旋转
         initialZ = transform.position.z;
@@ -62,9 +79,10 @@ public class CameraManager : MonoBehaviour
         cam = GetComponent<Camera>();
         if (cam == null)
         {
-            Debug.LogError("CameraManager脚本必须挂载在有Camera组件的GameObject上！");
+            Debug.LogError("CameraManager脚本必须挂载在有Camera组件的GameObject上!");
             return;
         }
+        
         
         // 设置初始目标大小
         targetSize = cam.orthographicSize;
@@ -132,10 +150,55 @@ public class CameraManager : MonoBehaviour
         Vector3 currentPosition = transform.position;
         Vector3 newPosition = currentPosition;
         
+        // 计算目标垂直速度
+        Vector3 targetVelocity = Vector3.zero;
+        if (Time.deltaTime > 0)
+        {
+            targetVelocity = (currentTarget.position - lastTargetPosition) / Time.deltaTime;
+        }
+        lastTargetPosition = currentTarget.position;
+        
+        // 根据垂直速度调整Y轴偏移量
+        if (enableFallingOffsetAdjustment)
+        {
+            bool isTargetFalling = targetVelocity.y < fallingThreshold;
+            
+            // 计算目标偏移量
+            float targetYOffset = offset.y; // 默认使用原始偏移量
+            
+            if (isTargetFalling)
+            {
+                // 当目标下落时，向负方向过渡
+                targetYOffset = maxNegativeYOffset;
+            }
+            else if (wasTargetFalling || currentYOffset < offset.y)
+            {
+                // 当目标停止下落或正在恢复时，向正方向过渡
+                targetYOffset = maxPositiveYOffset;
+                
+                // 如果已经接近原始偏移量，则恢复到原始偏移量
+                if (Mathf.Abs(currentYOffset - offset.y) < 0.1f)
+                {
+                    targetYOffset = offset.y;
+                }
+            }
+            
+            // 平滑过渡到目标偏移量
+            currentYOffset = Mathf.Lerp(currentYOffset, targetYOffset, offsetTransitionSpeed * Time.deltaTime);
+            
+            // 更新下落状态
+            wasTargetFalling = isTargetFalling;
+        }
+        else
+        {
+            // 如果不启用下落偏移调整，使用原始偏移量
+            currentYOffset = offset.y;
+        }
+        
         // 计算目标位置（考虑偏移量），但只考虑X和Y
         Vector3 targetPosition = new Vector3(
             currentTarget.position.x + offset.x,
-            currentTarget.position.y + offset.y,
+            currentTarget.position.y + currentYOffset, // 使用动态Y轴偏移量
             initialZ  // 保持原始Z值
         );
 
