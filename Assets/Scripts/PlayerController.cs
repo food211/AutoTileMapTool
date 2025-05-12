@@ -18,7 +18,7 @@ public class PlayerController : MonoBehaviour
     
     [Header("钩索设置")]
     [SerializeField] private Transform aimIndicator;
-    [SerializeField] public GameObject arrow; // 添加对箭头的引用
+    [SerializeField] public GameObject Gun; // 添加对箭头的引用
     [SerializeField] private float aimRotationSpeed = 120f;
     
     [Header("引用")]
@@ -87,9 +87,13 @@ public class PlayerController : MonoBehaviour
         {
             originalColor = playerRenderer.color;
         }
-        if (arrow != null)
+        if (Gun = null)
         {
-        arrow.SetActive(CanShootRope);
+            Debug.LogError("Can't find player's Gun");
+        }
+        else
+        {
+        Gun.SetActive(CanShootRope);
         }
         // 确保无敌特效初始状态为关闭
         if (invincibleEffect != null)
@@ -117,9 +121,9 @@ public class PlayerController : MonoBehaviour
     
     private void Update()
     {
-        if (arrow != null && arrow.activeSelf != (CanShootRope && !isRopeMode))
+        if (Gun != null && Gun.activeSelf != (CanShootRope && !isRopeMode))
         {
-        arrow.SetActive(CanShootRope && !isRopeMode);
+        Gun.SetActive(CanShootRope && !isRopeMode);
         }
         if (isRopeMode)
         {
@@ -531,6 +535,7 @@ public class PlayerController : MonoBehaviour
         // 发射钩索 - 只在绳索未发射时
         if (Input.GetKeyDown(KeyCode.Space) && !isRopeBusy && CanShootRope)
         {
+
             Vector2 direction = aimIndicator.right * (aimIndicator.localScale.x > 0 ? 1 : -1);
             ropeSystem.ShootRope(direction);
         }
@@ -593,9 +598,9 @@ public class PlayerController : MonoBehaviour
         isRopeMode = true;
         
         // 隐藏箭头
-        if (arrow != null)
+        if (Gun != null)
         {
-            arrow.SetActive(false);
+            Gun.SetActive(false);
         }
         
         // 应用弹性物理材质
@@ -621,9 +626,9 @@ public void ExitRopeMode()
     float currentSpeed = releaseVelocity.magnitude;
     
     // 显示箭头
-    if (arrow != null)
+    if (Gun != null)
     {
-        arrow.SetActive(CanShootRope);
+        Gun.SetActive(CanShootRope);
     }
     
     // 恢复原始物理材质
@@ -782,9 +787,9 @@ private void HandlePlayerDied()
     }
     
     // 隐藏箭头
-    if (arrow != null)
+    if (Gun != null)
     {
-        arrow.SetActive(false);
+        Gun.SetActive(false);
     }
     
     #if UNITY_EDITOR
@@ -821,15 +826,19 @@ private void HandlePlayerDied()
         CanShootRope = canShoot;
         
         // 更新箭头显示状态
-        if (arrow != null && !isRopeMode)
+        if (Gun != null && !isRopeMode && !ropeSystem.IsShooting())
         {
-            arrow.SetActive(canShoot);
+            Gun.SetActive(canShoot);
         }
     }
 
 #endregion
 
 #region 公共方法
+public void ShowPlayerArrow ()
+{
+    Gun.SetActive(false);
+}
 
 public float GetMoveSpeed()
 {

@@ -179,8 +179,11 @@ private void PredictiveCollisionCheck(Vector2 fromPos, Vector2 toPos)
 
 private void CheckPointToAnchors(Vector2 checkPoint)
 {
+    // 合并可钩住层和仅碰撞层，用于绳索弯折检测
+    LayerMask combinedLayers = hookableLayers | collisionOnlyLayers;
+    
     // 检查到第一个锚点
-    RaycastHit2D hit = Physics2D.Linecast(checkPoint, anchors[0], hookableLayers);
+    RaycastHit2D hit = Physics2D.Linecast(checkPoint, anchors[0], combinedLayers);
     if (hit && Vector2.Distance(hit.point, anchors[0]) > anchorSafetyCheck)
     {
         // 获取碰撞物体的标签
@@ -200,7 +203,7 @@ private void CheckPointToAnchors(Vector2 checkPoint)
             Vector2 offsetStart = checkPoint + dirToAnchor * 0.2f;
             
             // 再次检查从偏移起点到新锚点是否有障碍物
-            RaycastHit2D safetyCheck = Physics2D.Linecast(offsetStart, safeAnchorPoint, hookableLayers);
+            RaycastHit2D safetyCheck = Physics2D.Linecast(offsetStart, safeAnchorPoint, combinedLayers);
             
             // 如果没有障碍物或障碍物就是目标点，则添加锚点
             if (!safetyCheck || Vector2.Distance(safetyCheck.point, safeAnchorPoint) < 0.1f)
@@ -210,7 +213,7 @@ private void CheckPointToAnchors(Vector2 checkPoint)
         }
     }
 }
-    
+
     // 发射绳索
     public void ShootRope(Vector2 direction)
     {
@@ -290,8 +293,8 @@ private void CheckPointToAnchors(Vector2 checkPoint)
     private void UpdateRopeShooting()
     {
     // 隐藏玩家控制器中的箭头（如果有）
-    if (playerController.arrow != null)
-        playerController.arrow.SetActive(false);
+    if (playerController.Gun != null)
+        playerController.Gun.SetActive(false);
         
     // 增加绳索长度
     shootDistance += Time.deltaTime * ropeShootSpeed;
@@ -411,7 +414,7 @@ private void HandleHookTagEffect(string tag)
         UpdateLineRenderer();
     }
     
-    private void RopeJointManager()
+private void RopeJointManager()
 {
     // 检查从玩家到最近锚点的线检测
     if (anchors.Count > 0)
@@ -419,8 +422,11 @@ private void HandleHookTagEffect(string tag)
         // 获取玩家位置
         Vector2 playerPos = playerController.transform.position;
         
-        // 检查是否需要添加新的锚点 - 使用Layer而不是Tag
-        RaycastHit2D hit = Physics2D.Linecast(playerPos, anchors[0], hookableLayers);
+        // 合并可钩住层和仅碰撞层，用于绳索弯折检测
+        LayerMask combinedLayers = hookableLayers | collisionOnlyLayers;
+        
+        // 检查是否需要添加新的锚点 - 使用合并后的Layer
+        RaycastHit2D hit = Physics2D.Linecast(playerPos, anchors[0], combinedLayers);
         if (hit)
         {
             // 获取碰撞物体的标签
@@ -443,7 +449,7 @@ private void HandleHookTagEffect(string tag)
                 Vector2 offsetStart = playerPos + dirToAnchor * 0.2f;
                 
                 // 再次检查从偏移起点到新锚点是否有障碍物
-                RaycastHit2D safetyCheck = Physics2D.Linecast(offsetStart, safeAnchorPoint, hookableLayers);
+                RaycastHit2D safetyCheck = Physics2D.Linecast(offsetStart, safeAnchorPoint, combinedLayers);
                 
                 // 如果没有障碍物或障碍物就是目标点，则添加锚点
                 if (!safetyCheck || Vector2.Distance(safetyCheck.point, safeAnchorPoint) < 0.1f)
@@ -476,7 +482,7 @@ private void HandleHookTagEffect(string tag)
                 Vector2 ABVector = (anchors[0] - playerPos).normalized;
                 Vector2 shortLCStart = anchors[0] - (0.2f * ABVector);
                 
-                RaycastHit2D returnHitShort = Physics2D.Linecast(shortLCStart, anchors[1], hookableLayers);
+                RaycastHit2D returnHitShort = Physics2D.Linecast(shortLCStart, anchors[1], combinedLayers);
                 if (!returnHitShort)
                 {
                     // 如果没有障碍物，可以移除第一个锚点

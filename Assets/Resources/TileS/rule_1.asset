@@ -1,0 +1,118 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e94c511a04b63f94a897ac9e19aa1f90, type: 3}
+  m_Name: rule_1
+  m_EditorClassIdentifier: 
+  emptyMarkerTile: {fileID: 11400000, guid: fa088c7e7e8295a4d96c0d4d0c57ff60, type: 2}
+  inputRulesPrefab: {fileID: 9060736298155810219, guid: 769cf13a7b6921d4badb2bad5627972e, type: 3}
+  outputRulesPrefab: {fileID: 9060736298155810219, guid: 4b89c6c8ce08a0247a177939453450cf, type: 3}
+  rules:
+  - ruleName: Rule 19
+    bounds:
+      m_Position: {x: -2, y: -8, z: 0}
+      m_Size: {x: 1, y: 1, z: 1}
+    priority: 20
+  - ruleName: Rule 17
+    bounds:
+      m_Position: {x: 9, y: -10, z: 0}
+      m_Size: {x: 3, y: 3, z: 1}
+    priority: 19
+  - ruleName: Rule 16
+    bounds:
+      m_Position: {x: 5, y: -10, z: 0}
+      m_Size: {x: 3, y: 3, z: 1}
+    priority: 18
+  - ruleName: Rule 15
+    bounds:
+      m_Position: {x: 1, y: -10, z: 0}
+      m_Size: {x: 3, y: 3, z: 1}
+    priority: 17
+  - ruleName: Rule 18
+    bounds:
+      m_Position: {x: 13, y: -10, z: 0}
+      m_Size: {x: 3, y: 3, z: 1}
+    priority: 16
+  - ruleName: Rule 14
+    bounds:
+      m_Position: {x: 10, y: -14, z: 0}
+      m_Size: {x: 3, y: 3, z: 1}
+    priority: 15
+  - ruleName: Rule 13
+    bounds:
+      m_Position: {x: 6, y: -14, z: 0}
+      m_Size: {x: 3, y: 3, z: 1}
+    priority: 14
+  - ruleName: Rule 12
+    bounds:
+      m_Position: {x: 2, y: -14, z: 0}
+      m_Size: {x: 3, y: 3, z: 1}
+    priority: 13
+  - ruleName: Rule 11
+    bounds:
+      m_Position: {x: -2, y: -14, z: 0}
+      m_Size: {x: 3, y: 3, z: 1}
+    priority: 12
+  - ruleName: Rule 10
+    bounds:
+      m_Position: {x: 10, y: -18, z: 0}
+      m_Size: {x: 3, y: 3, z: 1}
+    priority: 11
+  - ruleName: Rule 9
+    bounds:
+      m_Position: {x: 6, y: -18, z: 0}
+      m_Size: {x: 3, y: 3, z: 1}
+    priority: 10
+  - ruleName: Rule 8
+    bounds:
+      m_Position: {x: 2, y: -18, z: 0}
+      m_Size: {x: 3, y: 3, z: 1}
+    priority: 9
+  - ruleName: Rule 7
+    bounds:
+      m_Position: {x: -2, y: -19, z: 0}
+      m_Size: {x: 3, y: 3, z: 1}
+    priority: 8
+  - ruleName: Rule 6
+    bounds:
+      m_Position: {x: 6, y: -23, z: 0}
+      m_Size: {x: 3, y: 3, z: 1}
+    priority: 7
+  - ruleName: Rule 5
+    bounds:
+      m_Position: {x: 2, y: -23, z: 0}
+      m_Size: {x: 3, y: 3, z: 1}
+    priority: 6
+  - ruleName: Rule 4
+    bounds:
+      m_Position: {x: -2, y: -23, z: 0}
+      m_Size: {x: 3, y: 3, z: 1}
+    priority: 5
+  - ruleName: Rule 3
+    bounds:
+      m_Position: {x: 12, y: -27, z: 0}
+      m_Size: {x: 2, y: 2, z: 1}
+    priority: 4
+  - ruleName: Rule 2
+    bounds:
+      m_Position: {x: 8, y: -27, z: 0}
+      m_Size: {x: 2, y: 2, z: 1}
+    priority: 3
+  - ruleName: Rule 1
+    bounds:
+      m_Position: {x: 3, y: -27, z: 0}
+      m_Size: {x: 2, y: 2, z: 1}
+    priority: 2
+  - ruleName: Rule 0
+    bounds:
+      m_Position: {x: -2, y: -27, z: 0}
+      m_Size: {x: 2, y: 2, z: 1}
+    priority: 1
