@@ -8,8 +8,8 @@ using UnityEngine;
 public class PlayerHealthManager : MonoBehaviour
 {
     [Header("生命值设置")]
-    [SerializeField] private int maxHealth = 5;
-    [SerializeField] private int currentHealth;
+    [SerializeField] public int maxHealth = 5;
+    [SerializeField] public int currentHealth;
     
     [Header("无敌时间")]
     [SerializeField] private float invincibilityDuration = 1.5f; // 受伤后的无敌时间
@@ -173,7 +173,9 @@ public class PlayerHealthManager : MonoBehaviour
         // 调用死亡处理
         Die();
         
+        #if UNITY_EDITOR
         Debug.Log("玩家被立即杀死");
+        #endif
     }
     
     /// <summary>

@@ -51,6 +51,12 @@ public static class GameEvents
     public static event Action OnPlayerDied;
     public static event Action OnPlayerRespawn;
     public static event Action OnPlayerRespawnCompleted;
+
+    /// <summary>
+    /// 当玩家到达关卡终点时触发
+    /// </summary>
+    public static event System.Action<Transform> OnEndpointReached;
+    public static event System.Action<string> OnLevelLoaded; // 关卡加载完成事件，包含场景名称
     
     // 定义玩家状态枚举（可以移到单独的文件中）
     public enum PlayerState
@@ -197,4 +203,14 @@ public static class GameEvents
     {
         OnCheckpointActivated?.Invoke(checkpoint);
     }
+
+    public static void TriggerEndpointReached(Transform endpointTransform)
+    {
+        OnEndpointReached?.Invoke(endpointTransform);
+    }
+    public static void TriggerLevelLoaded(string sceneName)
+    {
+        OnLevelLoaded?.Invoke(sceneName);
+    }
+
 }

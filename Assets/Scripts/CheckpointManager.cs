@@ -79,8 +79,9 @@ public class CheckpointManager : MonoBehaviour
         {
             checkpoints.Add(checkpoint);
         }
-        
+        #if UNITY_EDITOR
         Debug.Log($"找到 {checkpoints.Count} 个存档点");
+        #endif
     }
     
     /// <summary>
@@ -158,8 +159,9 @@ public class CheckpointManager : MonoBehaviour
         {
             healthManager.FullHeal();
         }
-        
+        #if UNITY_EDITOR
         Debug.Log($"激活存档点: {checkpoint.name} (ID: {checkpoint.CheckpointID})");
+        #endif
     }
     
     /// <summary>

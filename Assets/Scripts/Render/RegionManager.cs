@@ -368,7 +368,9 @@ private void ApplyShaderEffects()
     else
     {
         // 多区域支持
+        #if UNITY_EDITOR
         Debug.Log($"应用 {regions.Count} 个区域的效果");
+        #endif
         
         // 获取tilemap的边界
         tilemap.CompressBounds();
