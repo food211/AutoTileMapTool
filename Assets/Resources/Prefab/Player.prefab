@@ -222,8 +222,8 @@ MonoBehaviour:
   ropeAdjustSpeed: 2
   minRopeLength: 1
   maxRopeLength: 20
-  ropeShootSpeed: 50
-  maxLengthHoldTime: 0.1
+  ropeShootSpeed: 45
+  maxLengthHoldTime: 0.05
   hookableLayers:
     serializedVersion: 2
     m_Bits: 8
@@ -232,7 +232,7 @@ MonoBehaviour:
     m_Bits: 320
   linecastOffset: 0.01
   anchorSafetyCheck: 0.15
-  swingCollisionSteps: 25
+  swingCollisionSteps: 40
   burnPropagationSpeed: 5
   burnBreakThreshold: 0.8
   fireParticlePrefab: {fileID: 0}
@@ -502,9 +502,9 @@ Rigidbody2D:
   m_Simulated: 1
   m_UseFullKinematicContacts: 0
   m_UseAutoMass: 0
-  m_Mass: 5
-  m_LinearDrag: 0
-  m_AngularDrag: 0
+  m_Mass: 6
+  m_LinearDrag: 0.01
+  m_AngularDrag: 0.01
   m_GravityScale: 1
   m_Material: {fileID: 0}
   m_IncludeLayers:
@@ -533,14 +533,17 @@ MonoBehaviour:
   jumpHeight: 4
   jumpCutMultiplier: 0.01
   fallMultiplier: 2
-  maxFallSpeed: 30
+  maxFallSpeed: 25
+  airControlDuration: 0.5
+  airControlForce: 5
+  maxAirSpeed: 50
   aimIndicator: {fileID: 5635784684978988382}
   Gun: {fileID: 4446759240664853420}
-  aimRotationSpeed: 300
+  aimRotationSpeed: 250
   ropeSystem: {fileID: 9142167173418991407}
   statusManager: {fileID: 0}
   swingForce: 10
-  maxSwingSpeed: 50
+  maxSwingSpeed: 40
   bouncyBallMaterial: {fileID: 6200000, guid: 82034143d116bed46868247357b8036a, type: 2}
   groundLayers:
     serializedVersion: 2

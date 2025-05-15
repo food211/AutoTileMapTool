@@ -1,6 +1,7 @@
-using System;
 using System.Collections;
 using UnityEngine;
+using Vector2 = UnityEngine.Vector2;
+using Vector3 = UnityEngine.Vector3;
 
 public class PlayerController : MonoBehaviour
 {
@@ -13,7 +14,8 @@ public class PlayerController : MonoBehaviour
     [Header("空中控制设置")]
     [SerializeField] private float airControlDuration = 0.5f; // 脱离绳索后可控制的时间（秒）
     [SerializeField] private float airControlForce = 5f; // 空中控制力度
-    private float horizontalInput = Input.GetAxis("Horizontal");
+    [SerializeField] private float maxAirSpeed = 50f;//空中最大速度
+
     private float airControlTimeRemaining = 0f; // 剩余的空中控制时间
     private bool justReleasedRope = false; // 是否刚刚脱离绳索
     private float initialJumpVelocity; // 计算得出的初始跳跃速度
@@ -66,6 +68,7 @@ public class PlayerController : MonoBehaviour
     private bool isGrounded = false;
     private bool isRopeMode = false;
     private bool CanShootRope = true;
+    private bool debugmode = false;
     private DistanceJoint2D distanceJoint;
     
     // 缓存变量，用于减少null检查
@@ -541,34 +544,38 @@ public class PlayerController : MonoBehaviour
         }
         else if (rbInitialized)
         {
-            // 如果刚刚脱离绳索或者还有剩余的控制时间
             if (justReleasedRope || airControlTimeRemaining > 0)
             {
                 // 减少剩余控制时间
                 airControlTimeRemaining -= Time.deltaTime;
-                justReleasedRope = false;
                 
                 // 在有限时间内可以控制
                 if (airControlTimeRemaining > 0)
                 {
-                    // 施加力以控制方向
-                    rb.AddForce(new Vector2(horizontalInput * moveSpeed * airControlForce, 0), ForceMode2D.Force);
-                    
-                    // 可选：在编辑器中显示调试信息
-                    #if UNITY_EDITOR
-                    if (Mathf.Abs(horizontalInput) > 0.1f)
-                    {
-                        Debug.Log($"空中控制中: 剩余时间 {airControlTimeRemaining:F2}秒");
-                    }
-                    #endif
+                    // 施加力以控制方向，但不影响原有动量
+                    rb.AddForce(new Vector2(horizontalInput * airControlForce, 0), ForceMode2D.Force);
+                }
+
+                if (Mathf.Abs(rb.velocity.x) > maxAirSpeed)
+                {
+                    float clampedXVelocity = Mathf.Clamp(rb.velocity.x, -maxAirSpeed * 1f, maxAirSpeed * 1f);
+                    rb.velocity = new Vector2(clampedXVelocity, rb.velocity.y);
+                }
+                
+                // 不再将justReleasedRope设为false，让它保持为true直到落地
+                if (isGrounded || ropeSystem.IsHooked() || rb.velocity.y <= 0f)
+                {
+                    justReleasedRope = false;
                 }
             }
-            
-            // 可选：限制最大水平速度
-            if (Mathf.Abs(rb.velocity.x) > moveSpeed * 1f)
+            else
             {
-                float clampedXVelocity = Mathf.Clamp(rb.velocity.x, -moveSpeed * 1f, moveSpeed * 1f);
-                rb.velocity = new Vector2(clampedXVelocity, rb.velocity.y);
+                // 只有在非脱绳状态下的限制空中水平速度
+                if (Mathf.Abs(rb.velocity.x) > moveSpeed * 1.5f)
+                {
+                    float clampedXVelocity = Mathf.Clamp(rb.velocity.x, -moveSpeed * 1f, moveSpeed * 1f);
+                    rb.velocity = new Vector2(clampedXVelocity, rb.velocity.y);
+                }
             }
         }
         
@@ -600,7 +607,7 @@ public class PlayerController : MonoBehaviour
             
             // 根据 aimIndicator 的水平翻转调整旋转角度
             float flipMultiplier = aimIndicator.localScale.x > 0 ? 1 : -1; // 如果翻转，角度需要反向
-            aimIndicator.rotation = Quaternion.Euler(0, 0, aimAngle * flipMultiplier);
+            aimIndicator.rotation = UnityEngine.Quaternion.Euler(0, 0, aimAngle * flipMultiplier);
         }
             
         // 跳跃 - 只在绳索未发射时且在地面上
@@ -721,6 +728,32 @@ public class PlayerController : MonoBehaviour
         // 恢复原始物理材质
         if (rbInitialized)
         {
+            // 在退出绳索模式时，将当前速度降低到80%
+            Vector2 currentVelocity = rb.velocity;
+            float currentSpeed = currentVelocity.magnitude;
+            
+            // 只有当速度足够大时才进行调整
+            if (currentSpeed > 12f && currentSpeed < 20f)
+            {
+                // 保持方向不变，但将速度降低到80%
+                rb.velocity = currentVelocity.normalized * (currentSpeed * 0.9f);
+
+                #if UNITY_EDITOR
+                if(debugmode)Debug.LogFormat($"脱离绳索：原速度 {currentSpeed}，调整后速度 {rb.velocity.magnitude}");
+                #endif
+            }
+           
+            if (currentSpeed > 20f)
+            {
+                // 保持方向不变，但将速度降低到80%
+                rb.velocity = currentVelocity.normalized * (currentSpeed * 0.8f);
+
+                #if UNITY_EDITOR
+                if(debugmode)
+                Debug.LogFormat($"脱离绳索：原速度 {currentSpeed}，调整后速度 {rb.velocity.magnitude}");
+                #endif
+            }
+            
             rb.sharedMaterial = originalMaterial;
         }
         
@@ -874,9 +907,10 @@ public class PlayerController : MonoBehaviour
         {
             Gun.SetActive(false);
         }
-        
+
         #if UNITY_EDITOR
-        Debug.Log("玩家死亡，已禁用所有输入和移动");
+        if(debugmode)
+        Debug.LogFormat("玩家死亡，已禁用所有输入和移动");
         #endif
     }
 

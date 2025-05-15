@@ -636,13 +636,6 @@ private void RopeJointManager()
     #region release rope
 public void ReleaseRope()
 {
-    // 如果玩家已经钩住，在释放前分析摆荡状态并应用推力
-    if (isHooked && playerRigidbody != null)
-    {
-        // 分析当前摆荡状态，决定是否应用飞行推力
-        ApplyReleaseForce();
-    }
-    
     // 原有的代码
     isShooting = false;
     isHooked = false;
@@ -694,179 +687,50 @@ public void ReleaseRope()
     playerController.ExitRopeMode();
 }
 
-// 更新ApplyContinuousForce协程，接受推力倍数参数
-private IEnumerator ApplyContinuousForce(Vector2 initialVelocity, float forceMultiplier = 1.0f)
-{
-    if (playerRigidbody == null)
-        yield break;
-    
-    // 计算初始水平方向
-    float horizontalDirection = Mathf.Sign(initialVelocity.x);
-    
-    // 计算基础推力大小（基于初始速度），并应用倍数
-    float baseForce = Mathf.Min(initialVelocity.magnitude * 0.6f, 15f) * forceMultiplier; // 限制最大推力并应用倍数
-    
-    #if UNITY_EDITOR
-    Debug.Log($"应用脱绳推力: 方向={horizontalDirection}, 基础力={baseForce}, 初始速度={initialVelocity}, 倍数={forceMultiplier}");
-    #endif
 
-    // 增加持续应用推力的时间
-    float maxForceDuration = 1.2f; // 从0.8f增加到1.2f
-    float elapsedTime = 0;
-    
-    // 持续应用推力，直到条件不再满足
-    while (elapsedTime < maxForceDuration)
-    {
-        // 检查终止条件
-        // 1. 如果玩家重新进入绳索模式，停止推力
-        if (isHooked || isShooting)
-            break;
-            
-        // 2. 如果玩家落地，停止推力
-        if (playerController.isPlayerGrounded())
-            break;
-            
-        // 3. 如果Y方向速度变为负值且足够大（表示开始下落），减弱推力
-        if (playerRigidbody.velocity.y < -8f)
-        {
-            baseForce *= 0.5f;
-        }
-        
-        // 4. 如果水平速度方向改变，停止推力
-        if (Mathf.Sign(playerRigidbody.velocity.x) != horizontalDirection)
-            break;
-        
-        // 应用持续推力，但随时间逐渐减弱
-        float currentForce = baseForce * (1 - elapsedTime / maxForceDuration);
-        
-        // 如果力已经很小，停止应用
-        if (currentForce < 0.5f)
-            break;
-            
-        playerRigidbody.AddForce(new Vector2(horizontalDirection * currentForce, 0), ForceMode2D.Force);
-        
-        elapsedTime += Time.deltaTime;
-        yield return null;
-    }
-    
-    #if UNITY_EDITOR
-    Debug.Log("脱绳推力结束");
-    #endif
-}
-
-// 改进ApplyReleaseForce方法，更精确地分析摆荡状态
-private void ApplyReleaseForce()
-{
-    // 获取当前速度
-    Vector2 velocity = playerRigidbody.velocity;
-    float speed = velocity.magnitude;
-    
-    // 如果速度太小，不应用推力
-    if (speed < 5f)
-        return;
-    
-    // 计算速度角度（弧度）
-    float angle = Mathf.Atan2(velocity.y, velocity.x);
-    // 转换为角度
-    float angleDegrees = angle * Mathf.Rad2Deg;
-    
-    // 获取绳索方向（从玩家到第一个锚点）
-    Vector2 ropeDirection = Vector2.zero;
-    if (anchors.Count > 0)
-    {
-        ropeDirection = (anchors[0] - (Vector2)playerController.transform.position).normalized;
-    }
-    else
-    {
-        return; // 如果没有锚点，不应用推力
-    }
-    
-    // 计算绳索角度（从玩家到锚点）
-    float ropeAngle = Mathf.Atan2(ropeDirection.y, ropeDirection.x) * Mathf.Rad2Deg;
-    
-    // 计算速度方向与绳索方向的夹角
-    float angleDifference = Mathf.Abs(Mathf.DeltaAngle(angleDegrees, ropeAngle));
-    
-    // 计算速度方向与水平轴的夹角（0度表示完全水平，90度表示完全垂直）
-    float verticalityAngle = Mathf.Abs(angleDegrees);
-    if (verticalityAngle > 90f)
-        verticalityAngle = 180f - verticalityAngle;
-    
-    // 判断是否处于良好的摆荡状态
-    // 1. 速度足够大
-    // 2. 速度方向与绳索方向的夹角在合适范围内（表示正在摆荡）
-    // 3. 水平速度分量足够大
-    bool isGoodSwingState = speed > 8f && 
-                           (angleDifference > 45f && angleDifference < 135f) &&
-                           Mathf.Abs(velocity.x) > 5f;
-    
-    #if UNITY_EDITOR
-    Debug.Log($"脱绳分析: 速度={speed}, 角度={angleDegrees}, 绳索角度={ropeAngle}, 夹角={angleDifference}, 垂直度={verticalityAngle}, 良好状态={isGoodSwingState}");
-    #endif
-    
-    // 如果不是良好的摆荡状态，不应用额外推力
-    if (!isGoodSwingState)
-        return;
-    
-    // 根据与垂直方向的接近程度计算推力倍数
-    // 垂直度越高（接近90度），推力越大
-    // 水平度越高（接近0度），推力越小
-    float forceMultiplier = verticalityAngle / 90f; // 0到1之间的值
-    
-    // 确保有最小推力
-    forceMultiplier = Mathf.Max(0.1f, forceMultiplier);
-    
-    #if UNITY_EDITOR
-    Debug.Log($"应用推力倍数: {forceMultiplier}, 基于垂直度: {verticalityAngle}");
-    #endif
-    
-    // 开始协程应用持续推力，传入推力倍数
-    StartCoroutine(ApplyContinuousForce(velocity, forceMultiplier));
-}
-
-#endregion
+    #endregion
     public void AdjustRopeLength(float direction)
     {
         if (!isHooked || distanceJoint == null || !distanceJoint.enabled || anchors.Count == 0)
             return;
-        
+
         // 如果是伸长绳索 (direction > 0)
         if (direction > 0)
         {
             // 计算绳索的实际路径长度
             float actualRopePathLength = 0f;
             Vector2 prevPoint = playerController.transform.position;
-            
+
             // 计算玩家到所有锚点的路径总长度
             for (int i = 0; i < anchors.Count; i++)
             {
                 actualRopePathLength += Vector2.Distance(prevPoint, anchors[i]);
                 prevPoint = anchors[i];
             }
-            
+
             // 检查如果增加长度后是否会超过最大长度
             float newRopeLength = currentRopeLength + direction * ropeAdjustSpeed * Time.deltaTime;
-            
+
             // 计算总长度 = 新的关节距离 + 锚点之间的距离
             float totalLength = newRopeLength + combinedAnchorLen;
-            
+
             // 如果总长度超过最大长度，则不再增加
             if (totalLength > maxRopeLength)
             {
                 return;
             }
         }
-        
+
         // 存储原来的长度
         float previousLength = currentRopeLength;
         // 正常调整绳索长度
         currentRopeLength += direction * ropeAdjustSpeed * Time.deltaTime;
-        
+
         // 限制长度范围
         // 最大允许的关节距离 = 最大绳索长度 - 锚点之间的距离
         float allowedDistance = maxRopeLength - combinedAnchorLen;
         currentRopeLength = Mathf.Clamp(currentRopeLength, minRopeLength, allowedDistance);
-        
+
         // 更新关节距离
         distanceJoint.distance = currentRopeLength;
 
@@ -999,6 +863,12 @@ private bool IsPointNearLineSegment(Vector2 lineStart, Vector2 lineEnd, Vector2 
     {
         return isShooting;
     }
+
+    public bool IsHooked()
+    {
+        return isHooked;
+    }
+
     public bool IsRopeShootingOrHooked()
     {
         return isShooting || isHooked;
