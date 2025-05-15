@@ -10,6 +10,12 @@ public class PlayerController : MonoBehaviour
     [SerializeField] private float jumpCutMultiplier = 0.5f; // 松开跳跃键时的速度减少系数
     [SerializeField] private float fallMultiplier = 1.5f; // 下落时的重力倍增系数
     [SerializeField] private float maxFallSpeed = 15f; // 最大下落速度
+    [Header("空中控制设置")]
+    [SerializeField] private float airControlDuration = 0.5f; // 脱离绳索后可控制的时间（秒）
+    [SerializeField] private float airControlForce = 5f; // 空中控制力度
+    private float horizontalInput = Input.GetAxis("Horizontal");
+    private float airControlTimeRemaining = 0f; // 剩余的空中控制时间
+    private bool justReleasedRope = false; // 是否刚刚脱离绳索
     private float initialJumpVelocity; // 计算得出的初始跳跃速度
     private bool isJumping = false; // 是否正在跳跃
     private float currentSlopeAngle = 0f;
@@ -535,8 +541,28 @@ public class PlayerController : MonoBehaviour
         }
         else if (rbInitialized)
         {
-            // 在空中时，只施加少量力以微调方向，但保持惯性
-            rb.AddForce(new Vector2(horizontalInput * moveSpeed * 5f, 0), ForceMode2D.Force);
+            // 如果刚刚脱离绳索或者还有剩余的控制时间
+            if (justReleasedRope || airControlTimeRemaining > 0)
+            {
+                // 减少剩余控制时间
+                airControlTimeRemaining -= Time.deltaTime;
+                justReleasedRope = false;
+                
+                // 在有限时间内可以控制
+                if (airControlTimeRemaining > 0)
+                {
+                    // 施加力以控制方向
+                    rb.AddForce(new Vector2(horizontalInput * moveSpeed * airControlForce, 0), ForceMode2D.Force);
+                    
+                    // 可选：在编辑器中显示调试信息
+                    #if UNITY_EDITOR
+                    if (Mathf.Abs(horizontalInput) > 0.1f)
+                    {
+                        Debug.Log($"空中控制中: 剩余时间 {airControlTimeRemaining:F2}秒");
+                    }
+                    #endif
+                }
+            }
             
             // 可选：限制最大水平速度
             if (Mathf.Abs(rb.velocity.x) > moveSpeed * 1f)
@@ -703,6 +729,10 @@ public class PlayerController : MonoBehaviour
         {
             distanceJoint.enabled = false;
         }
+        
+        // 重置空中控制时间
+        airControlTimeRemaining = airControlDuration;
+        justReleasedRope = true;
     }
 
     // 处理下落时的重力加速

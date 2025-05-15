@@ -540,9 +540,7 @@ MonoBehaviour:
   ropeSystem: {fileID: 9142167173418991407}
   statusManager: {fileID: 0}
   swingForce: 10
-  maxSwingSpeed: 120
-  velocityRecordInterval: 0.1
-  velocityPreservationFactor: 0.8
+  maxSwingSpeed: 50
   bouncyBallMaterial: {fileID: 6200000, guid: 82034143d116bed46868247357b8036a, type: 2}
   groundLayers:
     serializedVersion: 2
