@@ -633,58 +633,58 @@ private void RopeJointManager()
         }
     }
     #region release rope
-    public void ReleaseRope()
+public void ReleaseRope()
+{
+    // 原有的代码
+    isShooting = false;
+    isHooked = false;
+    
+    // 重置线渲染器的颜色和宽度到原始状态
+    if (lineRenderer != null)
     {
-        isShooting = false;
-        isHooked = false;
+        // 恢复原始颜色
+        lineRenderer.startColor = originalRopeColor;
+        lineRenderer.endColor = originalRopeColor;
         
-        // 重置线渲染器的颜色和宽度到原始状态
-        if (lineRenderer != null)
-        {
-            // 恢复原始颜色
-            lineRenderer.startColor = originalRopeColor;
-            lineRenderer.endColor = originalRopeColor;
-            
-            // 恢复原始宽度 - 确保清除宽度曲线
-            lineRenderer.widthCurve = originalWithCurve; // 清除宽度曲线
-            lineRenderer.startWidth = originalStartWidth;
-            lineRenderer.endWidth = originalEndWidth;
-            lineRenderer.colorGradient = originalColorGradient; // 恢复原始颜色渐变
-        }
-        
-        lineRenderer.enabled = false;
-
-        // 清空锚点
-        anchors.Clear();
-        combinedAnchorLen = 0f;
-        
-        // 重置线渲染器
-        lineRenderer.positionCount = 2;
-        lineRenderer.SetPosition(0, playerController.transform.position);
-        lineRenderer.SetPosition(1, playerController.transform.position);
-        
-        // 禁用关节
-        if (distanceJoint != null)
-        {
-            distanceJoint.enabled = false;
-        }
-        
-        // 隐藏箭头
-        if (arrowObject != null)
-        {
-            arrowObject.SetActive(false);
-        }
-        
-        // 重置绳索长度
-        currentRopeLength = ropeLength;
-        
-        // 重置燃烧状态
-        burningAnchorIndex = -1;
-        currentHookTag = "";
-        
-        // 通知玩家控制器退出绳索模式
-        playerController.ExitRopeMode();
+        // 恢复原始宽度 - 确保清除宽度曲线
+        lineRenderer.widthCurve = originalWithCurve; // 清除宽度曲线
+        lineRenderer.startWidth = originalStartWidth;
+        lineRenderer.endWidth = originalEndWidth;
+        lineRenderer.colorGradient = originalColorGradient; // 恢复原始颜色渐变
     }
+    
+    lineRenderer.enabled = false;
+
+    // 清空锚点
+    anchors.Clear();
+    combinedAnchorLen = 0f;
+    
+    // 重置线渲染器
+    lineRenderer.positionCount = 2;
+    lineRenderer.SetPosition(0, playerController.transform.position);
+    lineRenderer.SetPosition(1, playerController.transform.position);
+    
+    if (distanceJoint != null)
+    {
+        distanceJoint.enabled = false;
+    }
+    
+    // 隐藏箭头
+    if (arrowObject != null)
+    {
+        arrowObject.SetActive(false);
+    }
+    
+    // 重置绳索长度
+    currentRopeLength = ropeLength;
+    
+    // 重置燃烧状态
+    burningAnchorIndex = -1;
+    currentHookTag = "";
+    
+    // 通知玩家控制器退出绳索模式
+    playerController.ExitRopeMode();
+}
 
 #endregion
     public void AdjustRopeLength(float direction)

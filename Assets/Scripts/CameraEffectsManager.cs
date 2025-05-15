@@ -29,6 +29,7 @@ public class CameraEffectsManager : MonoBehaviour
     
     [Header("偏移设置")]
     [SerializeField] private Vector2 lookAheadOffset = new Vector2(2f, 0f); // 前视偏移
+    [SerializeField] private Vector2 lookBackOffset = new Vector2(-2f, 0f); // 前视偏移
     [SerializeField] private Vector2 lookUpOffset = new Vector2(0f, 2f); // 上视偏移
     [SerializeField] private Vector2 lookDownOffset = new Vector2(0f, -2f); // 下视偏移
     [SerializeField] private Vector2 defaultOffset = Vector2.zero; // 默认偏移
@@ -37,18 +38,18 @@ public class CameraEffectsManager : MonoBehaviour
     private float originalSmoothSpeed; // 原始平滑速度
     private Coroutine currentEffectCoroutine; // 当前效果协程
 
-    private void Awake()
+    private void Start()
     {
         // 如果没有指定相机管理器，尝试在同一游戏对象上查找
         if (cameraManager == null)
         {
             cameraManager = GetComponent<CameraManager>();
-            
+
             // 如果还是找不到，尝试在场景中查找
             if (cameraManager == null)
             {
                 cameraManager = FindObjectOfType<CameraManager>();
-                
+
                 if (cameraManager == null)
                 {
                     Debug.LogError("CameraEffectsManager无法找到CameraManager组件！");
@@ -61,10 +62,6 @@ public class CameraEffectsManager : MonoBehaviour
         {
             originalSmoothSpeed = normalFollowSpeed;
         }
-    }
-
-    private void Start()
-    {
         // 初始化原始偏移
         originalOffset = defaultOffset;
     }
@@ -158,6 +155,24 @@ public class CameraEffectsManager : MonoBehaviour
         
         // 设置前视偏移
         cameraManager.SetOffset(lookAheadOffset);
+        
+        // 如果指定了持续时间，启动计时器
+        if (duration > 0)
+        {
+            currentEffectCoroutine = StartCoroutine(ResetOffsetAfterDelay(duration));
+        }
+    }
+
+        public void LookBack(float duration = 0f) // 0表示无限持续
+    {
+        // 停止当前效果
+        StopCurrentEffect();
+        
+        // 保存原始偏移
+        originalOffset = GetCurrentOffset();
+        
+        // 设置前视偏移
+        cameraManager.SetOffset(lookBackOffset);
         
         // 如果指定了持续时间，启动计时器
         if (duration > 0)

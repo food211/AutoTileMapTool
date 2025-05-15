@@ -51,13 +51,10 @@ public class LevelManager : MonoBehaviour
     // CheckpointManager引用
     private CheckpointManager checkpointManager;
     
-    // LoadManager引用
-    private LoadManager loadManager;
-    
     // ProgressManager引用
     private ProgressManager progressManager;
     
-    private void Awake()
+    private void Start()
     {
         // 实现单例模式
         if (Instance == null)
@@ -81,21 +78,11 @@ public class LevelManager : MonoBehaviour
     /// </summary>
     private void InitializeManager()
     {
-        // 获取LoadManager引用
-        loadManager = FindObjectOfType<LoadManager>();
-        if (loadManager == null)
-        {
-            Debug.LogWarning("未找到LoadManager，某些功能可能不可用");
-        }
-        
-        // 获取ProgressManager引用
+        // 获取ProgressManager引用 - 依赖GameInitializer
         progressManager = FindObjectOfType<ProgressManager>();
         if (progressManager == null)
         {
-            Debug.LogWarning("未找到ProgressManager，将创建一个新实例");
-            GameObject progressObj = new GameObject("ProgressManager");
-            progressManager = progressObj.AddComponent<ProgressManager>();
-            DontDestroyOnLoad(progressObj);
+            Debug.LogWarning("未找到ProgressManager，请确保GameInitializer已正确配置");
         }
         
         // 订阅场景加载事件
@@ -130,7 +117,7 @@ public class LevelManager : MonoBehaviour
     /// <summary>
     /// 场景加载完成回调
     /// </summary>
-    private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
+private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
     {
         currentSceneName = scene.name;
         
@@ -143,7 +130,7 @@ public class LevelManager : MonoBehaviour
             InitializeMenu();
         }
         // 如果是游戏场景，设置玩家和出生点
-        else
+        else if (currentSceneName != "LoadingUI") // 忽略加载UI场景
         {
             // 查找场景中的所有起始点
             StartPoint[] startPoints = FindObjectsOfType<StartPoint>();
@@ -415,6 +402,12 @@ public class LevelManager : MonoBehaviour
                     #endif
                 }
             }
+            
+        // 如果有保存的玩家数据，应用它
+        if (progressManager != null && player != null)
+        {
+            progressManager.ApplyPlayerData();
+        }
         }
     }
     
@@ -435,6 +428,7 @@ public class LevelManager : MonoBehaviour
         else
         {
             // 使用LoadManager加载场景
+            LoadManager loadManager = LoadManager.Instance;
             if (loadManager != null)
             {
                 loadManager.LoadScene(levelName);
@@ -442,6 +436,7 @@ public class LevelManager : MonoBehaviour
             else
             {
                 // 如果没有LoadManager，使用直接场景加载
+                Debug.LogWarning("未找到LoadManager，使用直接场景加载");
                 SceneManager.LoadScene(levelName);
             }
         }
@@ -455,6 +450,7 @@ public class LevelManager : MonoBehaviour
         yield return new WaitForSeconds(delay);
         
         // 使用LoadManager加载场景
+        LoadManager loadManager = LoadManager.Instance;
         if (loadManager != null)
         {
             loadManager.LoadScene(levelName);
@@ -462,6 +458,7 @@ public class LevelManager : MonoBehaviour
         else
         {
             // 如果没有LoadManager，使用直接场景加载
+            Debug.LogWarning("未找到LoadManager，使用直接场景加载");
             SceneManager.LoadScene(levelName);
         }
     }

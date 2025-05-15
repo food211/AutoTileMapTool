@@ -15,6 +15,7 @@ public class CheckpointManager : MonoBehaviour
     [Header("玩家引用")]
     [SerializeField] private PlayerController playerController;
     [SerializeField] private PlayerHealthManager healthManager;
+    [SerializeField] private ProgressManager progressManager;
     
     // 当前激活的存档点
     private Checkpoint activeCheckpoint;
@@ -61,6 +62,7 @@ public class CheckpointManager : MonoBehaviour
     {
         // 当通过事件触发时，我们希望触发治疗效果
         ActivateCheckpoint(checkpointTransform, true);
+        progressManager.SavePlayerData();
     }
     
     /// <summary>

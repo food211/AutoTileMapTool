@@ -686,10 +686,6 @@ public class PlayerController : MonoBehaviour
     {
         isRopeMode = false;
         
-        // 保存当前速度，用于松开绳索后的惯性
-        Vector2 releaseVelocity = rbInitialized ? rb.velocity : Vector2.zero;
-        float currentSpeed = releaseVelocity.magnitude;
-        
         // 显示箭头
         if (gunInitialized)
         {
@@ -707,16 +703,6 @@ public class PlayerController : MonoBehaviour
         {
             distanceJoint.enabled = false;
         }
-        
-        // 应用松开时的速度调整
-        if (!isGrounded && currentSpeed > 0 && rbInitialized)
-        {
-            // 保留速度的百分比 - 可以根据需要调整
-            float velocityRetention = 0.98f; 
-            
-            // 应用保留的速度
-            rb.velocity = releaseVelocity * velocityRetention;
-        }
     }
 
     // 处理下落时的重力加速
@@ -730,7 +716,7 @@ public class PlayerController : MonoBehaviour
             {
                 // 应用额外的向下力，使下落更快
                 rb.AddForce(Vector2.down * fallMultiplier * Physics2D.gravity.magnitude, ForceMode2D.Force);
-                
+
                 // 限制最大下落速度
                 if (rb.velocity.y < -maxFallSpeed)
                 {
@@ -913,6 +899,16 @@ public class PlayerController : MonoBehaviour
     public float GetMoveSpeed()
     {
         return moveSpeed;
+    }
+
+    public bool isPlayerGrounded()
+    {
+        return isGrounded;
+    }
+
+    public bool isPlayerRopeMode()
+    {
+        return isRopeMode;
     }
 
     public void SetMoveSpeed(float speed)
