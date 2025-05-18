@@ -159,18 +159,14 @@ private void PredictiveCollisionCheck(Vector2 fromPos, Vector2 toPos)
     Vector2 movementVector = toPos - fromPos;
     float movementDistance = movementVector.magnitude;
     
-    // 根据移动速度动态调整检测步数
+    // 根据最大检测步数
     const int maxSteps = 50;
-    int dynamicSteps = Mathf.Min(maxSteps, Mathf.Max(swingCollisionSteps, Mathf.CeilToInt(movementDistance * 10)));
-    // 速度较低时减少检测步数
-    if (playerRigidbody != null && playerRigidbody.velocity.sqrMagnitude < 100f) // 使用sqrMagnitude优化
-        dynamicSteps = Mathf.Max(5, dynamicSteps / 2);
     
     // 将移动路径分成多个步骤进行检测
-    for (int i = 1; i <= dynamicSteps; i++)
+    for (int i = 1; i <= maxSteps; i++)
     {
         // 计算当前检测点
-        float stepProgress = (float)i / dynamicSteps;
+        float stepProgress = (float)i / maxSteps;
         Vector2 checkPoint = fromPos + movementVector * stepProgress;
         
         // 检查从当前检测点到所有锚点的路径是否有障碍物
@@ -179,7 +175,7 @@ private void PredictiveCollisionCheck(Vector2 fromPos, Vector2 toPos)
         // 添加元素碰撞检测 - 调用PlayerController的预测性碰撞检测
         if (i > 1) // 跳过第一个点，因为它太接近当前位置
         {
-            float prevProgress = (float)(i-1) / dynamicSteps;
+            float prevProgress = (float)(i-1) / maxSteps;
             Vector2 prevPoint = fromPos + movementVector * prevProgress;
             playerController.CheckPredictiveElementalCollision(prevPoint, checkPoint, hookableLayers);
         }
