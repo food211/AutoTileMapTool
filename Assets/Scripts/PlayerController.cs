@@ -890,8 +890,11 @@ public void ExitRopeMode()
 
     public void UseItem()
     {
+        // 触发交互事件，让 Trigger 脚本可以响应
+        GameEvents.TriggerPlayerInteract();
+        
         #if UNITY_EDITOR
-        Debug.LogFormat("使用道具");
+        Debug.LogFormat("使用道具或交互");
         #endif
     }
     
@@ -1248,6 +1251,13 @@ public void ExitRopeMode()
         }
     }
 
+    // 添加处理玩家进入/离开交互区域的方法
+    private bool playerInInteractiveZone = false;
+    private void HandlePlayerInInteractiveZoneChanged(bool inZone)
+    {
+        playerInInteractiveZone = inZone;
+    }
+
     /// 获取无敌状态
     public bool IsInvincible()
     {
@@ -1337,14 +1347,16 @@ public void ExitRopeMode()
         GameEvents.OnCanShootRopeChanged += HandleCanShootRopeChanged;
         GameEvents.OnPlayerDied += HandlePlayerDied;
         GameEvents.OnPlayerRespawnCompleted += HandlePlayerRespawn;
+        GameEvents.OnPlayerInInteractiveZoneChanged += HandlePlayerInInteractiveZoneChanged;
     }
-    
+        
     private void OnDisable()
     {
         // 移除事件监听
         GameEvents.OnCanShootRopeChanged -= HandleCanShootRopeChanged;
         GameEvents.OnPlayerDied -= HandlePlayerDied;
         GameEvents.OnPlayerRespawnCompleted -= HandlePlayerRespawn;
+        GameEvents.OnPlayerInInteractiveZoneChanged -= HandlePlayerInInteractiveZoneChanged;
         
         // 停止所有协程
         StopAllCoroutines();

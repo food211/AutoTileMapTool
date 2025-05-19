@@ -212,4 +212,21 @@ public static class GameEvents
     {
         OnLevelLoaded?.Invoke(sceneName);
     }
+
+    // 交互相关事件
+    public static event Action<bool> OnPlayerInInteractiveZoneChanged; // 玩家进入/离开交互区域
+    public static event Action OnPlayerInteract; // 玩家执行交互
+
+    // 在触发方法部分添加以下内容
+    public static void TriggerPlayerInInteractiveZoneChanged(bool inZone)
+    {
+        OnPlayerInInteractiveZoneChanged?.Invoke(inZone);
+    }
+
+    public static void TriggerPlayerInteract()
+    {
+        OnPlayerInteract?.Invoke();
+    }
+
+    
 }
