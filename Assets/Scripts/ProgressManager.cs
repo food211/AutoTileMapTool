@@ -10,13 +10,14 @@ public class ProgressManager : MonoBehaviour
 {
     // 单例实例
     public static ProgressManager Instance { get; private set; }
-    
+
     [Header("存档设置")]
     [Tooltip("是否在存档时显示保存图标")]
     [SerializeField] private bool showSaveIcon = true;
     // Canvas实例，用于显示UI元素
     private Canvas uiCanvas;
-    
+    [SerializeField] private Canvas mainUICanvas; // 在Inspector手动指定
+
 
     [Header("自动保存设置")]
     [Tooltip("是否启用自动保存")]
@@ -24,25 +25,25 @@ public class ProgressManager : MonoBehaviour
 
     [Tooltip("自动保存间隔（秒）")]
     [SerializeField] private float autoSaveInterval = 300f; // 5分钟
-    
+
     private float lastAutoSaveTime = 0f;
-    
+
     [Header("保存图标设置")]
     [Tooltip("保存图标预制体")]
     [SerializeField] private GameObject saveIconPrefab;
-    
+
     [Tooltip("保存图标在屏幕上的位置")]
     [SerializeField] private Vector2 saveIconScreenPosition = new Vector2(50f, 50f); // 默认右下角，距离边缘50像素
 
     [Tooltip("保存图标大小")]
     [SerializeField] private Vector2 saveIconSize = new Vector2(16f, 16f);
-    
+
     [Tooltip("保存图标显示时间")]
     [SerializeField] private float saveIconDuration = 1.5f;
-    
+
     [Tooltip("像素完美渲染")]
     [SerializeField] private bool pixelPerfect = true;
-    
+
     // 存档键名
     private const string LAST_SCENE_KEY = "LastScene";
     private const string LAST_STARTPOINT_KEY = "LastStartPoint";
@@ -54,23 +55,23 @@ public class ProgressManager : MonoBehaviour
 
     // 当前玩家数据
     private PlayerData currentPlayerData = new PlayerData();
-    
+
     // 是否正在保存
     private bool isSaving = false;
-    
+
     // 保存图标实例（持久保留）
     private GameObject saveIconInstance;
     private CanvasGroup saveIconCanvasGroup;
     private Coroutine fadeCoroutine;
-    
-    private void Awake()
+
+    private void Start()
     {
         // 实现单例模式
         if (Instance == null)
         {
             Instance = this;
             DontDestroyOnLoad(gameObject);
-            
+
             // 初始化
             Initialize();
         }
@@ -86,8 +87,8 @@ public class ProgressManager : MonoBehaviour
         if (enableAutoSave && Time.time - lastAutoSaveTime > autoSaveInterval)
         {
             // 检查是否在游戏场景中（非菜单）
-            if (!string.IsNullOrEmpty(SceneManager.GetActiveScene().name) && 
-                SceneManager.GetActiveScene().name != "StartMenu" && 
+            if (!string.IsNullOrEmpty(SceneManager.GetActiveScene().name) &&
+                SceneManager.GetActiveScene().name != "StartMenu" &&
                 SceneManager.GetActiveScene().name != "LoadingUI")
             {
                 // 检查玩家是否在地面上
@@ -97,21 +98,21 @@ public class ProgressManager : MonoBehaviour
                     // 执行自动保存
                     SavePlayerData();
                     lastAutoSaveTime = Time.time;
-                    
+
                     // 显示保存图标
                     if (showSaveIcon)
                     {
                         ShowSaveIcon();
                     }
-                    
-                    #if UNITY_EDITOR
-                    Debug.Log("已执行自动保存");
-                    #endif
+
+#if UNITY_EDITOR
+                    Debug.LogFormat("已执行自动保存");
+#endif
                 }
             }
         }
     }
-    
+
     /// <summary>
     /// 初始化
     /// </summary>
@@ -119,29 +120,29 @@ public class ProgressManager : MonoBehaviour
     {
         // 订阅场景加载事件
         SceneManager.sceneLoaded += OnSceneLoaded;
-        
+
         // 订阅存档点激活事件
         GameEvents.OnCheckpointActivated += HandleCheckpointActivated;
-        
+
         // 订阅终点到达事件
         GameEvents.OnEndpointReached += HandleEndpointReached;
-        
+
         // 创建UI Canvas和保存图标
         CreateUICanvas();
         CreateSaveIcon();
-        
-        #if UNITY_EDITOR
-        Debug.Log("ProgressManager 初始化完成");
-        #endif
+
+#if UNITY_EDITOR
+        Debug.LogFormat("ProgressManager 初始化完成");
+#endif
     }
-    
+
     private void OnDestroy()
     {
         // 取消订阅事件
         SceneManager.sceneLoaded -= OnSceneLoaded;
         GameEvents.OnCheckpointActivated -= HandleCheckpointActivated;
         GameEvents.OnEndpointReached -= HandleEndpointReached;
-        
+
         // 停止所有协程
         if (fadeCoroutine != null)
         {
@@ -149,7 +150,7 @@ public class ProgressManager : MonoBehaviour
             fadeCoroutine = null;
         }
     }
-    
+
     /// <summary>
     /// 场景加载完成回调
     /// </summary>
@@ -157,23 +158,23 @@ public class ProgressManager : MonoBehaviour
     {
         // 场景加载完成后的处理
         string sceneName = scene.name;
-        
+
         // 确保UI Canvas和保存图标在新场景中有效
         if (uiCanvas == null)
         {
             CreateUICanvas();
         }
-        
+
         if (saveIconInstance == null)
         {
             CreateSaveIcon();
         }
-        
-        #if UNITY_EDITOR
-        Debug.Log($"ProgressManager: 场景 {sceneName} 已加载");
-        #endif
+
+#if UNITY_EDITOR
+        Debug.LogFormat($"ProgressManager: 场景 {sceneName} 已加载");
+#endif
     }
-    
+
     /// <summary>
     /// 处理存档点激活事件
     /// </summary>
@@ -184,7 +185,7 @@ public class ProgressManager : MonoBehaviour
         {
             // 保存存档点信息
             SaveCheckpointActivated(checkpoint.CheckpointID, SceneManager.GetActiveScene().name);
-            
+
             // 显示保存图标
             if (showSaveIcon)
             {
@@ -192,7 +193,7 @@ public class ProgressManager : MonoBehaviour
             }
         }
     }
-    
+
     /// <summary>
     /// 处理终点到达事件
     /// </summary>
@@ -202,84 +203,64 @@ public class ProgressManager : MonoBehaviour
         if (endpoint != null)
         {
             // 这里我们不直接保存，因为终点信息应该由Endpoint组件调用SaveEndpointUsed方法保存
-            #if UNITY_EDITOR
-            Debug.Log($"ProgressManager: 终点 {endpoint.name} 已到达");
-            #endif
+#if UNITY_EDITOR
+            Debug.LogFormat($"ProgressManager: 终点 {endpoint.name} 已到达");
+#endif
         }
     }
-    
+
     /// <summary>
     /// 创建UI Canvas
     /// </summary>
     private void CreateUICanvas()
+{
+    if (mainUICanvas != null)
     {
-        // 查找现有的Canvas
-        Canvas[] canvases = FindObjectsOfType<Canvas>();
-        foreach (Canvas canvas in canvases)
+        uiCanvas = mainUICanvas;
+        return;
+    }
+
+    // 获取当前激活场景
+    var activeScene = UnityEngine.SceneManagement.SceneManager.GetActiveScene();
+
+    // 查找当前场景下的主 Canvas
+    Canvas[] canvases = FindObjectsOfType<Canvas>();
+    foreach (Canvas canvas in canvases)
+    {
+        if (canvas.gameObject.scene == activeScene &&
+            canvas.name == "Canvas" &&
+            canvas.renderMode == RenderMode.ScreenSpaceOverlay &&
+            canvas.gameObject.activeInHierarchy)
         {
-            if (canvas.renderMode == RenderMode.ScreenSpaceOverlay && canvas.gameObject.activeInHierarchy)
-            {
-                uiCanvas = canvas;
-                
-                // 如果需要像素完美渲染，添加或配置CanvasScaler
-                if (pixelPerfect)
-                {
-                    uiCanvas.pixelPerfect = true;
-                }
-                
-                break;
-            }
-        }
-        
-        // 如果没有找到合适的Canvas，创建一个新的
-        if (uiCanvas == null)
-        {
-            GameObject canvasObj = new GameObject("SaveIconCanvas");
-            uiCanvas = canvasObj.AddComponent<Canvas>();
-            uiCanvas.renderMode = RenderMode.ScreenSpaceOverlay;
-            uiCanvas.sortingOrder = 100; // 确保在最上层
-            
-            // 添加CanvasScaler组件
-            CanvasScaler scaler = canvasObj.AddComponent<CanvasScaler>();
-            if (pixelPerfect)
-            {
-                scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-                scaler.referenceResolution = new Vector2(320, 180); // 典型的像素艺术分辨率
-                scaler.referencePixelsPerUnit = 32; // 根据您的像素艺术设置调整
-                
-                // 添加像素完美组件
-                try
-                {
-                    // 尝试添加PixelPerfectCamera组件（如果URP可用）
-                    var assembly = System.Reflection.Assembly.Load("Unity.RenderPipelines.Universal.Runtime");
-                    if (assembly != null)
-                    {
-                        var pixelPerfectType = assembly.GetType("UnityEngine.Experimental.Rendering.Universal.PixelPerfectCamera");
-                        if (pixelPerfectType != null)
-                        {
-                            canvasObj.AddComponent(pixelPerfectType);
-                        }
-                    }
-                }
-                catch (System.Exception e)
-                {
-                    Debug.LogWarning("无法添加PixelPerfectCamera组件: " + e.Message);
-                }
-            }
-            else
-            {
-                scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-                scaler.referenceResolution = new Vector2(1920, 1080);
-            }
-            
-            // 添加GraphicRaycaster组件
-            canvasObj.AddComponent<UnityEngine.UI.GraphicRaycaster>();
-            
-            // 保留这个对象，不要在场景切换时销毁
-            DontDestroyOnLoad(canvasObj);
+            uiCanvas = canvas;
+            break;
         }
     }
-    
+
+    // 如果没有找到合适的 Canvas，创建一个新的
+    if (uiCanvas == null)
+    {
+        GameObject canvasObj = new GameObject("SaveIconCanvas");
+        uiCanvas = canvasObj.AddComponent<Canvas>();
+        uiCanvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        uiCanvas.sortingOrder = 100;
+        CanvasScaler scaler = canvasObj.AddComponent<CanvasScaler>();
+        if (pixelPerfect)
+        {
+            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+            scaler.referenceResolution = new Vector2(320, 180);
+            scaler.referencePixelsPerUnit = 32;
+        }
+        else
+        {
+            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+            scaler.referenceResolution = new Vector2(1920, 1080);
+        }
+        canvasObj.AddComponent<UnityEngine.UI.GraphicRaycaster>();
+        // 注意：不要 DontDestroyOnLoad，这样它只属于当前场景
+    }
+}
+
     /// <summary>
     /// 创建保存图标（只创建一次，然后隐藏）
     /// </summary>
@@ -290,19 +271,22 @@ public class ProgressManager : MonoBehaviour
         {
             CreateUICanvas();
         }
-        
+#if UNITY_EDITOR
+Debug.LogFormat("创建保存图标，prefab={0}", saveIconPrefab);
+#endif
+
         // 如果已经有保存图标，不需要重新创建
         if (saveIconInstance != null)
         {
             return;
         }
-        
+
         // 如果有预制体，实例化
         if (saveIconPrefab != null)
         {
             // 在Canvas下实例化保存图标
             saveIconInstance = Instantiate(saveIconPrefab, uiCanvas.transform);
-            
+
             // 设置为RectTransform
             RectTransform rectTransform = saveIconInstance.GetComponent<RectTransform>();
             if (rectTransform != null)
@@ -312,24 +296,24 @@ public class ProgressManager : MonoBehaviour
                 rectTransform.anchorMax = new Vector2(1, 0);
                 rectTransform.pivot = new Vector2(1, 0);
                 rectTransform.anchoredPosition = new Vector2(-saveIconScreenPosition.x, saveIconScreenPosition.y);
-                
+
                 // 设置大小
                 rectTransform.sizeDelta = saveIconSize;
             }
-            
+
             // 添加或获取CanvasGroup组件
             saveIconCanvasGroup = saveIconInstance.GetComponent<CanvasGroup>();
             if (saveIconCanvasGroup == null)
             {
                 saveIconCanvasGroup = saveIconInstance.AddComponent<CanvasGroup>();
             }
-            
+
             // 初始状态为隐藏
             saveIconCanvasGroup.alpha = 0f;
             saveIconInstance.SetActive(false);
         }
     }
-    
+
     /// <summary>
     /// 保存使用过的终点
     /// </summary>
@@ -337,25 +321,25 @@ public class ProgressManager : MonoBehaviour
     {
         // 标记正在保存
         isSaving = true;
-        
+
         // 保存最后一个场景和起始点
         PlayerPrefs.SetString(LAST_SCENE_KEY, targetScene);
         PlayerPrefs.SetString(LAST_STARTPOINT_KEY, targetStartPoint);
-        
+
         // 记录这个终点已被使用
         PlayerPrefs.SetInt(ENDPOINT_PREFIX + endpointID, 1);
-        
+
         // 保存更改
         PlayerPrefs.Save();
-        
+
         // 保存完成
         isSaving = false;
-        
-        #if UNITY_EDITOR
-        Debug.Log($"已保存终点使用记录: {endpointID} -> {targetScene}:{targetStartPoint}");
-        #endif
+
+#if UNITY_EDITOR
+        Debug.LogFormat($"已保存终点使用记录: {endpointID} -> {targetScene}:{targetStartPoint}");
+#endif
     }
-    
+
     /// <summary>
     /// 保存激活的存档点
     /// </summary>
@@ -363,16 +347,16 @@ public class ProgressManager : MonoBehaviour
     {
         // 标记正在保存
         isSaving = true;
-        
+
         // 保存最后激活的存档点
         PlayerPrefs.SetString(LAST_CHECKPOINT_KEY, checkpointID);
-        
+
         // 保存场景名称
         PlayerPrefs.SetString(LAST_SCENE_KEY, sceneName);
-        
+
         // 记录这个存档点已被激活
         PlayerPrefs.SetInt(CHECKPOINT_PREFIX + checkpointID, 1);
-        
+
         // 查找对应的检查点组件以获取重生点坐标
         Checkpoint checkpoint = FindCheckpointById(checkpointID);
         if (checkpoint != null && checkpoint.RespawnPoint != null)
@@ -382,24 +366,24 @@ public class ProgressManager : MonoBehaviour
             PlayerPrefs.SetFloat("Player_PosX", respawnPosition.x);
             PlayerPrefs.SetFloat("Player_PosY", respawnPosition.y);
             PlayerPrefs.SetFloat("Player_PosZ", respawnPosition.z);
-            
-            #if UNITY_EDITOR
-            Debug.Log($"已保存重生点位置: ({respawnPosition.x}, {respawnPosition.y}, {respawnPosition.z})");
-            #endif
+
+#if UNITY_EDITOR
+            Debug.LogFormat($"已保存重生点位置: ({respawnPosition.x}, {respawnPosition.y}, {respawnPosition.z})");
+#endif
         }
-        
+
         // 保存玩家状态信息（如果有PlayerHealthManager）
         SavePlayerHealthState();
-        
+
         // 保存更改
         PlayerPrefs.Save();
-        
+
         // 保存完成
         isSaving = false;
-        
-        #if UNITY_EDITOR
-        Debug.Log($"已保存存档点激活记录: {checkpointID} 在场景 {sceneName}");
-        #endif
+
+#if UNITY_EDITOR
+        Debug.LogFormat($"已保存存档点激活记录: {checkpointID} 在场景 {sceneName}");
+#endif
     }
 
     /// <summary>
@@ -430,13 +414,13 @@ public class ProgressManager : MonoBehaviour
             // 保存玩家生命值
             PlayerPrefs.SetFloat("Player_Health", healthManager.currentHealth);
             PlayerPrefs.SetFloat("Player_MaxHealth", healthManager.maxHealth);
-            
-            #if UNITY_EDITOR
-            Debug.Log($"已保存玩家状态: 生命值 {healthManager.currentHealth}/{healthManager.maxHealth}");
-            #endif
+
+#if UNITY_EDITOR
+            Debug.LogFormat($"已保存玩家状态: 生命值 {healthManager.currentHealth}/{healthManager.maxHealth}");
+#endif
         }
     }
-    
+
     /// <summary>
     /// 保存完整的玩家数据
     /// </summary>
@@ -445,23 +429,23 @@ public class ProgressManager : MonoBehaviour
         // 获取玩家和健康管理器引用
         PlayerController player = FindObjectOfType<PlayerController>();
         PlayerHealthManager healthManager = FindObjectOfType<PlayerHealthManager>();
-        
+
         // 更新玩家数据
         currentPlayerData.PopulateFromPlayer(player, healthManager);
-        
+
         // 更新游戏时间
         currentPlayerData.playTime += Time.deltaTime;
-        
+
         // 序列化为JSON
         string jsonData = JsonUtility.ToJson(currentPlayerData, true);
-        
+
         // 保存到PlayerPrefs
         PlayerPrefs.SetString("PlayerData_JSON", jsonData);
         PlayerPrefs.Save();
-        
-        #if UNITY_EDITOR
-        Debug.Log("已保存完整玩家数据");
-        #endif
+
+#if UNITY_EDITOR
+        Debug.LogFormat("已保存完整玩家数据");
+#endif
     }
 
     /// <summary>
@@ -475,11 +459,11 @@ public class ProgressManager : MonoBehaviour
             currentPlayerData = JsonUtility.FromJson<PlayerData>(jsonData);
             return currentPlayerData;
         }
-        
-        #if UNITY_EDITOR
-        Debug.Log("未找到玩家数据，返回新的数据实例");
-        #endif
-        
+
+#if UNITY_EDITOR
+        Debug.LogFormat("未找到玩家数据，返回新的数据实例");
+#endif
+
         // 如果没有保存的数据，返回新实例
         currentPlayerData = new PlayerData();
         return currentPlayerData;
@@ -492,20 +476,20 @@ public class ProgressManager : MonoBehaviour
     {
         PlayerController player = FindObjectOfType<PlayerController>();
         PlayerHealthManager healthManager = FindObjectOfType<PlayerHealthManager>();
-        
+
         // 确保已加载数据
         if (currentPlayerData == null)
         {
             LoadPlayerData();
         }
-        
+
         // 应用健康值
         if (healthManager != null)
         {
             healthManager.maxHealth = currentPlayerData.maxHealth;
             healthManager.currentHealth = currentPlayerData.currentHealth;
         }
-        
+
         // 应用位置（如果在同一场景）
         if (player != null && currentPlayerData.currentScene == SceneManager.GetActiveScene().name)
         {
@@ -515,14 +499,14 @@ public class ProgressManager : MonoBehaviour
                 currentPlayerData.positionZ
             );
         }
-        
+
         // 可以添加更多数据应用逻辑
-        
-        #if UNITY_EDITOR
-        Debug.Log("已应用玩家数据");
-        #endif
+
+#if UNITY_EDITOR
+        Debug.LogFormat("已应用玩家数据");
+#endif
     }
-    
+
     /// <summary>
     /// 显示保存图标
     /// </summary>
@@ -533,22 +517,22 @@ public class ProgressManager : MonoBehaviour
         {
             CreateSaveIcon();
         }
-        
+
         // 如果不显示保存图标，直接返回
         if (!showSaveIcon || saveIconInstance == null)
         {
             return;
         }
-        
+
         // 停止之前的淡出协程
         if (fadeCoroutine != null)
         {
             StopCoroutine(fadeCoroutine);
         }
-        
+
         // 确保图标激活
         saveIconInstance.SetActive(true);
-        
+
         // 重置透明度
         if (saveIconCanvasGroup != null)
         {
@@ -565,7 +549,7 @@ public class ProgressManager : MonoBehaviour
                 img.color = color;
             }
         }
-        
+
         // 启动淡出协程
         fadeCoroutine = StartCoroutine(FadeOutSaveIcon(saveIconDuration));
     }
@@ -577,11 +561,11 @@ public class ProgressManager : MonoBehaviour
     {
         // 等待一小段时间，让图标完全显示
         yield return new WaitForSeconds(0.5f);
-        
+
         // 计算淡出的时间
         float fadeTime = duration - 0.5f;
         float startTime = Time.time;
-        
+
         // 如果有CanvasGroup，使用它来淡出
         if (saveIconCanvasGroup != null)
         {
@@ -606,7 +590,7 @@ public class ProgressManager : MonoBehaviour
                 {
                     originalColors[i] = images[i].color;
                 }
-                
+
                 // 淡出
                 while (Time.time < startTime + fadeTime)
                 {
@@ -619,7 +603,7 @@ public class ProgressManager : MonoBehaviour
                     }
                     yield return null;
                 }
-                
+
                 // 设置完全透明
                 for (int i = 0; i < images.Length; i++)
                 {
@@ -629,12 +613,12 @@ public class ProgressManager : MonoBehaviour
                 }
             }
         }
-        
+
         // 隐藏图标而不是销毁它
         saveIconInstance.SetActive(false);
         fadeCoroutine = null;
     }
-    
+
     /// <summary>
     /// 获取最后一个场景
     /// </summary>
@@ -642,7 +626,7 @@ public class ProgressManager : MonoBehaviour
     {
         return PlayerPrefs.GetString(LAST_SCENE_KEY, "");
     }
-    
+
     /// <summary>
     /// 获取最后一个起始点
     /// </summary>
@@ -650,7 +634,7 @@ public class ProgressManager : MonoBehaviour
     {
         return PlayerPrefs.GetString(LAST_STARTPOINT_KEY, "");
     }
-    
+
     /// <summary>
     /// 获取最后激活的存档点
     /// </summary>
@@ -658,7 +642,7 @@ public class ProgressManager : MonoBehaviour
     {
         return PlayerPrefs.GetString(LAST_CHECKPOINT_KEY, "");
     }
-    
+
     /// <summary>
     /// 检查终点是否已使用
     /// </summary>
@@ -666,7 +650,7 @@ public class ProgressManager : MonoBehaviour
     {
         return PlayerPrefs.GetInt(ENDPOINT_PREFIX + endpointID, 0) == 1;
     }
-    
+
     /// <summary>
     /// 检查存档点是否已激活
     /// </summary>
@@ -674,7 +658,7 @@ public class ProgressManager : MonoBehaviour
     {
         return PlayerPrefs.GetInt(CHECKPOINT_PREFIX + checkpointID, 0) == 1;
     }
-    
+
     /// <summary>
     /// 记录物品获取
     /// </summary>
@@ -683,7 +667,7 @@ public class ProgressManager : MonoBehaviour
         PlayerPrefs.SetInt(ITEM_PREFIX + itemID, 1);
         PlayerPrefs.Save();
     }
-    
+
     /// <summary>
     /// 手动保存游戏
     /// </summary>
@@ -693,28 +677,28 @@ public class ProgressManager : MonoBehaviour
         PlayerController player = FindObjectOfType<PlayerController>();
         if (player != null && !player.isPlayerGrounded())
         {
-            #if UNITY_EDITOR
+#if UNITY_EDITOR
             Debug.LogWarning("无法保存游戏：玩家不在地面上");
-            #endif
+#endif
             return;
         }
-        
+
         // 保存当前场景
         string currentScene = SceneManager.GetActiveScene().name;
         PlayerPrefs.SetString(LAST_SCENE_KEY, currentScene);
-        
+
         // 保存完整的玩家数据
         SavePlayerData();
-        
+
         // 显示保存图标
         if (showSaveIcon && player != null)
         {
             ShowSaveIcon();
         }
-        
-        #if UNITY_EDITOR
-        Debug.Log("已手动保存游戏");
-        #endif
+
+#if UNITY_EDITOR
+        Debug.LogFormat("已手动保存游戏");
+#endif
     }
 
     /// <summary>
@@ -727,21 +711,21 @@ public class ProgressManager : MonoBehaviour
         {
             LoadPlayerData();
         }
-        
+
         // 添加到收集列表
         if (!currentPlayerData.collectedItems.Contains(itemID))
         {
             currentPlayerData.collectedItems.Add(itemID);
-            
+
             // 同时保存到PlayerPrefs以保持兼容性
             PlayerPrefs.SetInt(ITEM_PREFIX + itemID, 1);
-            
+
             // 保存更新后的数据
             SavePlayerData();
-            
-            #if UNITY_EDITOR
-            Debug.Log($"已收集物品: {itemID} (类型: {itemType})");
-            #endif
+
+#if UNITY_EDITOR
+            Debug.LogFormat($"已收集物品: {itemID} (类型: {itemType})");
+#endif
         }
     }
 
@@ -768,18 +752,18 @@ public class ProgressManager : MonoBehaviour
         {
             LoadPlayerData();
         }
-        
+
         // 添加到已解锁能力列表
         if (!currentPlayerData.unlockedAbilities.Contains(abilityID))
         {
             currentPlayerData.unlockedAbilities.Add(abilityID);
-            
+
             // 保存更新后的数据
             SavePlayerData();
-            
-            #if UNITY_EDITOR
-            Debug.Log($"已解锁能力: {abilityID}");
-            #endif
+
+#if UNITY_EDITOR
+            Debug.LogFormat($"已解锁能力: {abilityID}");
+#endif
         }
     }
 
@@ -793,10 +777,10 @@ public class ProgressManager : MonoBehaviour
         {
             LoadPlayerData();
         }
-        
+
         return currentPlayerData.unlockedAbilities.Contains(abilityID);
     }
-    
+
     /// <summary>
     /// 重置所有游戏进度
     /// </summary>
@@ -805,15 +789,15 @@ public class ProgressManager : MonoBehaviour
         // 清除所有PlayerPrefs数据
         PlayerPrefs.DeleteAll();
         PlayerPrefs.Save();
-        
+
         // 重置当前玩家数据
         currentPlayerData = new PlayerData();
-        
-        #if UNITY_EDITOR
-        Debug.Log("已重置所有游戏进度");
-        #endif
+
+#if UNITY_EDITOR
+        Debug.LogFormat("已重置所有游戏进度");
+#endif
     }
-    
+
     /// <summary>
     /// 检查是否有保存的游戏进度
     /// </summary>
@@ -821,9 +805,18 @@ public class ProgressManager : MonoBehaviour
     {
         return !string.IsNullOrEmpty(GetLastScene()) || !string.IsNullOrEmpty(GetLastCheckpoint());
     }
-    
+
     /// <summary>
     /// 是否正在保存
     /// </summary>
     public bool IsSaving => isSaving;
+
+    #if UNITY_EDITOR
+    [ContextMenu("测试显示保存图标")]
+    #endif
+    private void TestShowSaveIcon()
+    {
+        ShowSaveIcon();
+    }
+    
 }

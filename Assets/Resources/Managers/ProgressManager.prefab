@@ -9,7 +9,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 2896450283666983765}
-  - component: {fileID: 4701937750902305008}
+  - component: {fileID: 2696965779286281187}
   m_Layer: 0
   m_Name: ProgressManager
   m_TagString: Untagged
@@ -32,7 +32,7 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &4701937750902305008
+--- !u!114 &2696965779286281187
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -45,7 +45,11 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   showSaveIcon: 1
+  mainUICanvas: {fileID: 0}
   enableAutoSave: 1
   autoSaveInterval: 300
   saveIconPrefab: {fileID: 7379143721005220322, guid: 1c0263def8c82314bb1c08d2b93c53d1, type: 3}
+  saveIconScreenPosition: {x: 60, y: 60}
+  saveIconSize: {x: 16, y: 16}
   saveIconDuration: 1.5
+  pixelPerfect: 1
