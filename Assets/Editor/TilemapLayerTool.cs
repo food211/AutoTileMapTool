@@ -717,11 +717,7 @@ private void DrawSelectedCells()
         // 如果选择了清空目标，先清空目标区域
         if (clearTargetBeforeMove)
         {
-            foreach (Vector2Int cell in cells)
-            {
-                Vector3Int pos = new Vector3Int(cell.x, cell.y, 0);
-                targetTilemap.SetTile(pos, null);
-            }
+            targetTilemap.ClearAllTiles();
         }
         
         // 移动瓦片

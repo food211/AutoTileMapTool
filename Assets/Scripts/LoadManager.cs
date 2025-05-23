@@ -190,6 +190,9 @@ public class LoadManager : MonoBehaviour
         currentLoadingScene = sceneName;
         isLoading = true;
         
+        // 在开始加载前执行垃圾回收
+        PerformGarbageCollection();
+        
         if (shouldUseLoadingUI && !string.IsNullOrEmpty(loadingSceneName))
             StartCoroutine(LoadLoadingScene(sceneName));
         else
@@ -252,6 +255,9 @@ public class LoadManager : MonoBehaviour
     private IEnumerator LoadTargetScene(string sceneName)
     {
         float startTime = Time.time;
+
+        // 执行垃圾回收
+        PerformGarbageCollection();
         
         // 开始异步加载目标场景
         AsyncOperation operation = SceneManager.LoadSceneAsync(sceneName, useAdditiveLoading ? LoadSceneMode.Additive : LoadSceneMode.Single);
@@ -334,6 +340,9 @@ public class LoadManager : MonoBehaviour
         float startTime = Time.time;
         currentLoadingScene = sceneName;
         isLoading = true;
+
+        // 执行垃圾回收
+        PerformGarbageCollection();
         
         AsyncOperation operation = SceneManager.LoadSceneAsync(sceneName);
         operation.allowSceneActivation = false;
@@ -422,12 +431,29 @@ public class LoadManager : MonoBehaviour
         fadeCanvas.enabled = false;
     }
 
+        private void PerformGarbageCollection()
+    {
+        // 强制垃圾回收
+        System.GC.Collect();
+        
+        // 等待所有终结器执行完毕
+        System.GC.WaitForPendingFinalizers();
+        
+        // 再次收集，确保所有对象都被清理
+        System.GC.Collect();
+        
+        // 减少堆内存占用
+        Resources.UnloadUnusedAssets();
+        
+        Log("执行了垃圾回收");
+    }
+
     // 条件日志方法
     [Conditional("UNITY_EDITOR"), Conditional("DEVELOPMENT_BUILD")]
     private void Log(string message)
     {
         if (IsDebugMode)
-            Debug.Log($"LoadManager: {message}");
+            Debug.LogFormat($"LoadManager: {message}");
     }
     
     [Conditional("UNITY_EDITOR"), Conditional("DEVELOPMENT_BUILD")]

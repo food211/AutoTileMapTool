@@ -89,7 +89,7 @@ public class LevelManager : MonoBehaviour
         SceneManager.sceneLoaded += OnSceneLoaded;
         
         // 订阅终点到达事件
-        GameEvents.OnEndpointReached += HandleEndpointReached;
+        GameEvents.OnPlayerReachedEndpointCenter += HandlePlayerReachedEndpointCenter;
         
         // 订阅玩家重生事件
         GameEvents.OnPlayerRespawn += HandlePlayerRespawn;
@@ -109,7 +109,7 @@ public class LevelManager : MonoBehaviour
         {
             // 取消订阅事件
             SceneManager.sceneLoaded -= OnSceneLoaded;
-            GameEvents.OnEndpointReached -= HandleEndpointReached;
+            GameEvents.OnPlayerReachedEndpointCenter -= HandlePlayerReachedEndpointCenter;
             GameEvents.OnPlayerRespawn -= HandlePlayerRespawn;
         }
     }
@@ -255,7 +255,7 @@ private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
     /// <summary>
     /// 处理终点到达事件
     /// </summary>
-    private void HandleEndpointReached(Transform endpointTransform)
+    private void HandlePlayerReachedEndpointCenter(Transform endpointTransform)
     {
         Endpoint endpoint = endpointTransform.GetComponent<Endpoint>();
         

@@ -103,6 +103,11 @@ public class Endpoint : MonoBehaviour
             TriggerEndpoint();
         }
     }
+
+    private void OnTriggerExit2D(Collider2D other)
+    {
+        isTriggered = false;
+    }
     
     /// <summary>
     /// 手动触发终点
@@ -154,22 +159,11 @@ public class Endpoint : MonoBehaviour
         // 触发终点事件 - 通知LevelManager处理场景切换
         GameEvents.TriggerEndpointReached(this.transform);
         
-        // 延迟重置触发状态，以便可以再次触发
-        StartCoroutine(ResetTriggerAfterDelay(1f));
-        
         #if UNITY_EDITOR
         Debug.Log($"终点 {name} 已触发，目标场景: {targetSceneName}，目标起始点: {targetStartPointID}");
         #endif
     }
-    
-    /// <summary>
-    /// 延迟重置触发状态
-    /// </summary>
-    private IEnumerator ResetTriggerAfterDelay(float delay)
-    {
-        yield return new WaitForSeconds(delay);
-        isTriggered = false;
-    }
+
     
     #if UNITY_EDITOR
     private void OnDrawGizmos()

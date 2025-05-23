@@ -53,3 +53,4 @@ MonoBehaviour:
   saveIconSize: {x: 16, y: 16}
   saveIconDuration: 1.5
   pixelPerfect: 1
+  debugCoinMode: 1

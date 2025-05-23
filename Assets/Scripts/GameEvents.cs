@@ -57,6 +57,8 @@ public static class GameEvents
     /// </summary>
     public static event System.Action<Transform> OnEndpointReached;
     public static event System.Action<string> OnLevelLoaded; // 关卡加载完成事件，包含场景名称
+    public static event System.Action OnProgressManagerInitialized;
+    public static event System.Action<string> OnSceneFullyLoaded;
 
     // 定义玩家状态枚举（可以移到单独的文件中）
     public enum PlayerState
@@ -227,6 +229,20 @@ public static class GameEvents
     {
         OnPlayerInteract?.Invoke();
     }
+    public static event Action<Transform> OnPlayerReachedEndpointCenter;
 
-    
+    public static void TriggerPlayerReachedEndpointCenter(Transform endpoint)
+    {
+        OnPlayerReachedEndpointCenter?.Invoke(endpoint);
+    }
+
+    public static void TriggerOnProgressManagerInitialized()
+    {
+        OnProgressManagerInitialized?.Invoke();
+    }
+
+    public static void TriggerOnSceneFullyLoaded(string sceneName)
+    {
+        OnSceneFullyLoaded?.Invoke(sceneName);
+    }
 }

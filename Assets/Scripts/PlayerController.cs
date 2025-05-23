@@ -887,15 +887,106 @@ public void ExitRopeMode()
             }
         }
     }
+    
+    private void HandleEndpointReached(Transform endpointTransform)
+    {
+        SetPlayerInput(false);
+        // 如果在绳索模式，强制退出绳索模式
+        if (isRopeMode && ropeSystemInitialized)
+        {
+            ropeSystem.ReleaseRope();
+        }
+
+        // 停止所有移动
+        if (rbInitialized)
+        {
+            rb.velocity = Vector2.zero;
+            rb.angularVelocity = 0f;
+            
+            // 禁用重力，但不完全冻结玩家，以便我们可以移动它
+            rb.gravityScale = 0f;
+            rb.constraints = RigidbodyConstraints2D.FreezeRotation;
+            
+            // 启动协程，平滑移动玩家到终点中心
+            StartCoroutine(MovePlayerToEndpoint(endpointTransform));
+        }
+
+        // 隐藏箭头
+        if (gunInitialized)
+        {
+            Gun.SetActive(false);
+        }
+
+        #if UNITY_EDITOR
+        if(debugmode)
+        Debug.LogFormat("玩家到达终点，开始平滑移动到终点中心");
+        #endif
+    }
+
+    // 平滑移动玩家到终点中心的协程
+    private IEnumerator MovePlayerToEndpoint(Transform endpointTransform)
+    {
+        // 移动持续时间
+        float duration = 0.6f;
+        float elapsedTime = 0f;
+
+        // 起始位置和目标位置
+        Vector2 startPosition = transform.position;
+        Vector2 targetPosition = endpointTransform.position;
+
+        while (elapsedTime < duration)
+        {
+            // 计算已经过的时间比例
+            float t = elapsedTime / duration;
+            
+            // 应用缓出效果 (Ease Out Cubic)
+            float easedT = 1 - Mathf.Pow(1 - t, 3);
+            
+            // 插值计算当前位置
+            if (rbInitialized)
+            {
+                rb.position = Vector2.Lerp(startPosition, targetPosition, easedT);
+            }
+            else
+            {
+                transform.position = Vector2.Lerp(startPosition, targetPosition, easedT);
+            }
+            
+            // 增加已经过的时间
+            elapsedTime += Time.deltaTime;
+            
+            yield return null;
+        }
+
+        // 确保最终位置精确
+        if (rbInitialized)
+        {
+            rb.position = targetPosition;
+            // 移动完成后完全冻结玩家
+            rb.constraints = RigidbodyConstraints2D.FreezeAll;
+        }
+        else
+        {
+            transform.position = targetPosition;
+        }
+
+        #if UNITY_EDITOR
+        if(debugmode)
+        Debug.LogFormat("玩家已平滑移动到终点中心并冻结");
+        #endif
+        
+        // 在移动完成后触发事件，通知场景管理器可以开始加载目标场景了
+        GameEvents.TriggerPlayerReachedEndpointCenter(endpointTransform);
+    }
 
     public void UseItem()
     {
         // 触发交互事件，让 Trigger 脚本可以响应
         GameEvents.TriggerPlayerInteract();
-        
-        #if UNITY_EDITOR
+
+#if UNITY_EDITOR
         Debug.LogFormat("使用道具或交互");
-        #endif
+#endif
     }
     
     // 提供给其他脚本访问玩家状态的方法
@@ -1348,6 +1439,7 @@ public void ExitRopeMode()
         GameEvents.OnPlayerDied += HandlePlayerDied;
         GameEvents.OnPlayerRespawnCompleted += HandlePlayerRespawn;
         GameEvents.OnPlayerInInteractiveZoneChanged += HandlePlayerInInteractiveZoneChanged;
+        GameEvents.OnEndpointReached += HandleEndpointReached;
     }
         
     private void OnDisable()
@@ -1357,6 +1449,7 @@ public void ExitRopeMode()
         GameEvents.OnPlayerDied -= HandlePlayerDied;
         GameEvents.OnPlayerRespawnCompleted -= HandlePlayerRespawn;
         GameEvents.OnPlayerInInteractiveZoneChanged -= HandlePlayerInInteractiveZoneChanged;
+        GameEvents.OnEndpointReached += HandleEndpointReached;
         
         // 停止所有协程
         StopAllCoroutines();

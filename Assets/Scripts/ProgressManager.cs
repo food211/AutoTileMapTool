@@ -51,13 +51,14 @@ public class ProgressManager : MonoBehaviour
     private const string ENDPOINT_PREFIX = "Endpoint_";
     private const string CHECKPOINT_PREFIX = "Checkpoint_";
     private const string ITEM_PREFIX = "Item_";
-    private const string VARIABLE_PREFIX = "GameVar_";
+    private const string COIN_PREFIX = "Coin_";
 
     // 当前玩家数据
     private PlayerData currentPlayerData = new PlayerData();
 
     // 是否正在保存
     private bool isSaving = false;
+    public bool debugCoinMode = false;
 
     // 保存图标实例（持久保留）
     private GameObject saveIconInstance;
@@ -130,6 +131,12 @@ public class ProgressManager : MonoBehaviour
         // 创建UI Canvas和保存图标
         CreateUICanvas();
         CreateSaveIcon();
+        // 立即加载玩家数据
+        LoadPlayerData();
+        // 添加一个事件，通知其他对象ProgressManager已初始化完成
+
+        GameEvents.TriggerOnProgressManagerInitialized();
+
 
 #if UNITY_EDITOR
         Debug.LogFormat("ProgressManager 初始化完成");
@@ -169,6 +176,10 @@ public class ProgressManager : MonoBehaviour
         {
             CreateSaveIcon();
         }
+        // 重新加载玩家数据，确保数据是最新的
+        LoadPlayerData();
+        // 通知其他对象场景已加载完成
+        GameEvents.TriggerOnSceneFullyLoaded(sceneName);
 
 #if UNITY_EDITOR
         Debug.LogFormat($"ProgressManager: 场景 {sceneName} 已加载");
@@ -666,6 +677,51 @@ Debug.LogFormat("创建保存图标，prefab={0}", saveIconPrefab);
     {
         PlayerPrefs.SetInt(ITEM_PREFIX + itemID, 1);
         PlayerPrefs.Save();
+    }
+
+    /// <summary>
+    /// 获取金币存储键名
+    /// </summary>
+    public string GetCoinKey(string coinID)
+    {
+        return COIN_PREFIX + coinID;
+    }
+
+    /// <summary>
+    /// 保存金币收集状态
+    /// </summary>
+    public void SaveCoinCollected(string coinID)
+    {
+        // 确保已加载数据
+        if (currentPlayerData == null)
+        {
+            LoadPlayerData();
+        }
+
+        // 添加到金币收集列表
+        currentPlayerData.AddCoin(coinID);
+        
+        // 保存更新后的数据
+        SavePlayerData();
+
+        #if UNITY_EDITOR
+        if(debugCoinMode)
+            Debug.LogFormat("已保存金币收集状态: {0}", coinID);
+        #endif
+    }
+
+    /// <summary>
+    /// 检查金币是否已被收集
+    /// </summary>
+    public bool IsCoinCollected(string coinID)
+    {
+        // 确保已加载数据
+        if (currentPlayerData == null)
+        {
+            LoadPlayerData();
+        }
+        
+        return currentPlayerData.collectedCoins.Contains(coinID);
     }
 
     /// <summary>

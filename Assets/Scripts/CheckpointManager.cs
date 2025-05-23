@@ -20,7 +20,7 @@ public class CheckpointManager : MonoBehaviour
     // 当前激活的存档点
     private Checkpoint activeCheckpoint;
     
-    private void Awake()
+    private void Start()
     {
         // 获取组件引用
         if (playerController == null)

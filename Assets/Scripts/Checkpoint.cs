@@ -44,7 +44,7 @@ public class Checkpoint : MonoBehaviour
     public string CheckpointID => string.IsNullOrEmpty(checkpointID) ? name : checkpointID;
     public Transform RespawnPoint => respawnPoint != null ? respawnPoint : transform;
     
-    private void Awake()
+    private void Start()
     {
         // 确保存档点有唯一ID
         if (string.IsNullOrEmpty(checkpointID))
