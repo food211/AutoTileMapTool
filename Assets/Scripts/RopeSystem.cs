@@ -5,7 +5,7 @@ using UnityEngine;
 public class RopeSystem : MonoBehaviour
 {
     [Header("引用")]
-    [SerializeField] private LineRenderer lineRenderer;
+    [SerializeField] public LineRenderer lineRenderer;
     [SerializeField] private PlayerController playerController;
     [SerializeField] private StatusManager statusManager;
     [SerializeField] private GameObject arrowPrefab; // 箭头预制体引用

@@ -67,7 +67,8 @@ public static class GameEvents
         Swinging,
         Frozen,
         Burning,
-        Electrified
+        Electrified,
+        Paralyzed
     }
 
     // 触发事件的方法

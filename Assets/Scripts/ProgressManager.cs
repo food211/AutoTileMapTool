@@ -248,28 +248,29 @@ public class ProgressManager : MonoBehaviour
         }
     }
 
-    // 如果没有找到合适的 Canvas，创建一个新的
-    if (uiCanvas == null)
-    {
-        GameObject canvasObj = new GameObject("SaveIconCanvas");
-        uiCanvas = canvasObj.AddComponent<Canvas>();
-        uiCanvas.renderMode = RenderMode.ScreenSpaceOverlay;
-        uiCanvas.sortingOrder = 100;
-        CanvasScaler scaler = canvasObj.AddComponent<CanvasScaler>();
-        if (pixelPerfect)
+        // 如果没有找到合适的 Canvas，创建一个新的
+        if (uiCanvas == null)
         {
-            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-            scaler.referenceResolution = new Vector2(320, 180);
-            scaler.referencePixelsPerUnit = 32;
+            GameObject canvasObj = new GameObject("SaveIconCanvas");
+            uiCanvas = canvasObj.AddComponent<Canvas>();
+            uiCanvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            uiCanvas.sortingOrder = 100;
+            CanvasScaler scaler = canvasObj.AddComponent<CanvasScaler>();
+            if (pixelPerfect)
+            {
+                scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+                scaler.referenceResolution = new Vector2(768, 420);
+                scaler.referencePixelsPerUnit = 16;
+            }
+            else
+            {
+                scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+                scaler.referenceResolution = new Vector2(1920, 1080);
+            }
+            canvasObj.AddComponent<UnityEngine.UI.GraphicRaycaster>();
+
+            DontDestroyOnLoad(canvasObj);
         }
-        else
-        {
-            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-            scaler.referenceResolution = new Vector2(1920, 1080);
-        }
-        canvasObj.AddComponent<UnityEngine.UI.GraphicRaycaster>();
-        // 注意：不要 DontDestroyOnLoad，这样它只属于当前场景
-    }
 }
 
     /// <summary>

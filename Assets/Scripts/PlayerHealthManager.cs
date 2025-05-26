@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using static GameEvents;
 
 /// <summary>
 /// 管理玩家生命值、受伤和恢复的脚本
@@ -23,6 +24,7 @@ public class PlayerHealthManager : MonoBehaviour
     
     [Header("引用")]
     [SerializeField] private PlayerController playerController;
+    [SerializeField] private StatusManager statusManager;
     [SerializeField] private SpriteRenderer arrow;
     [SerializeField] private CheckpointManager checkpointManager; // 存档点管理器
     [SerializeField] private float respawnDelay = 1.0f; // 重生延迟
@@ -33,30 +35,34 @@ public class PlayerHealthManager : MonoBehaviour
     private Coroutine flashCoroutine;
     private Vector3 initialPosition; // 初始位置（仅作为备用）
     private bool isRespawning = false; // 标记玩家是否正在重生
+
     
     private void Awake()
     {
         // 初始化生命值为最大值
         currentHealth = maxHealth;
         
+        if (statusManager == null)
+            statusManager = GetComponent<StatusManager>();
+
         // 获取组件引用
         if (playerRenderer == null)
             playerRenderer = GetComponent<SpriteRenderer>();
-            
+
         if (playerController == null)
             playerController = GetComponent<PlayerController>();
-            
+
         if (checkpointManager == null)
             checkpointManager = FindObjectOfType<CheckpointManager>();
-            
+
         // 保存原始颜色
         if (playerRenderer != null)
             originalColor = playerRenderer.color;
-            
+
         // 保存初始位置（仅作为最后的备用）
         initialPosition = transform.position;
     }
-    
+
     private void OnEnable()
     {
         // 订阅伤害事件
@@ -64,7 +70,7 @@ public class PlayerHealthManager : MonoBehaviour
         // 订阅重生事件
         GameEvents.OnPlayerRespawn += RespawnPlayer;
     }
-    
+
     private void OnDisable()
     {
         // 取消订阅伤害事件
@@ -82,18 +88,16 @@ public class PlayerHealthManager : MonoBehaviour
         // 如果处于无敌状态或正在重生，不受伤害
         if (isInvincible || playerController.IsInvincible() || isRespawning)
             return;
-            
+
         // 减少生命值
         currentHealth = Mathf.Max(0, currentHealth - damage);
-        
+
         // 触发受伤事件
         GameEvents.TriggerPlayerHealthChanged(currentHealth, maxHealth);
         
-        // 播放受伤视觉效果
-        if (flashCoroutine != null)
-            StopCoroutine(flashCoroutine);
-        flashCoroutine = StartCoroutine(DamageFlashEffect());
-        
+        // 相机震动
+        GameEvents.TriggerCameraShake(0.2f);
+
         // 如果生命值为0，触发死亡
         if (currentHealth <= 0)
         {
@@ -101,9 +105,24 @@ public class PlayerHealthManager : MonoBehaviour
         }
         else
         {
-            // 否则进入短暂无敌状态
-            SetInvincible(true);
+            // 播放受伤视觉效果后再进入无敌状态
+            if (flashCoroutine != null)
+                StopCoroutine(flashCoroutine);
+            
+            // 使用协程顺序执行：先闪烁，再进入无敌状态
+            flashCoroutine = StartCoroutine(DamageFlashThenInvincibility());
         }
+    }
+    
+        /// <summary>
+    /// 先执行伤害闪烁，然后再进入无敌状态
+    /// </summary>
+    private IEnumerator DamageFlashThenInvincibility()
+    {
+        // 闪烁完成后再进入无敌状态
+        SetInvincible(true);
+        // 先执行伤害闪烁
+        yield return StartCoroutine(DamageFlashEffect());
     }
     
     /// <summary>
@@ -114,10 +133,10 @@ public class PlayerHealthManager : MonoBehaviour
     {
         // 增加生命值，但不超过最大值
         currentHealth = Mathf.Min(maxHealth, currentHealth + amount);
-        
+
         // 触发生命值变化事件
         GameEvents.TriggerPlayerHealthChanged(currentHealth, maxHealth);
-        
+
         // 如果不在重生过程中，才播放恢复特效
         if (!isRespawning)
         {
@@ -206,7 +225,7 @@ public class PlayerHealthManager : MonoBehaviour
         isInvincible = true;
         
         // 如果不在重生过程中，才播放闪烁效果
-        if (!isRespawning)
+        if (!isRespawning && !playerController.IsInRopeMode())
         {
             StartCoroutine(InvincibilityFlashEffect(duration));
         }
@@ -244,10 +263,29 @@ public class PlayerHealthManager : MonoBehaviour
         
         float elapsed = 0f;
         float flashInterval = 0.1f;
-        
+
         // 在无敌时间内闪烁
         while (elapsed < duration && !isRespawning)
         {
+            // 直接检查当前玩家状态是否为电击状态
+            bool isElectrifiedState = false;
+            
+            // 如果有StatusManager组件，使用它来检查状态
+            if (statusManager != null)
+            {
+                isElectrifiedState = statusManager.IsInState(GameEvents.PlayerState.Electrified) || 
+                                    statusManager.IsInState(GameEvents.PlayerState.Paralyzed);
+            }
+            
+            // 如果玩家处于电击状态，不改变透明度
+            if (isElectrifiedState)
+            {
+                // 不改变透明度，让电击效果处理视觉表现
+                yield return new WaitForSeconds(flashInterval);
+                elapsed += flashInterval;
+                continue;
+            }
+            
             // 切换透明度
             playerRenderer.color = new Color(
                 originalColor.r,
@@ -275,17 +313,28 @@ public class PlayerHealthManager : MonoBehaviour
         // 如果不在重生过程中，恢复原始颜色
         if (!isRespawning)
         {
-            playerRenderer.color = originalColor;
-            
-            // 恢复箭头颜色
-            if (arrow != null)
+            // 再次检查电击状态，避免覆盖电击效果
+            bool isElectrifiedState = false;
+            if (statusManager != null)
             {
-                arrow.color = new Color(
-                    arrow.color.r,
-                    arrow.color.g,
-                    arrow.color.b,
-                    1f
-                );
+                isElectrifiedState = statusManager.IsInState(GameEvents.PlayerState.Electrified) || 
+                                    statusManager.IsInState(GameEvents.PlayerState.Paralyzed);
+            }
+            
+            if (!isElectrifiedState)
+            {
+                playerRenderer.color = originalColor;
+                
+                // 恢复箭头颜色
+                if (arrow != null)
+                {
+                    arrow.color = new Color(
+                        arrow.color.r,
+                        arrow.color.g,
+                        arrow.color.b,
+                        1f
+                    );
+                }
             }
         }
     }

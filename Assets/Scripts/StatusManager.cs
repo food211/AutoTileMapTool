@@ -414,8 +414,6 @@ public class StatusManager : MonoBehaviour
         switch (newState)
         {
             case PlayerState.Normal:
-                // 正常状态不需要特殊处理
-                // 但需要通知GameEvents系统状态已变更
                 GameEvents.TriggerPlayerStateChanged(GameEvents.PlayerState.Normal);
                 break;
                 
@@ -980,9 +978,9 @@ public class StatusManager : MonoBehaviour
             {
                 // 如果不是直接钩中带电物体，开始电击冷却
                 StartCoroutine(ElectrifiedCooldownRoutine());
-                
-                // 检查当前环境，决定下一个状态
-                CheckEnvironmentForStateTransition();
+                GameEvents.TriggerRopeReleased();
+
+                SetPlayerState(PlayerState.Paralyzed);
             }
             else
             {
@@ -1530,7 +1528,7 @@ public void ChangeRopeColor(GameEvents.PlayerState state)
         if (playerRenderer == null) yield break;
         
         // 闪烁颜色
-        Color blinkColor1 = new Color(1.0f, 1.0f, 0.3f);
+        Color blinkColor1 = new Color(0.2f, 0.2f, 0.2f);
         Color blinkColor2 = electrifiedTint;
         
         // 持续闪烁直到状态改变
@@ -1539,28 +1537,52 @@ public void ChangeRopeColor(GameEvents.PlayerState state)
             // 闪烁效果
             playerRenderer.color = blinkColor1;
             yield return new WaitForSeconds(0.05f);
+            
+            // 再次检查状态，确保不会在状态改变后设置颜色
+            if (currentPlayerState != PlayerState.Electrified) break;
+            
             playerRenderer.color = blinkColor2;
             yield return new WaitForSeconds(0.05f);
         }
+        
+        // 确保在协程结束时不会保留电击颜色（如果状态已经改变）
+        if (currentPlayerState != PlayerState.Electrified && 
+            currentPlayerState != PlayerState.Paralyzed && 
+            playerRenderer != null)
+        {
+            playerRenderer.color = originalTint;
+        }
     }
-
-    // 电击后的闪烁效果
-    private IEnumerator ElectrifiedBlinkRoutine()
+    
+        private IEnumerator ElectrifiedBlinkRoutine()
     {
         if (playerRenderer == null) yield break;
         
-        Color blinkColor1 = new Color(1.0f, 1.0f, 0.6f, 1.0f); // 淡黄色
-        Color blinkColor2 = new Color(0.8f, 0.8f, 0.8f, 1.0f); // 淡灰色
+        // 闪烁颜色
+        Color blinkColor1 = new Color(0.2f, 0.2f, 0.2f);
+        Color blinkColor2 = electrifiedTint;
         
         float blinkSpeed = 0.15f; // 闪烁速度
         
-        while (true)
+        // 持续闪烁直到状态改变
+        while (currentPlayerState == PlayerState.Paralyzed)
         {
-            // 在两种颜色之间交替
+            // 闪烁效果
             playerRenderer.color = blinkColor1;
             yield return new WaitForSeconds(blinkSpeed);
+
+            // 再次检查状态，确保不会在状态改变后设置颜色
+            if (currentPlayerState != PlayerState.Paralyzed) break;
+
             playerRenderer.color = blinkColor2;
             yield return new WaitForSeconds(blinkSpeed);
+        }
+        
+        // 确保在协程结束时不会保留电击颜色（如果状态已经改变）
+        if (currentPlayerState != PlayerState.Paralyzed && 
+            playerRenderer != null)
+        {
+            playerRenderer.color = originalTint;
         }
     }
     #endregion
@@ -1571,22 +1593,22 @@ public void ChangeRopeColor(GameEvents.PlayerState state)
     {
         // 设置冰冻冷却状态
         isFrozenOnCooldown = true;
-        
+
         // 如果有PlayerController，通知它冰免疫状态
         if (playerController != null)
         {
             playerController.SetIceImmunity(true);
         }
-        
+
         // 添加冷却期间的白色闪烁效果
         StartCoroutine(CooldownBlinkEffect(frozenCooldown));
-        
+
         // 等待冷却时间
         yield return new WaitForSeconds(frozenCooldown);
-        
+
         // 冷却结束
         isFrozenOnCooldown = false;
-        
+
         // 如果有PlayerController，取消冰免疫状态
         if (playerController != null)
         {
@@ -1600,34 +1622,34 @@ public void ChangeRopeColor(GameEvents.PlayerState state)
     {
         // 设置电击冷却状态
         isElectrifiedOnCooldown = true;
-        
+
         // 如果有PlayerController，通知它电击免疫状态
         if (playerController != null)
         {
             playerController.SetElectricImmunity(true);
         }
-        
+
         // 添加冷却期间的白色闪烁效果
         StartCoroutine(CooldownBlinkEffect(electrifiedCooldown));
-        
+
         // 等待冷却时间
         yield return new WaitForSeconds(electrifiedCooldown);
-        
+
         // 冷却结束，恢复发射绳索能力
         if (playerController != null)
         {
             GameEvents.TriggerCanShootRopeChanged(true);
         }
-        
+
         // 恢复原始颜色
         if (playerRenderer != null)
         {
             playerRenderer.color = originalTint;
         }
-        
+
         // 冷却结束
         isElectrifiedOnCooldown = false;
-        
+
         // 如果有PlayerController，取消电击免疫状态
         if (playerController != null)
         {
@@ -1679,14 +1701,14 @@ public void ChangeRopeColor(GameEvents.PlayerState state)
     {
         // 获取玩家当前位置
         Vector2 playerPosition = transform.position;
-        
+
         // 检查玩家是否在火上
         if (isPlayerBurn && !playerController.IsFireImmune())
         {
             SetPlayerState(PlayerState.Burning);
             return;
         }
-        
+
         // 检查玩家是否在冰上 - 使用OverlapCircle检测
         Collider2D[] iceColliders = Physics2D.OverlapCircleAll(playerPosition, 0.5f);
         foreach (Collider2D collider in iceColliders)
@@ -1697,7 +1719,7 @@ public void ChangeRopeColor(GameEvents.PlayerState state)
                 return;
             }
         }
-        
+
         // 检查玩家是否在电上 - 使用OverlapCircle检测
         Collider2D[] electColliders = Physics2D.OverlapCircleAll(playerPosition, 0.5f);
         foreach (Collider2D collider in electColliders)
@@ -1708,8 +1730,7 @@ public void ChangeRopeColor(GameEvents.PlayerState state)
                 return;
             }
         }
-        
-        // 如果没有特殊环境，设置为正常状态
+
         SetPlayerState(PlayerState.Normal);
     }
 

@@ -49,7 +49,7 @@ MonoBehaviour:
   enableAutoSave: 1
   autoSaveInterval: 300
   saveIconPrefab: {fileID: 7379143721005220322, guid: 1c0263def8c82314bb1c08d2b93c53d1, type: 3}
-  saveIconScreenPosition: {x: 60, y: 60}
+  saveIconScreenPosition: {x: 30, y: 30}
   saveIconSize: {x: 16, y: 16}
   saveIconDuration: 1.5
   pixelPerfect: 1
