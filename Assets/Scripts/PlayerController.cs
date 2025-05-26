@@ -916,6 +916,7 @@ public void ExitRopeMode()
         {
             Gun.SetActive(false);
         }
+        
 
         #if UNITY_EDITOR
         if(debugmode)

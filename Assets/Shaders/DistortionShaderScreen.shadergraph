@@ -3686,7 +3686,7 @@
     "m_Type": "UnityEditor.ShaderGraph.Vector1MaterialSlot",
     "m_ObjectId": "ef51950b3b8140358c94758c6395152d",
     "m_Id": 0,
-    "m_DisplayName": "WaveDIstanceFromCenter",
+    "m_DisplayName": "WaveDistanceFromCenter",
     "m_SlotType": 1,
     "m_Hidden": false,
     "m_ShaderOutputName": "Out",
@@ -3703,10 +3703,10 @@
     "m_Guid": {
         "m_GuidSerialized": "28181a62-4a76-4664-8554-b5a75f1f7ce6"
     },
-    "m_Name": "WaveDIstanceFromCenter",
+    "m_Name": "WaveDistanceFromCenter",
     "m_DefaultRefNameVersion": 1,
-    "m_RefNameGeneratedByDisplayName": "WaveDIstanceFromCenter",
-    "m_DefaultReferenceName": "_WaveDIstanceFromCenter",
+    "m_RefNameGeneratedByDisplayName": "WaveDistanceFromCenter",
+    "m_DefaultReferenceName": "_WaveDistanceFromCenter",
     "m_OverrideReferenceName": "",
     "m_GeneratePropertyBlock": true,
     "m_UseCustomSlotLabel": false,

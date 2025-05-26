@@ -74,6 +74,7 @@ Material:
     - _ShockWaveStrength: -0.1
     - _Size: 0.05
     - _WaveDIstanceFromCenter: -0.1
+    - _WaveDistanceFromCenter: -0.1
     m_Colors:
     - _Color: {r: 1, g: 1, b: 1, a: 1}
     - _Flip: {r: 1, g: 1, b: 1, a: 1}

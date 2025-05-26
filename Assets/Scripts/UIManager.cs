@@ -68,7 +68,7 @@ public class UIManager : MonoBehaviour
                 foundMapping = true;
                 
                 #if UNITY_EDITOR
-                Debug.Log($"UIManager: 已应用场景 '{sceneName}' 的UI映射");
+                Debug.LogFormat($"UIManager: 已应用场景 '{sceneName}' 的UI映射");
                 #endif
                 
                 break;
@@ -81,7 +81,7 @@ public class UIManager : MonoBehaviour
             ApplyDefaultSettings();
             
             #if UNITY_EDITOR
-            Debug.Log($"UIManager: 场景 '{sceneName}' 没有特定映射，已应用默认设置");
+            Debug.LogFormat($"UIManager: 场景 '{sceneName}' 没有特定映射，已应用默认设置");
             #endif
         }
     }

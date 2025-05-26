@@ -64,4 +64,4 @@ MonoBehaviour:
   - MainMenu
   loadingSceneNames:
   - LoadingUI
-  logDebugInfo: 1
+  logDebugInfo: 0
