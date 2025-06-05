@@ -1,4 +1,3 @@
-using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -40,6 +39,8 @@ public class RopeSystem : MonoBehaviour
     // 燃烧状态相关变量
     private int burningAnchorIndex = -1; // 开始燃烧的锚点索引
     private GameObject fireParticleInstance; // 火焰粒子实例
+
+
     
     // 内部变量
     private bool isShooting = false;
@@ -100,6 +101,23 @@ public class RopeSystem : MonoBehaviour
         // 在初始化时创建箭头对象并隐藏
         CreateArrowObject();
     }
+
+
+    private void OnEnable()
+    {
+        GameEvents.OnRopeReleased += ReleaseRope;
+    }
+    
+    private void OnDisable()
+    {
+        if (arrowObject != null && Application.isPlaying)
+        {
+            Destroy(arrowObject);
+            arrowObject = null;
+        }
+
+        GameEvents.OnRopeReleased -= ReleaseRope;
+    }
     
     // 创建箭头对象 - 只在游戏开始时调用一次
     private void CreateArrowObject()
@@ -110,20 +128,20 @@ public class RopeSystem : MonoBehaviour
             Debug.LogWarning("箭头预制体未设置!");
             return;
         }
-        
+
         // 实例化箭头
         arrowObject = Instantiate(arrowPrefab, transform.position, Quaternion.identity);
-        
+
         // 将箭头设为该脚本的子对象，便于管理
         arrowObject.transform.SetParent(transform);
-        
+
         // 初始时隐藏箭头
         arrowObject.SetActive(false);
-        
+
         // 获取SpriteRenderer组件
         arrowRenderer = arrowObject.GetComponentInChildren<SpriteRenderer>();
     }
-    
+    #region UPDATE
     private void Update()
     {
         if (isShooting)
@@ -150,9 +168,10 @@ public class RopeSystem : MonoBehaviour
         }
     }
 }
-
-// 预测性碰撞检测方法
-private void PredictiveCollisionCheck(Vector2 fromPos, Vector2 toPos)
+    #endregion
+#region rope physics
+    // 预测性碰撞检测方法
+    private void PredictiveCollisionCheck(Vector2 fromPos, Vector2 toPos)
 {
     if (anchors.Count == 0) return;
     
@@ -218,7 +237,8 @@ private void CheckPointToAnchors(Vector2 checkPoint)
         }
     }
 }
-
+    #endregion
+#region rope controller
     // 发射绳索
     public void ShootRope(Vector2 direction)
     {
@@ -629,59 +649,60 @@ private void RopeJointManager()
             lineRenderer.SetPosition(i + 1, anchors[i]);
         }
     }
+    #endregion
     #region release rope
-public void ReleaseRope()
-{
-    // 原有的代码
-    isShooting = false;
-    isHooked = false;
-    
-    // 重置线渲染器的颜色和宽度到原始状态
-    if (lineRenderer != null)
+    public void ReleaseRope()
     {
-        // 恢复原始颜色
-        lineRenderer.startColor = originalRopeColor;
-        lineRenderer.endColor = originalRopeColor;
-        
-        // 恢复原始宽度 - 确保清除宽度曲线
-        lineRenderer.widthCurve = originalWithCurve; // 清除宽度曲线
-        lineRenderer.startWidth = originalStartWidth;
-        lineRenderer.endWidth = originalEndWidth;
-        lineRenderer.colorGradient = originalColorGradient; // 恢复原始颜色渐变
-    }
-    
-    lineRenderer.enabled = false;
+        // 原有的代码
+        isShooting = false;
+        isHooked = false;
 
-    // 清空锚点
-    anchors.Clear();
-    combinedAnchorLen = 0f;
-    
-    // 重置线渲染器
-    lineRenderer.positionCount = 2;
-    lineRenderer.SetPosition(0, playerController.transform.position);
-    lineRenderer.SetPosition(1, playerController.transform.position);
-    
-    if (distanceJoint != null)
-    {
-        distanceJoint.enabled = false;
+        // 重置线渲染器的颜色和宽度到原始状态
+        if (lineRenderer != null)
+        {
+            // 恢复原始颜色
+            lineRenderer.startColor = originalRopeColor;
+            lineRenderer.endColor = originalRopeColor;
+
+            // 恢复原始宽度 - 确保清除宽度曲线
+            lineRenderer.widthCurve = originalWithCurve; // 清除宽度曲线
+            lineRenderer.startWidth = originalStartWidth;
+            lineRenderer.endWidth = originalEndWidth;
+            lineRenderer.colorGradient = originalColorGradient; // 恢复原始颜色渐变
+        }
+
+        lineRenderer.enabled = false;
+
+        // 清空锚点
+        anchors.Clear();
+        combinedAnchorLen = 0f;
+
+        // 重置线渲染器
+        lineRenderer.positionCount = 2;
+        lineRenderer.SetPosition(0, playerController.transform.position);
+        lineRenderer.SetPosition(1, playerController.transform.position);
+
+        if (distanceJoint != null)
+        {
+            distanceJoint.enabled = false;
+        }
+
+        // 隐藏箭头
+        if (arrowObject != null)
+        {
+            arrowObject.SetActive(false);
+        }
+
+        // 重置绳索长度
+        currentRopeLength = ropeLength;
+
+        // 重置燃烧状态
+        burningAnchorIndex = -1;
+        currentHookTag = "";
+
+        // 通知玩家控制器退出绳索模式
+        playerController.ExitRopeMode();
     }
-    
-    // 隐藏箭头
-    if (arrowObject != null)
-    {
-        arrowObject.SetActive(false);
-    }
-    
-    // 重置绳索长度
-    currentRopeLength = ropeLength;
-    
-    // 重置燃烧状态
-    burningAnchorIndex = -1;
-    currentHookTag = "";
-    
-    // 通知玩家控制器退出绳索模式
-    playerController.ExitRopeMode();
-}
 
 
     #endregion
@@ -762,97 +783,99 @@ public void ReleaseRope()
         // 应用力
         playerRigidbody.AddForce(perpendicularDirection * direction * 10f);
     }
-    #region Public Methods
+
 
     public void SetCollisionOnlyLayers(LayerMask layers)
 {
     collisionOnlyLayers = layers;
 }
     // 在指定位置切断绳索
-public bool CutRope(Vector2 cutPosition, float cutRadius = 0.5f)
-{
-    // 如果没有钩住或者没有锚点，则无法切断
-    if (!isHooked || anchors.Count == 0)
-        return false;
-    
-    // 检查玩家位置和所有锚点之间的线段是否与切割点相交
-    Vector2 playerPos = playerController.transform.position;
-    Vector2 prevPoint = playerPos;
-    
-    // 创建一个新的锚点列表，用于存储切割后保留的锚点
-    List<Vector2> remainingAnchors = new List<Vector2>();
-    bool ropeCut = false;
-    
-    // 检查玩家到第一个锚点的线段
-    if (IsPointNearLineSegment(playerPos, anchors[0], cutPosition, cutRadius))
+    public bool CutRope(Vector2 cutPosition, float cutRadius = 0.5f)
     {
-        // 如果切割点靠近玩家和第一个锚点之间的线段，直接释放绳索
-        ReleaseRope();
-        return true;
-    }
-    
-    // 检查锚点之间的线段
-    for (int i = 0; i < anchors.Count - 1; i++)
-    {
-        if (IsPointNearLineSegment(anchors[i], anchors[i + 1], cutPosition, cutRadius))
-        {
-            // 如果切割点靠近当前锚点和下一个锚点之间的线段
-            ropeCut = true;
-            
-            // 保留切割点之前的锚点
-            remainingAnchors = new List<Vector2>(anchors.GetRange(0, i + 1));
-            break;
-        }
-    }
-    
-    // 如果绳索被切断
-    if (ropeCut)
-    {
-        // 更新锚点列表
-        anchors = remainingAnchors;
-        
-        // 重新计算锚点间距离
-        RecalculateAnchorLength();
-        
-        // 更新关节
-        SetJoint();
-        
-        // 更新线渲染器
-        UpdateLineRenderer();
-        
-        // 触发绳索切断事件
-        GameEvents.TriggerRopeCut(cutPosition);
-        
-        // 可以在这里添加切断效果，如粒子效果或声音
-        
-        return true;
-    }
-    
-    return false;
-}
+        // 如果没有钩住或者没有锚点，则无法切断
+        if (!isHooked || anchors.Count == 0)
+            return false;
 
-// 检查点是否靠近线段
-private bool IsPointNearLineSegment(Vector2 lineStart, Vector2 lineEnd, Vector2 point, float maxDistance)
-{
-    // 计算点到线段的距离
-    Vector2 line = lineEnd - lineStart;
-    float lineLength = line.magnitude;
-    Vector2 lineDirection = line.normalized;
-    Vector2 pointVector = point - lineStart;
-    
-    // 计算点在线段上的投影长度
-    float projection = Vector2.Dot(pointVector, lineDirection);
-    
-    // 如果投影在线段外，返回false
-    if (projection < 0 || projection > lineLength)
+        // 检查玩家位置和所有锚点之间的线段是否与切割点相交
+        Vector2 playerPos = playerController.transform.position;
+        Vector2 prevPoint = playerPos;
+
+        // 创建一个新的锚点列表，用于存储切割后保留的锚点
+        List<Vector2> remainingAnchors = new List<Vector2>();
+        bool ropeCut = false;
+
+        // 检查玩家到第一个锚点的线段
+        if (IsPointNearLineSegment(playerPos, anchors[0], cutPosition, cutRadius))
+        {
+            // 如果切割点靠近玩家和第一个锚点之间的线段，直接释放绳索
+            ReleaseRope();
+            return true;
+        }
+
+        // 检查锚点之间的线段
+        for (int i = 0; i < anchors.Count - 1; i++)
+        {
+            if (IsPointNearLineSegment(anchors[i], anchors[i + 1], cutPosition, cutRadius))
+            {
+                // 如果切割点靠近当前锚点和下一个锚点之间的线段
+                ropeCut = true;
+
+                // 保留切割点之前的锚点
+                remainingAnchors = new List<Vector2>(anchors.GetRange(0, i + 1));
+                break;
+            }
+        }
+
+        // 如果绳索被切断
+        if (ropeCut)
+        {
+            // 更新锚点列表
+            anchors = remainingAnchors;
+
+            // 重新计算锚点间距离
+            RecalculateAnchorLength();
+
+            // 更新关节
+            SetJoint();
+
+            // 更新线渲染器
+            UpdateLineRenderer();
+
+            // 触发绳索切断事件
+            GameEvents.TriggerRopeCut(cutPosition);
+
+            // 可以在这里添加切断效果，如粒子效果或声音
+
+            return true;
+        }
+
         return false;
-    
-    // 计算点到线段的垂直距离
-    float distance = Vector2.Distance(point, lineStart + lineDirection * projection);
-    
-    // 如果距离小于最大距离，返回true
-    return distance <= maxDistance;
-}
+    }
+
+    #region Public Methods
+
+    // 检查点是否靠近线段
+    private bool IsPointNearLineSegment(Vector2 lineStart, Vector2 lineEnd, Vector2 point, float maxDistance)
+    {
+        // 计算点到线段的距离
+        Vector2 line = lineEnd - lineStart;
+        float lineLength = line.magnitude;
+        Vector2 lineDirection = line.normalized;
+        Vector2 pointVector = point - lineStart;
+
+        // 计算点在线段上的投影长度
+        float projection = Vector2.Dot(pointVector, lineDirection);
+
+        // 如果投影在线段外，返回false
+        if (projection < 0 || projection > lineLength)
+            return false;
+
+        // 计算点到线段的垂直距离
+        float distance = Vector2.Distance(point, lineStart + lineDirection * projection);
+
+        // 如果距离小于最大距离，返回true
+        return distance <= maxDistance;
+    }
     // 检查绳索状态
     // 添加这个新方法来单独检查绳索是否处于发射状态
     public bool IsShooting()
@@ -898,23 +921,6 @@ private bool IsPointNearLineSegment(Vector2 lineStart, Vector2 lineEnd, Vector2 
     public string GetCurrentHookTag()
     {
         return currentHookTag;
-    }
-
-
-    private void OnEnable() {
-        GameEvents.OnRopeReleased += ReleaseRope;
-    }
-    
-    // 清理资源
-    private void OnDisable()
-    {
-        if (arrowObject != null && Application.isPlaying)
-        {
-            Destroy(arrowObject);
-            arrowObject = null;
-        }
-
-        GameEvents.OnRopeReleased -= ReleaseRope;
     }
 
 

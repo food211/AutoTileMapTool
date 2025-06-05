@@ -25,7 +25,7 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 5960107396613169898}
   serializedVersion: 2
-  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
@@ -56,10 +56,15 @@ MonoBehaviour:
   burningDrag: 0.8
   burningDamageInterval: 1.5
   struggletimes: 15
-  frozenEffect: {fileID: 0}
-  burningEffect: {fileID: 0}
-  electrifiedEffect: {fileID: 0}
-  frozenTint: {r: 0.31760997, g: 0.94887584, b: 1, a: 1}
-  burningTint: {r: 1, g: 0.4509804, b: 0.14117648, a: 1}
+  frozenMaterial: {fileID: 0}
+  burningMaterial: {fileID: 2100000, guid: 25c4c89c16a88e94c805b8da7f10569f, type: 2}
+  electrifiedMaterial: {fileID: 2100000, guid: 5ed6a9b6f7a940a44a6d29e6567076c8, type: 2}
+  RopefrozenMaterial: {fileID: 0}
+  RopeburningMaterial: {fileID: -876546973899608171, guid: 1c311462602742148b9d75fec4c1ab8a, type: 3}
+  RopeelectrifiedMaterial: {fileID: 0}
+  fireParticleSystemPrefab: {fileID: 3099934303986255966, guid: 54494747ae6742346ac611c34ff64dbd, type: 3}
+  frozenTint: {r: 0.13162044, g: 0.71398336, b: 0.7610062, a: 1}
+  burningTint: {r: 0.6855345, g: 0.29828352, b: 0.07976332, a: 1}
+  electrifiedTint: {r: 0.74213827, g: 0.71168435, b: 0.17036496, a: 1}
   frozenCooldown: 2
   electrifiedCooldown: 1.5

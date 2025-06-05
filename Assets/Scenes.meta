@@ -1,5 +1,7 @@
 fileFormatVersion: 2
 guid: d5899a25947260c4a8f14384cfa80376
+labels:
+- Scene
 folderAsset: yes
 DefaultImporter:
   externalObjects: {}

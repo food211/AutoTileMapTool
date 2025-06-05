@@ -67,7 +67,7 @@ public class PlayerController : MonoBehaviour
 
     [Header("免疫视觉效果")]
     [SerializeField] private GameObject invincibleEffect;  // 无敌特效
-    [SerializeField] private Color invincibleTint = new Color(1f, 1f, 1f, 0.7f); // 无敌时的颜色
+    [SerializeField] private Color invincibleTint = new Color(1f, 1f, 1f, 1f); // 无敌时的颜色
     private SpriteRenderer playerRenderer;
     private Color originalColor;
     
@@ -822,6 +822,9 @@ private void HandleNormalMode()
     // 退出绳索模式
 public void ExitRopeMode()
 {
+    if (!isRopeMode)
+    return;
+
     isRopeMode = false;
     
     // 显示箭头
@@ -891,6 +894,7 @@ public void ExitRopeMode()
     private void HandleEndpointReached(Transform endpointTransform)
     {
         SetPlayerInput(false);
+        SetInvincible(true);
         // 如果在绳索模式，强制退出绳索模式
         if (isRopeMode && ropeSystemInitialized)
         {
@@ -928,21 +932,25 @@ public void ExitRopeMode()
     private IEnumerator MovePlayerToEndpoint(Transform endpointTransform)
     {
         // 移动持续时间
-        float duration = 0.6f;
+        float moveDuration = 0.4f;
+        float scaleDuration = 0.3f;
         float elapsedTime = 0f;
 
         // 起始位置和目标位置
         Vector2 startPosition = transform.position;
+        Vector3 originalScale = transform.localScale;
         Vector2 targetPosition = endpointTransform.position;
+        Vector3 targetScale = Vector3.zero;
 
-        while (elapsedTime < duration)
+        // 第一阶段：移动到终点中心
+        while (elapsedTime < moveDuration)
         {
             // 计算已经过的时间比例
-            float t = elapsedTime / duration;
-            
+            float t = elapsedTime / moveDuration;
+
             // 应用缓出效果 (Ease Out Cubic)
             float easedT = 1 - Mathf.Pow(1 - t, 3);
-            
+
             // 插值计算当前位置
             if (rbInitialized)
             {
@@ -952,33 +960,60 @@ public void ExitRopeMode()
             {
                 transform.position = Vector2.Lerp(startPosition, targetPosition, easedT);
             }
-            
+
             // 增加已经过的时间
             elapsedTime += Time.deltaTime;
-            
+
             yield return null;
         }
 
-        // 确保最终位置精确
+        // 确保位置精确
         if (rbInitialized)
         {
             rb.position = targetPosition;
-            // 移动完成后完全冻结玩家
-            rb.constraints = RigidbodyConstraints2D.FreezeAll;
         }
         else
         {
             transform.position = targetPosition;
         }
 
-        #if UNITY_EDITOR
-        if(debugmode)
-        Debug.LogFormat("玩家已平滑移动到终点中心并冻结");
-        #endif
-        
+        // 第二阶段：缩小至消失
+        elapsedTime = 0f;
+        while (elapsedTime < scaleDuration)
+        {
+            // 计算已经过的时间比例
+            float t = elapsedTime / scaleDuration;
+
+            // 应用缓出效果 (Ease Out Cubic)
+            float easedT = 1 - Mathf.Pow(1 - t, 3);
+
+            // 插值计算当前缩放
+            transform.localScale = Vector3.Lerp(originalScale, targetScale, easedT);
+
+            // 增加已经过的时间
+            elapsedTime += Time.deltaTime;
+
+            yield return null;
+        }
+
+        // 确保最终缩放为0
+        transform.localScale = targetScale;
+
+        // 移动完成后完全冻结玩家
+        if (rbInitialized)
+        {
+            rb.constraints = RigidbodyConstraints2D.FreezeAll;
+        }
+
+#if UNITY_EDITOR
+        if (debugmode)
+            Debug.LogFormat("玩家已先移动到终点中心，然后缩小至0");
+#endif
+
         // 在移动完成后触发事件，通知场景管理器可以开始加载目标场景了
         GameEvents.TriggerPlayerReachedEndpointCenter(endpointTransform);
     }
+
 
     public void UseItem()
     {
@@ -1450,7 +1485,7 @@ public void ExitRopeMode()
         GameEvents.OnPlayerDied -= HandlePlayerDied;
         GameEvents.OnPlayerRespawnCompleted -= HandlePlayerRespawn;
         GameEvents.OnPlayerInInteractiveZoneChanged -= HandlePlayerInInteractiveZoneChanged;
-        GameEvents.OnEndpointReached += HandleEndpointReached;
+        GameEvents.OnEndpointReached -= HandleEndpointReached;
         
         // 停止所有协程
         StopAllCoroutines();

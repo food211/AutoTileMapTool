@@ -21,6 +21,8 @@ public static class GameEvents
     public static event Action<Vector2> OnRopeHooked; // 包含钩点位置
     public static event Action OnRopeReleased;
     public static event Action<float> OnRopeLengthChanged; // 包含新长度
+    public static event Action<RopeState> OnRopeStateChanged;
+
     // 绳索切断事件
     public static event System.Action<Vector2> OnRopeCut;
 
@@ -69,6 +71,14 @@ public static class GameEvents
         Burning,
         Electrified,
         Paralyzed
+    }
+
+    public enum RopeState
+    {
+        Normal,
+        Burning,
+        Electrified,
+        Frozen
     }
 
     // 触发事件的方法
@@ -245,5 +255,24 @@ public static class GameEvents
     public static void TriggerOnSceneFullyLoaded(string sceneName)
     {
         OnSceneFullyLoaded?.Invoke(sceneName);
+    }
+
+    public static void TriggerRopeStateChanged(RopeState newState)
+    {
+        OnRopeStateChanged?.Invoke(newState);
+    }
+
+    public static event Action<List<Vector3>> OnRopeElectrifiedStart; // 绳索开始电击，传递路径点
+    public static event Action OnRopeElectrifiedEnd; // 绳索电击结束
+
+    // 对应的触发方法
+    public static void TriggerRopeElectrifiedStart(List<Vector3> ropePoints)
+    {
+        OnRopeElectrifiedStart?.Invoke(ropePoints);
+    }
+
+    public static void TriggerRopeElectrifiedEnd()
+    {
+        OnRopeElectrifiedEnd?.Invoke();
     }
 }

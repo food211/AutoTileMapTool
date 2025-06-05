@@ -194,7 +194,7 @@ LineRenderer:
     numCornerVertices: 8
     numCapVertices: 10
     alignment: 0
-    textureMode: 0
+    textureMode: 3
     textureScale: {x: 1, y: 1}
     shadowBias: 0.5
     generateLightingData: 0
@@ -423,7 +423,7 @@ SpriteRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: a97c105638bdf8b4a8650670310a4cd3, type: 2}
+  - {fileID: 10754, guid: 0000000000000000f000000000000000, type: 0}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -444,8 +444,8 @@ SpriteRenderer:
   m_SortingLayerID: 2062428235
   m_SortingLayer: 2
   m_SortingOrder: 101
-  m_Sprite: {fileID: -2413806693520163455, guid: a86470a33a6bf42c4b3595704624658b, type: 3}
-  m_Color: {r: 0.49999988, g: 0.5552548, b: 1, a: 1}
+  m_Sprite: {fileID: 21300000, guid: 8941ea9d6c35f1e44813602056f7be0b, type: 3}
+  m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
   m_DrawMode: 0
@@ -585,6 +585,7 @@ MonoBehaviour:
   damageFlashColor: {r: 1, g: 0, b: 0, a: 1}
   flashDuration: 0.1
   playerController: {fileID: 6686334195298017003}
+  statusManager: {fileID: 0}
   arrow: {fileID: 9072072273875727217}
   checkpointManager: {fileID: 0}
   respawnDelay: 0.1
