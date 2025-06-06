@@ -1544,30 +1544,6 @@ PrefabInstance:
       value: 
       objectReference: {fileID: 1888219646}
     - target: {fileID: 4141372611184910469, guid: bfddfe826b1bc78468232003d4053424, type: 3}
-      propertyPath: frozenTint.b
-      value: 1
-      objectReference: {fileID: 0}
-    - target: {fileID: 4141372611184910469, guid: bfddfe826b1bc78468232003d4053424, type: 3}
-      propertyPath: frozenTint.g
-      value: 0.9426888
-      objectReference: {fileID: 0}
-    - target: {fileID: 4141372611184910469, guid: bfddfe826b1bc78468232003d4053424, type: 3}
-      propertyPath: frozenTint.r
-      value: 0.2358489
-      objectReference: {fileID: 0}
-    - target: {fileID: 4141372611184910469, guid: bfddfe826b1bc78468232003d4053424, type: 3}
-      propertyPath: burningTint.b
-      value: 0.13521993
-      objectReference: {fileID: 0}
-    - target: {fileID: 4141372611184910469, guid: bfddfe826b1bc78468232003d4053424, type: 3}
-      propertyPath: burningTint.g
-      value: 0.4476566
-      objectReference: {fileID: 0}
-    - target: {fileID: 4141372611184910469, guid: bfddfe826b1bc78468232003d4053424, type: 3}
-      propertyPath: burningTint.r
-      value: 1
-      objectReference: {fileID: 0}
-    - target: {fileID: 4141372611184910469, guid: bfddfe826b1bc78468232003d4053424, type: 3}
       propertyPath: playerRenderer
       value: 
       objectReference: {fileID: 1888219649}
@@ -1579,22 +1555,6 @@ PrefabInstance:
       propertyPath: playerController
       value: 
       objectReference: {fileID: 1888219647}
-    - target: {fileID: 4141372611184910469, guid: bfddfe826b1bc78468232003d4053424, type: 3}
-      propertyPath: electrifiedTint.b
-      value: 0.35388732
-      objectReference: {fileID: 0}
-    - target: {fileID: 4141372611184910469, guid: bfddfe826b1bc78468232003d4053424, type: 3}
-      propertyPath: electrifiedTint.g
-      value: 1.0324371
-      objectReference: {fileID: 0}
-    - target: {fileID: 4141372611184910469, guid: bfddfe826b1bc78468232003d4053424, type: 3}
-      propertyPath: electrifiedTint.r
-      value: 1.0717734
-      objectReference: {fileID: 0}
-    - target: {fileID: 4141372611184910469, guid: bfddfe826b1bc78468232003d4053424, type: 3}
-      propertyPath: RopeburningMaterial
-      value: 
-      objectReference: {fileID: 2100000, guid: 1ff23f644e4e11f468668edd7a671845, type: 2}
     - target: {fileID: 5960107396613169898, guid: bfddfe826b1bc78468232003d4053424, type: 3}
       propertyPath: m_Name
       value: StatusManager
@@ -1919,7 +1879,7 @@ PrefabInstance:
     - target: {fileID: 72790869231794847, guid: 64f65beffb93e7c4e91c64d744f55993, type: 3}
       propertyPath: cameraManager
       value: 
-      objectReference: {fileID: 0}
+      objectReference: {fileID: 2041684323}
     - target: {fileID: 4828988282495702378, guid: 64f65beffb93e7c4e91c64d744f55993, type: 3}
       propertyPath: m_LocalPosition.x
       value: 0
@@ -2357,7 +2317,7 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: 1210877851460425971, guid: f8e82ce3969e9b04c8f5e772185b718c, type: 3}
       propertyPath: m_Parameters.textureMode
-      value: 1
+      value: 4
       objectReference: {fileID: 0}
     - target: {fileID: 3112569816307915108, guid: f8e82ce3969e9b04c8f5e772185b718c, type: 3}
       propertyPath: m_LocalPosition.x
@@ -2419,6 +2379,10 @@ PrefabInstance:
       propertyPath: statusManager
       value: 
       objectReference: {fileID: 1389818831}
+    - target: {fileID: 9142167173418991407, guid: f8e82ce3969e9b04c8f5e772185b718c, type: 3}
+      propertyPath: fireParticlePrefab
+      value: 
+      objectReference: {fileID: 3099934303986255966, guid: f928d0080b3576d4491f78e9edea3f95, type: 3}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []

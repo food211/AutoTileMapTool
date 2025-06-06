@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using ObjectPoolClass;
 
 public class RopeSystem : MonoBehaviour
 {
@@ -35,6 +36,7 @@ public class RopeSystem : MonoBehaviour
     [SerializeField] private float burnPropagationSpeed = 0.25f; // 燃烧传播速度
     [SerializeField] private float burnBreakThreshold = 0.8f; // 燃烧到多少程度时绳索断开
     [SerializeField] private GameObject fireParticlePrefab; // 火焰粒子效果预制体
+    private List<GameObject> activeFireParticles = new List<GameObject>();
 
     // 燃烧状态相关变量
     private int burningAnchorIndex = -1; // 开始燃烧的锚点索引
@@ -63,6 +65,7 @@ public class RopeSystem : MonoBehaviour
     private float combinedAnchorLen = 0f;
     private DistanceJoint2D distanceJoint;
     
+    
     private void Awake()
     {
         if (lineRenderer == null)
@@ -72,6 +75,11 @@ public class RopeSystem : MonoBehaviour
             playerController = GetComponentInParent<PlayerController>();
             
         playerRigidbody = playerController.GetComponent<Rigidbody2D>();
+            // 预热火焰粒子对象池
+        if (fireParticlePrefab != null)
+        {
+            ObjectPool.Instance.PrewarmPool(fireParticlePrefab, 5); // 预创建5个火焰粒子对象
+        }
         
         // 获取或添加DistanceJoint2D组件
         distanceJoint = playerController.GetComponent<DistanceJoint2D>();
@@ -115,7 +123,8 @@ public class RopeSystem : MonoBehaviour
             Destroy(arrowObject);
             arrowObject = null;
         }
-
+        // 停止所有火焰粒子
+        StopAllFireParticles();
         GameEvents.OnRopeReleased -= ReleaseRope;
     }
     
@@ -653,6 +662,9 @@ private void RopeJointManager()
     #region release rope
     public void ReleaseRope()
     {
+        // 停止所有火焰粒子
+        StopAllFireParticles();
+        
         // 原有的代码
         isShooting = false;
         isHooked = false;
@@ -925,91 +937,185 @@ private void RopeJointManager()
 
 
     // 获取燃烧锚点索引
-public int GetBurningAnchorIndex()
-{
-    return burningAnchorIndex;
-}
-
-// 获取燃烧传播速度
-public float GetBurnPropagationSpeed()
-{
-    return burnPropagationSpeed;
-}
-
-// 获取燃烧断开阈值
-public float GetBurnBreakThreshold()
-{
-    return burnBreakThreshold;
-}
-
-// 获取锚点列表
-public List<Vector2> GetAnchors()
-{
-    return new List<Vector2>(anchors);
-}
-
-public AnimationCurve getOriginalCurve()
-{
-    return originalWithCurve;
-}
-
-public Gradient getOriginalColorGradiant()
-{
-    return originalColorGradient;
-}
-// 创建火焰粒子
-public GameObject CreateFireParticle()
-{
-    if (fireParticleInstance != null)
+    public int GetBurningAnchorIndex()
     {
-        Destroy(fireParticleInstance);
+        return burningAnchorIndex;
     }
-    
-    if (fireParticlePrefab != null)
+
+
+    // 获取燃烧传播速度
+    public float GetBurnPropagationSpeed()
     {
-        // 在燃烧锚点位置创建火焰粒子
-        Vector3 firePosition = Vector3.zero;
-        if (anchors.Count > burningAnchorIndex && burningAnchorIndex >= 0)
+        return burnPropagationSpeed;
+    }
+
+
+    // 获取燃烧断开阈值
+    public float GetBurnBreakThreshold()
+    {
+        return burnBreakThreshold;
+    }
+
+
+    // 获取锚点列表
+    public List<Vector2> GetAnchors()
+    {
+        return new List<Vector2>(anchors);
+    }
+
+
+    public AnimationCurve getOriginalCurve()
+    {
+        return originalWithCurve;
+    }
+
+
+    public Gradient getOriginalColorGradiant()
+    {
+        return originalColorGradient;
+    }
+
+    // 创建火焰粒子
+    public GameObject CreateFireParticle()
+    {
+        // 清理之前的火焰粒子实例
+        if (fireParticleInstance != null)
         {
-            firePosition = anchors[burningAnchorIndex];
+            StopFireParticle(fireParticleInstance);
+            fireParticleInstance = null;
         }
-        else if (anchors.Count > 0)
-        {
-            firePosition = anchors[0];
-        }
-        
-        fireParticleInstance = Instantiate(fireParticlePrefab, firePosition, Quaternion.identity);
-        return fireParticleInstance;
-    }
-    
-    return null;
-}
 
-// 在燃烧点断开绳索
-public void BreakRopeAtBurningPoint()
-{
-    if (burningAnchorIndex < 0 || burningAnchorIndex >= anchors.Count)
-        return;
-    
-    // 保留从玩家到燃烧点的部分，移除燃烧点之后的部分
-    if (burningAnchorIndex > 0)
-    {
-        // 移除从燃烧点开始的所有锚点
-        int countToRemove = anchors.Count - burningAnchorIndex;
-        anchors.RemoveRange(burningAnchorIndex, countToRemove);
-        
-        // 重新计算锚点间距离
-        RecalculateAnchorLength();
-        
-        // 更新关节
-        SetJoint();
+        if (fireParticlePrefab != null)
+        {
+            // 确定火焰位置
+            Vector3 firePosition = Vector3.zero;
+            if (anchors.Count > burningAnchorIndex && burningAnchorIndex >= 0)
+            {
+                firePosition = anchors[burningAnchorIndex];
+            }
+            else if (anchors.Count > 0)
+            {
+                firePosition = anchors[0];
+            }
+            else
+            {
+                return null; // 如果没有有效位置，不创建火焰
+            }
+
+            // 从对象池获取火焰粒子
+            fireParticleInstance = ObjectPool.Instance.GetObject(fireParticlePrefab, firePosition, fireParticlePrefab.transform.rotation);
+
+            // 明确设置为绳索系统的子对象
+            fireParticleInstance.transform.SetParent(transform);
+
+            // 添加到活动火焰列表
+            activeFireParticles.Add(fireParticleInstance);
+
+            // 如果粒子有ParticleSystem组件，确保它在激活时播放
+            ParticleSystem ps = fireParticleInstance.GetComponent<ParticleSystem>();
+            if (ps != null)
+            {
+                ps.Play();
+            }
+
+            return fireParticleInstance;
+        }
+
+        return null;
     }
-    else
+
+
+
+    // 停止单个火焰粒子
+    public void StopFireParticle(GameObject fireParticle)
     {
-        // 如果燃烧点是第一个锚点，直接释放绳索
-        ReleaseRope();
+        if (fireParticle != null)
+        {
+            // 从活动列表中移除
+            activeFireParticles.Remove(fireParticle);
+            
+            // 在回收前，将其从绳索系统子对象中移除
+            fireParticle.transform.SetParent(null);
+            
+            // 获取粒子系统组件
+            ParticleSystem ps = fireParticle.GetComponent<ParticleSystem>();
+            if (ps != null)
+            {
+                // 停止发射新粒子
+                ps.Stop(true); // true表示停止发射但允许现有粒子完成生命周期
+                
+                // 使用协程在粒子完全消失后回收对象
+                StartCoroutine(ReturnParticleToPoolAfterDelay(fireParticle, ps.main.duration + ps.main.startLifetime.constantMax));
+            }
+            else
+            {
+                // 如果没有粒子系统组件，直接回收
+                ObjectPool.Instance.ReturnObject(fireParticle);
+            }
+        }
     }
-}
+
+    // 添加协程，在延迟后回收粒子对象
+    private System.Collections.IEnumerator ReturnParticleToPoolAfterDelay(GameObject particle, float delay)
+    {
+        yield return new WaitForSeconds(delay);
+        if (particle != null)
+        {
+            ObjectPool.Instance.ReturnObject(particle);
+        }
+    }
+    // 停止所有活动的火焰粒子
+    public void StopAllFireParticles()
+    {
+        // 创建一个临时列表，因为在循环中会修改activeFireParticles
+        List<GameObject> particlesToStop = new List<GameObject>(activeFireParticles);
+        
+        foreach (GameObject particle in particlesToStop)
+        {
+            StopFireParticle(particle);
+        }
+        
+        // 清空活动列表
+        activeFireParticles.Clear();
+        
+        // 确保主火焰实例也被清理
+        fireParticleInstance = null;
+    }
+
+
+
+    // 在燃烧点断开绳索
+    public void BreakRopeAtBurningPoint()
+    {
+        // 停止火焰粒子
+        if (fireParticleInstance != null)
+        {
+            StopFireParticle(fireParticleInstance);
+            fireParticleInstance = null;
+        }
+        
+        if (burningAnchorIndex < 0 || burningAnchorIndex >= anchors.Count)
+            return;
+        
+        // 保留从玩家到燃烧点的部分，移除燃烧点之后的部分
+        if (burningAnchorIndex > 0)
+        {
+            // 移除从燃烧点开始的所有锚点
+            int countToRemove = anchors.Count - burningAnchorIndex;
+            anchors.RemoveRange(burningAnchorIndex, countToRemove);
+            
+            // 重新计算锚点间距离
+            RecalculateAnchorLength();
+            
+            // 更新关节
+            SetJoint();
+        }
+        else
+        {
+            // 如果燃烧点是第一个锚点，直接释放绳索
+            ReleaseRope();
+        }
+    }
 
 // 重新计算锚点间总距离
 private void RecalculateAnchorLength()

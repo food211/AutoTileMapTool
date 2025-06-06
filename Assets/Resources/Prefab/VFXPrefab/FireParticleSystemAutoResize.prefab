@@ -4844,8 +4844,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   sizeMultiplier: 0.85
-  baseEmissionRate: 10
-  emissionAreaMultiplier: 5
   adjustOnStart: 1
   continuousAdjustment: 0
   updateInterval: 0.5

@@ -180,9 +180,13 @@ public class PlayerController : MonoBehaviour
         }
         
         // 性能优化：减少Gun状态检查频率
-        if (gunInitialized && Gun.activeSelf != (CanShootRope && !isRopeMode))
+        if (gunInitialized)
         {
-            Gun.SetActive(CanShootRope && !isRopeMode);
+            bool shouldShowGun = CanShootRope && !isRopeMode && ropeSystemInitialized && !ropeSystem.IsShooting() && !ropeSystem.IsRopeShootingOrHooked();
+            if (Gun.activeSelf != shouldShowGun)
+            {
+                Gun.SetActive(shouldShowGun);
+            }
         }
         
         if (isRopeMode)
@@ -1171,13 +1175,25 @@ public void ExitRopeMode()
     public void HandleCanShootRopeChanged(bool canShoot)
     {
         CanShootRope = canShoot;
-        
-        // 更新箭头显示状态
-        if (gunInitialized && !isRopeMode && ropeSystemInitialized && !ropeSystem.IsShooting())
+
+        // 更新箭头显示状态 - 修改这里的逻辑
+        if (gunInitialized)
         {
-            Gun.SetActive(canShoot);
+            // 只有在以下所有条件都满足时才显示Gun:
+            // 1. 可以发射绳索
+            // 2. 不在绳索模式
+            // 3. 绳索系统已初始化
+            // 4. 绳索不在发射或钩住状态
+            bool shouldShowGun = canShoot && !isRopeMode && ropeSystemInitialized && !ropeSystem.IsShooting() && !ropeSystem.IsRopeShootingOrHooked();
+
+            // 只在状态变化时更新Gun的显示状态，避免不必要的SetActive调用
+            if (Gun.activeSelf != shouldShowGun)
+            {
+                Gun.SetActive(shouldShowGun);
+            }
         }
     }
+
     #endregion
 
     #region 公共方法

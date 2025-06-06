@@ -215,7 +215,7 @@ Transform:
   m_GameObject: {fileID: 228200428}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 21, y: -6, z: 0}
+  m_LocalPosition: {x: -5, y: -11, z: 0}
   m_LocalScale: {x: 1.758735, y: 1.7167, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -1614,6 +1614,10 @@ PrefabInstance:
       propertyPath: playerController
       value: 
       objectReference: {fileID: 1888219647}
+    - target: {fileID: 4141372611184910469, guid: bfddfe826b1bc78468232003d4053424, type: 3}
+      propertyPath: playerFireParticlePrefab
+      value: 
+      objectReference: {fileID: 3099934303986255966, guid: 54494747ae6742346ac611c34ff64dbd, type: 3}
     - target: {fileID: 5960107396613169898, guid: bfddfe826b1bc78468232003d4053424, type: 3}
       propertyPath: m_Name
       value: StatusManager
@@ -2592,6 +2596,10 @@ PrefabInstance:
       propertyPath: statusManager
       value: 
       objectReference: {fileID: 1389818831}
+    - target: {fileID: 9142167173418991407, guid: f8e82ce3969e9b04c8f5e772185b718c, type: 3}
+      propertyPath: fireParticlePrefab
+      value: 
+      objectReference: {fileID: 3099934303986255966, guid: f928d0080b3576d4491f78e9edea3f95, type: 3}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
@@ -3015,7 +3023,7 @@ MonoBehaviour:
       isProperty: 0
       isComponentType: 0
     - fieldName: burningEffect
-      sceneObject: {fileID: 0}
+      sceneObject: {fileID: 3099934303986255966, guid: 54494747ae6742346ac611c34ff64dbd, type: 3}
       componentReference: {fileID: 0}
       fieldTypeName: GameObject
       isProperty: 0
@@ -3030,8 +3038,8 @@ MonoBehaviour:
     managerTypeName: CameraEffectsManager
     fieldReferences:
     - fieldName: cameraManager
-      sceneObject: {fileID: 0}
-      componentReference: {fileID: 0}
+      sceneObject: {fileID: 1585983198}
+      componentReference: {fileID: 1585983200}
       fieldTypeName: CameraManager
       isProperty: 0
       isComponentType: 1
@@ -3063,7 +3071,7 @@ MonoBehaviour:
       isProperty: 0
       isComponentType: 0
     - fieldName: fireParticlePrefab
-      sceneObject: {fileID: 0}
+      sceneObject: {fileID: 3099934303986255966, guid: 54494747ae6742346ac611c34ff64dbd, type: 3}
       componentReference: {fileID: 0}
       fieldTypeName: GameObject
       isProperty: 0
