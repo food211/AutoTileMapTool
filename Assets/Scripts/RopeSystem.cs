@@ -135,7 +135,6 @@ public class RopeSystem : MonoBehaviour
         if (arrowPrefab == null)
         {
             Debug.LogWarning("箭头预制体未设置!");
-            return;
         }
 
         // 实例化箭头
@@ -178,74 +177,76 @@ public class RopeSystem : MonoBehaviour
     }
 }
     #endregion
-#region rope physics
+    #region rope physics
     // 预测性碰撞检测方法
     private void PredictiveCollisionCheck(Vector2 fromPos, Vector2 toPos)
-{
-    if (anchors.Count == 0) return;
-    
-    Vector2 movementVector = toPos - fromPos;
-    float movementDistance = movementVector.magnitude;
-    
-    // 根据最大检测步数
-    const int maxSteps = 50;
-    
-    // 将移动路径分成多个步骤进行检测
-    for (int i = 1; i <= maxSteps; i++)
     {
-        // 计算当前检测点
-        float stepProgress = (float)i / maxSteps;
-        Vector2 checkPoint = fromPos + movementVector * stepProgress;
-        
-        // 检查从当前检测点到所有锚点的路径是否有障碍物
-        CheckPointToAnchors(checkPoint);
+        if (anchors.Count == 0) return;
 
-        // 添加元素碰撞检测 - 调用PlayerController的预测性碰撞检测
-        if (i > 1) // 跳过第一个点，因为它太接近当前位置
-        {
-            float prevProgress = (float)(i-1) / maxSteps;
-            Vector2 prevPoint = fromPos + movementVector * prevProgress;
-            playerController.CheckPredictiveElementalCollision(prevPoint, checkPoint, hookableLayers);
-        }
-    }
-}
+        Vector2 movementVector = toPos - fromPos;
+        float movementDistance = movementVector.magnitude;
 
-private void CheckPointToAnchors(Vector2 checkPoint)
-{
-    // 合并可钩住层和仅碰撞层，用于绳索弯折检测
-    LayerMask combinedLayers = hookableLayers | collisionOnlyLayers;
-    
-    // 检查到第一个锚点
-    RaycastHit2D hit = Physics2D.Linecast(checkPoint, anchors[0], combinedLayers);
-    if (hit && Vector2.Distance(hit.point, anchors[0]) > anchorSafetyCheck)
-    {
-        // 获取碰撞物体的标签
-        string hitTag = hit.collider.tag;
-        
-        // 处理特殊物体标签效果
-        HandleHookTagEffect(hitTag);
-        
-        // 计算更安全的锚点位置
-        Vector2 safeAnchorPoint = hit.point + (hit.normal.normalized * linecastOffset);
-        
-        // 检查新锚点是否与现有锚点距离足够远
-        if (Vector2.Distance(safeAnchorPoint, anchors[0]) > anchorSafetyCheck)
+        // 根据最大检测步数
+        const int maxSteps = 50;
+
+        // 将移动路径分成多个步骤进行检测
+        for (int i = 1; i <= maxSteps; i++)
         {
-            // 确保从检测点到新锚点的路径是通畅的
-            Vector2 dirToAnchor = (safeAnchorPoint - checkPoint).normalized;
-            Vector2 offsetStart = checkPoint + dirToAnchor * 0.2f;
-            
-            // 再次检查从偏移起点到新锚点是否有障碍物
-            RaycastHit2D safetyCheck = Physics2D.Linecast(offsetStart, safeAnchorPoint, combinedLayers);
-            
-            // 如果没有障碍物或障碍物就是目标点，则添加锚点
-            if (!safetyCheck || Vector2.Distance(safetyCheck.point, safeAnchorPoint) < 0.1f)
+            // 计算当前检测点
+            float stepProgress = (float)i / maxSteps;
+            Vector2 checkPoint = fromPos + movementVector * stepProgress;
+
+            // 检查从当前检测点到所有锚点的路径是否有障碍物
+            CheckPointToAnchors(checkPoint);
+
+            // 添加元素碰撞检测 - 调用PlayerController的预测性碰撞检测
+            if (i > 1) // 跳过第一个点，因为它太接近当前位置
             {
-                AddAnchor(safeAnchorPoint);
+                float prevProgress = (float)(i - 1) / maxSteps;
+                Vector2 prevPoint = fromPos + movementVector * prevProgress;
+                playerController.CheckPredictiveElementalCollision(prevPoint, checkPoint, hookableLayers);
             }
         }
     }
-}
+
+    private void CheckPointToAnchors(Vector2 checkPoint)
+    {
+        // 合并可钩住层和仅碰撞层，用于绳索弯折检测
+        LayerMask combinedLayers = hookableLayers | collisionOnlyLayers;
+
+        // 检查到第一个锚点
+        RaycastHit2D hit = Physics2D.Linecast(checkPoint, anchors[0], combinedLayers);
+        if (hit && Vector2.Distance(hit.point, anchors[0]) > anchorSafetyCheck)
+        {
+            // 获取碰撞物体的标签
+            string hitTag = hit.collider.tag;
+
+            // 处理特殊物体标签效果
+            HandleHookTagEffect(hitTag);
+
+            // 计算更安全的锚点位置
+            Vector2 safeAnchorPoint = hit.point + (hit.normal.normalized * linecastOffset);
+
+            // 检查新锚点是否与现有锚点距离足够远
+            if (Vector2.Distance(safeAnchorPoint, anchors[0]) > anchorSafetyCheck)
+            {
+                // 确保从检测点到新锚点的路径是通畅的
+                Vector2 dirToAnchor = (safeAnchorPoint - checkPoint).normalized;
+                Vector2 offsetStart = checkPoint + dirToAnchor * 0.2f;
+
+                // 再次检查从偏移起点到新锚点是否有障碍物
+                RaycastHit2D safetyCheck = Physics2D.Linecast(offsetStart, safeAnchorPoint, combinedLayers);
+
+                // 如果没有障碍物或障碍物就是目标点，则添加锚点
+                if (!safetyCheck || Vector2.Distance(safetyCheck.point, safeAnchorPoint) < 0.1f)
+                {
+                    // 添加新的锚点
+                    AddAnchor(safeAnchorPoint);
+                }
+            }
+        }
+    }
+
     #endregion
 #region rope controller
     // 发射绳索
@@ -439,20 +440,29 @@ private void CheckPointToAnchors(Vector2 checkPoint)
             HandleHookTagEffect(hitTag);
         }
     }
-    
-// 处理不同标签的钩索效果
-private void HandleHookTagEffect(string tag)
-{
-    // 保存当前钩中的物体标签
-    currentHookTag = tag;
-    
-    // 调用StatusManager中的方法处理效果
-    if (statusManager != null) {
-        statusManager.HandleHookTagEffect(tag);
-    } else {
-        Debug.LogError("没有找到statusManager");
+
+    // 处理不同标签的钩索效果
+    private void HandleHookTagEffect(string tag)
+    {
+        // 保存当前钩中的物体标签
+        currentHookTag = tag;
+        // 只有当标签为"Fire"且当前没有燃烧锚点时，才设置燃烧锚点
+        if (tag == "Fire" && burningAnchorIndex < 0 && anchors.Count > 0)
+        {
+            // 如果还没有燃烧锚点，设置当前锚点为燃烧锚点
+            SetBurningAnchorIndex(anchors.Count - 1);
+        }
+
+        // 调用StatusManager中的方法处理效果
+        if (statusManager != null)
+        {
+            statusManager.HandleHookTagEffect(tag);
+        }
+        else
+        {
+            Debug.LogError("没有找到statusManager");
+        }
     }
-}
 
     // 更新已钩住状态
     private void UpdateRopeHooked()
@@ -469,151 +479,162 @@ private void HandleHookTagEffect(string tag)
         // 更新线渲染器
         UpdateLineRenderer();
     }
-    
-private void RopeJointManager()
-{
-    // 检查从玩家到最近锚点的线检测
-    if (anchors.Count > 0)
+
+    private void RopeJointManager()
     {
-        // 获取玩家位置
-        Vector2 playerPos = playerController.transform.position;
-        
-        // 合并可钩住层和仅碰撞层，用于绳索弯折检测
-        LayerMask combinedLayers = hookableLayers | collisionOnlyLayers;
-        
-        // 检查是否需要添加新的锚点 - 使用合并后的Layer
-        RaycastHit2D hit = Physics2D.Linecast(playerPos, anchors[0], combinedLayers);
-        if (hit)
+        // 检查从玩家到最近锚点的线检测
+        if (anchors.Count > 0)
         {
-            // 获取碰撞物体的标签
-            string hitTag = hit.collider.tag;
-            
-            // 处理特殊物体标签效果
-            HandleHookTagEffect(hitTag);
-            
-            // 计算更安全的锚点位置
-            Vector2 safeAnchorPoint = hit.point + (hit.normal.normalized * linecastOffset);
-            
-            // 检查新锚点是否与现有锚点距离足够远，避免重复添加
-            if (Vector2.Distance(safeAnchorPoint, anchors[0]) > anchorSafetyCheck)
+            // 获取玩家位置
+            Vector2 playerPos = playerController.transform.position;
+
+            // 合并可钩住层和仅碰撞层，用于绳索弯折检测
+            LayerMask combinedLayers = hookableLayers | collisionOnlyLayers;
+
+            // 检查是否需要添加新的锚点 - 使用合并后的Layer
+            RaycastHit2D hit = Physics2D.Linecast(playerPos, anchors[0], combinedLayers);
+            if (hit)
             {
-                // 确保从玩家到新锚点的路径是通畅的
-                Vector2 dirToAnchor = (safeAnchorPoint - playerPos).normalized;
-                float distToAnchor = Vector2.Distance(playerPos, safeAnchorPoint);
-                
-                // 从玩家位置向新锚点方向稍微偏移一点，避免自身碰撞检测
-                Vector2 offsetStart = playerPos + dirToAnchor * 0.2f;
-                
-                // 再次检查从偏移起点到新锚点是否有障碍物
-                RaycastHit2D safetyCheck = Physics2D.Linecast(offsetStart, safeAnchorPoint, combinedLayers);
-                
-                // 如果没有障碍物或障碍物就是目标点，则添加锚点
-                if (!safetyCheck || Vector2.Distance(safetyCheck.point, safeAnchorPoint) < 0.1f)
+                // 获取碰撞物体的标签
+                string hitTag = hit.collider.tag;
+
+                // 处理特殊物体标签效果
+                HandleHookTagEffect(hitTag);
+
+                // 计算更安全的锚点位置
+                Vector2 safeAnchorPoint = hit.point + (hit.normal.normalized * linecastOffset);
+
+                // 检查新锚点是否与现有锚点距离足够远，避免重复添加
+                if (Vector2.Distance(safeAnchorPoint, anchors[0]) > anchorSafetyCheck)
                 {
-                    AddAnchor(safeAnchorPoint);
+                    // 确保从玩家到新锚点的路径是通畅的
+                    Vector2 dirToAnchor = (safeAnchorPoint - playerPos).normalized;
+                    float distToAnchor = Vector2.Distance(playerPos, safeAnchorPoint);
+
+                    // 从玩家位置向新锚点方向稍微偏移一点，避免自身碰撞检测
+                    Vector2 offsetStart = playerPos + dirToAnchor * 0.2f;
+
+                    // 再次检查从偏移起点到新锚点是否有障碍物
+                    RaycastHit2D safetyCheck = Physics2D.Linecast(offsetStart, safeAnchorPoint, combinedLayers);
+
+                    // 如果没有障碍物或障碍物就是目标点，则添加锚点
+                    if (!safetyCheck || Vector2.Distance(safetyCheck.point, safeAnchorPoint) < 0.1f)
+                    {
+                        AddAnchor(safeAnchorPoint);
+                    }
                 }
             }
-        }
-        
-        // 检查是否可以移除锚点
-        if (anchors.Count > 1)
-        {
-            // 计算玩家到第一个锚点的向量
-            Vector2 playerToFirstAnchor = (anchors[0] - playerPos).normalized;
-            // 计算第一个锚点到第二个锚点的向量
-            Vector2 firstToSecondAnchor = (anchors[1] - anchors[0]).normalized;
-            
-            // 计算两个向量的点积，用于判断夹角
-            float dotProduct = Vector2.Dot(playerToFirstAnchor, firstToSecondAnchor);
-            
-            // 点积接近-1表示两个向量方向几乎相反，即角度接近180度
-            // 这表明玩家-锚点1-锚点2几乎在一条直线上，可以移除第一个锚点
-            if (dotProduct < -0.75f) // 约等于角度大于143度
+
+            // 检查是否可以移除锚点
+            if (anchors.Count > 1)
             {
-                RemoveAnchor();
-            }
-            else
-            {
-                // 保留原有的检测逻辑作为备选
-                Vector2 ABVector = (anchors[0] - playerPos).normalized;
-                Vector2 shortLCStart = anchors[0] - (0.2f * ABVector);
-                
-                RaycastHit2D returnHitShort = Physics2D.Linecast(shortLCStart, anchors[1], combinedLayers);
-                if (!returnHitShort)
+                // 计算玩家到第一个锚点的向量
+                Vector2 playerToFirstAnchor = (anchors[0] - playerPos).normalized;
+                // 计算第一个锚点到第二个锚点的向量
+                Vector2 firstToSecondAnchor = (anchors[1] - anchors[0]).normalized;
+
+                // 计算两个向量的点积，用于判断夹角
+                float dotProduct = Vector2.Dot(playerToFirstAnchor, firstToSecondAnchor);
+
+                // 点积接近-1表示两个向量方向几乎相反，即角度接近180度
+                // 这表明玩家-锚点1-锚点2几乎在一条直线上，可以移除第一个锚点
+                if (dotProduct < -0.75f) // 约等于角度大于143度
                 {
-                    // 如果没有障碍物，可以移除第一个锚点
-                    RemoveAnchor();
+                    // 如果第一个锚点是燃烧锚点，则不允许删除
+                    if (burningAnchorIndex != 0)
+                    {
+                        RemoveAnchor();
+                    }
+                }
+                else
+                {
+                    // 保留原有的检测逻辑作为备选
+                    Vector2 ABVector = (anchors[0] - playerPos).normalized;
+                    Vector2 shortLCStart = anchors[0] - (0.2f * ABVector);
+
+                    RaycastHit2D returnHitShort = Physics2D.Linecast(shortLCStart, anchors[1], combinedLayers);
+                    if (!returnHitShort)
+                    {
+                        // 如果没有障碍物，可以移除第一个锚点
+                        // 但先检查是否是燃烧锚点
+                        if (burningAnchorIndex != 0)
+                        {
+                            RemoveAnchor();
+                        }
+                    }
                 }
             }
         }
     }
-}
-    
+
     // 添加锚点
     private void AddAnchor(Vector2 pos)
     {
         // 避免添加太接近的锚点
         if (anchors.Count > 0 && Vector2.Distance(pos, anchors[0]) < anchorSafetyCheck)
             return;
-            
-        // 插入到列表开头
+
+        // 记住燃烧点的实际位置（如果有）
+        Vector2? burningPointPosition = null;
+        if (burningAnchorIndex >= 0 && burningAnchorIndex < anchors.Count)
+        {
+            burningPointPosition = anchors[burningAnchorIndex];
+        }
+
+        // 始终在列表开头插入新锚点
         anchors.Insert(0, pos);
-        
+
+        // 如果有燃烧点，更新燃烧点索引
+        if (burningAnchorIndex >= 0)
+        {
+            // 燃烧点索引增加1，因为我们在列表开头插入了一个新元素
+            burningAnchorIndex++;
+        }
+
         // 如果有多个锚点，计算锚点间距离
         if (anchors.Count > 1)
         {
             combinedAnchorLen += Vector2.Distance(anchors[0], anchors[1]);
             combinedAnchorLen = Mathf.Round(combinedAnchorLen * 100f) / 100f;
         }
-        
+
         // 更新关节
         SetJoint();
     }
-    
-    // 移除第一个锚点
+
     private void RemoveAnchor()
     {
         if (anchors.Count <= 1)
             return;
-            
+
+        // 如果第一个锚点是燃烧锚点，则不允许删除
+        if (burningAnchorIndex == 0)
+            return;
+        // 如果删除后只剩下燃烧锚点，则不允许删除
+        if (anchors.Count == 2 && burningAnchorIndex == 1)
+            return;
+
+        // 记住燃烧点的实际位置（如果有）
+        Vector2? burningPointPosition = null;
+        if (burningAnchorIndex >= 0 && burningAnchorIndex < anchors.Count)
+        {
+            burningPointPosition = anchors[burningAnchorIndex];
+        }
+
         // 计算要减去的距离
         combinedAnchorLen -= Vector2.Distance(anchors[0], anchors[1]);
         combinedAnchorLen = Mathf.Round(combinedAnchorLen * 100f) / 100f;
-        
-        // 检查是否正在移除燃烧节点
-        bool removingBurningAnchor = (burningAnchorIndex == 0);
-        
+
         // 移除第一个锚点
         anchors.RemoveAt(0);
-        
-        // 如果移除的是燃烧节点，更新燃烧状态
-        if (removingBurningAnchor)
-        {
-            // 更新燃烧锚点索引
-            burningAnchorIndex = -1;
-            
-            // 如果玩家处于燃烧状态，恢复正常状态
-            if (statusManager != null && statusManager.IsInState(GameEvents.PlayerState.Burning))
-            {
-                // 恢复绳索外观
-                if (lineRenderer != null)
-                {
-                    lineRenderer.startColor = originalRopeColor;
-                    lineRenderer.endColor = originalRopeColor;
-                    lineRenderer.startWidth = originalStartWidth;
-                    lineRenderer.endWidth = originalEndWidth;
-                }
-                
-                // 触发状态变化事件
-                GameEvents.TriggerPlayerStateChanged(GameEvents.PlayerState.Swinging);
-            }
-        }
-        else if (burningAnchorIndex > 0)
+
+        // 更新燃烧锚点索引
+        if (burningAnchorIndex > 0)
         {
             // 如果删除的锚点在燃烧锚点之前，需要更新燃烧锚点索引
             burningAnchorIndex--;
         }
-        
+
         // 更新关节
         SetJoint();
     }
@@ -639,32 +660,109 @@ private void RopeJointManager()
         // 更新当前绳索长度
         currentRopeLength = dist;
     }
-    
+
     // 更新线渲染器
     private void UpdateLineRenderer()
     {
         if (lineRenderer == null)
             return;
-            
+
         // 设置顶点数量：玩家位置 + 所有锚点
-        lineRenderer.positionCount = anchors.Count + 1;
-        
+        int totalPoints = anchors.Count + 1;
+        lineRenderer.positionCount = totalPoints;
+
+        // 创建一个包含所有点的数组
+        Vector3[] positions = new Vector3[totalPoints];
+
         // 设置玩家位置为第一个点
-        lineRenderer.SetPosition(0, playerController.transform.position);
-        
+        positions[0] = playerController.transform.position;
+
         // 设置所有锚点
         for (int i = 0; i < anchors.Count; i++)
         {
-            lineRenderer.SetPosition(i + 1, anchors[i]);
+            positions[i + 1] = anchors[i];
+        }
+
+        // 一次性设置所有点的位置
+        lineRenderer.SetPositions(positions);
+
+        // 根据顶点数量动态调整widthCurve
+        UpdateWidthCurve(totalPoints);
+    }
+
+    // 根据顶点数量动态调整widthCurve
+    private void UpdateWidthCurve(int totalPoints)
+    {
+        // 如果只有一个点或没有点，使用原始宽度曲线
+        if (totalPoints <= 1)
+        {
+            lineRenderer.widthCurve = originalWithCurve;
+            return;
+        }
+
+        // 创建新的宽度曲线，与顶点数量匹配
+        AnimationCurve newWidthCurve = new AnimationCurve();
+
+        // 获取原始宽度曲线的关键帧，用于参考宽度值
+        float startWidth = originalStartWidth;
+        float endWidth = originalEndWidth;
+
+        // 如果原始曲线有关键帧，使用它们的值
+        if (originalWithCurve != null && originalWithCurve.keys.Length > 0)
+        {
+            // 获取原始曲线的第一个和最后一个关键帧的值
+            if (originalWithCurve.keys.Length > 0)
+                startWidth = originalWithCurve.keys[0].value;
+            if (originalWithCurve.keys.Length > 1)
+                endWidth = originalWithCurve.keys[originalWithCurve.keys.Length - 1].value;
+        }
+
+        // 为每个顶点创建一个关键帧，注意X轴方向需要反转
+        for (int i = 0; i < totalPoints; i++)
+        {
+            // 计算当前点在曲线上的相对位置（0到1之间）
+            // 由于方向相反，我们需要反转索引：从末尾开始到开头
+            float time = (float)(totalPoints - 1 - i) / (totalPoints - 1);
+
+            // 计算当前点的宽度
+            // 由于我们反转了索引，这里的宽度映射也需要调整
+            // 现在startWidth对应绳索末端，endWidth对应玩家位置
+            float width = Mathf.Lerp(endWidth, startWidth, time);
+
+            // 添加关键帧
+            Keyframe keyframe = new Keyframe(time, width);
+
+            // 设置切线以保持平滑过渡
+            keyframe.inTangent = 0;
+            keyframe.outTangent = 0;
+
+            // 添加到新曲线
+            newWidthCurve.AddKey(keyframe);
+        }
+
+        // 应用新的宽度曲线
+        lineRenderer.widthCurve = newWidthCurve;
+
+        // 如果有燃烧锚点，更新燃烧效果的可视化
+        if (burningAnchorIndex >= 0 && burningAnchorIndex < anchors.Count)
+        {
+            // 这里可以添加代码来更新燃烧效果的可视化
+            // 例如，更新火焰粒子的位置
+            if (fireParticleInstance != null)
+            {
+                fireParticleInstance.transform.position = anchors[burningAnchorIndex];
+            }
         }
     }
+
+
     #endregion
     #region release rope
     public void ReleaseRope()
     {
         // 停止所有火焰粒子
         StopAllFireParticles();
-        
+
         // 原有的代码
         isShooting = false;
         isHooked = false;
@@ -832,6 +930,13 @@ private void RopeJointManager()
                 // 如果切割点靠近当前锚点和下一个锚点之间的线段
                 ropeCut = true;
 
+                // 检查是否会切断包含燃烧锚点的部分
+                if (burningAnchorIndex >= 0 && burningAnchorIndex > i)
+                {
+                    // 如果燃烧锚点在切割点之后，不允许切断
+                    return false;
+                }
+
                 // 保留切割点之前的锚点
                 remainingAnchors = new List<Vector2>(anchors.GetRange(0, i + 1));
                 break;
@@ -973,6 +1078,15 @@ private void RopeJointManager()
     public Gradient getOriginalColorGradiant()
     {
         return originalColorGradient;
+    }
+
+    public void SetBurningAnchorIndex(int anchorIndex)
+    {
+        // 检查索引是否有效
+        if (anchorIndex >= 0 && anchorIndex < anchors.Count)
+        {
+            burningAnchorIndex = anchorIndex;
+        }
     }
 
     // 创建火焰粒子

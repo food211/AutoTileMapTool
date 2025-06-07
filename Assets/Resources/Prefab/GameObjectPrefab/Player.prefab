@@ -158,6 +158,15 @@ LineRenderer:
         weightedMode: 0
         inWeight: 0.33333334
         outWeight: 0.33333334
+      - serializedVersion: 3
+        time: 1
+        value: 1
+        inSlope: 0
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
       m_PreInfinity: 2
       m_PostInfinity: 2
       m_RotationOrder: 4
@@ -194,10 +203,10 @@ LineRenderer:
     numCornerVertices: 8
     numCapVertices: 10
     alignment: 0
-    textureMode: 3
+    textureMode: 4
     textureScale: {x: 1, y: 1}
     shadowBias: 0.5
-    generateLightingData: 0
+    generateLightingData: 1
   m_MaskInteraction: 0
   m_UseWorldSpace: 1
   m_Loop: 0
@@ -235,7 +244,8 @@ MonoBehaviour:
   swingCollisionSteps: 40
   burnPropagationSpeed: 5
   burnBreakThreshold: 0.8
-  fireParticlePrefab: {fileID: 0}
+  fireParticlePrefab: {fileID: 3099934303986255966, guid: f928d0080b3576d4491f78e9edea3f95, type: 3}
+  debugmode: 0
 --- !u!1 &4446759240664853420
 GameObject:
   m_ObjectHideFlags: 0

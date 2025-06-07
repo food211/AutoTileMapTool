@@ -179,7 +179,7 @@ public class FireParticleAutoSize : MonoBehaviour
         var main = myParticleSystem.main;
 
         // 等待所有粒子消失
-        float fadeTime = Mathf.Min(main.duration + main.startLifetime.constantMax, duration);
+        float fadeTime = Mathf.Max(main.duration + main.startLifetime.constantMax, duration);
         yield return new WaitForSeconds(fadeTime);
 
         // 回收到对象池

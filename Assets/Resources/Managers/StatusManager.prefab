@@ -60,11 +60,12 @@ MonoBehaviour:
   burningMaterial: {fileID: 0}
   electrifiedMaterial: {fileID: 2100000, guid: 5ed6a9b6f7a940a44a6d29e6567076c8, type: 2}
   RopefrozenMaterial: {fileID: 0}
-  RopeburningMaterial: {fileID: 2100000, guid: 1ff23f644e4e11f468668edd7a671845, type: 2}
-  RopeelectrifiedMaterial: {fileID: 0}
+  RopeburningMaterial: {fileID: 0}
+  RopeelectrifiedMaterial: {fileID: 2100000, guid: 1ff23f644e4e11f468668edd7a671845, type: 2}
   fireParticleSystemPrefab: {fileID: 3099934303986255966, guid: f928d0080b3576d4491f78e9edea3f95, type: 3}
   frozenTint: {r: 0.2358489, g: 0.9426888, b: 1, a: 1}
   burningTint: {r: 1, g: 0.4476566, b: 0.13521993, a: 1}
   electrifiedTint: {r: 1.0717734, g: 1.0324371, b: 0.35388732, a: 1}
   frozenCooldown: 2
   electrifiedCooldown: 1.5
+  playerFireParticlePrefab: {fileID: 3099934303986255966, guid: 54494747ae6742346ac611c34ff64dbd, type: 3}

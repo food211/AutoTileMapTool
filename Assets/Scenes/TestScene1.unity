@@ -215,7 +215,7 @@ Transform:
   m_GameObject: {fileID: 228200428}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: -5, y: -11, z: 0}
+  m_LocalPosition: {x: -6.15, y: -8.83, z: 0}
   m_LocalScale: {x: 1.758735, y: 1.7167, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -762,7 +762,7 @@ Transform:
   m_GameObject: {fileID: 692979882}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 21, y: 0, z: 0}
+  m_LocalPosition: {x: 8, y: 3, z: 0}
   m_LocalScale: {x: 1.758735, y: 1.7167, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -1306,7 +1306,7 @@ Transform:
   m_GameObject: {fileID: 1001854861}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0.42595816, w: 0.9047429}
-  m_LocalPosition: {x: -17, y: -5, z: 0.56837296}
+  m_LocalPosition: {x: -12, y: -4, z: 0.56837296}
   m_LocalScale: {x: 11.51, y: 11.51, z: 11.51}
   m_ConstrainProportionsScale: 1
   m_Children: []
@@ -1614,10 +1614,6 @@ PrefabInstance:
       propertyPath: playerController
       value: 
       objectReference: {fileID: 1888219647}
-    - target: {fileID: 4141372611184910469, guid: bfddfe826b1bc78468232003d4053424, type: 3}
-      propertyPath: playerFireParticlePrefab
-      value: 
-      objectReference: {fileID: 3099934303986255966, guid: 54494747ae6742346ac611c34ff64dbd, type: 3}
     - target: {fileID: 5960107396613169898, guid: bfddfe826b1bc78468232003d4053424, type: 3}
       propertyPath: m_Name
       value: StatusManager
@@ -1737,7 +1733,7 @@ Transform:
   m_GameObject: {fileID: 1431525939}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 10, y: -9, z: 0.56837296}
+  m_LocalPosition: {x: 11, y: -6, z: 0.56837296}
   m_LocalScale: {x: 8.23, y: 8.23, z: 8.23}
   m_ConstrainProportionsScale: 1
   m_Children: []
@@ -1819,7 +1815,7 @@ Transform:
   m_GameObject: {fileID: 1455997478}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: -6, y: -3, z: 0}
+  m_LocalPosition: {x: 24, y: -2, z: 0}
   m_LocalScale: {x: 5.8, y: 1.7167, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -2536,6 +2532,34 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 942610342}
     m_Modifications:
+    - target: {fileID: 1210877851460425971, guid: f8e82ce3969e9b04c8f5e772185b718c, type: 3}
+      propertyPath: m_Parameters.widthMultiplier
+      value: 0.25
+      objectReference: {fileID: 0}
+    - target: {fileID: 1210877851460425971, guid: f8e82ce3969e9b04c8f5e772185b718c, type: 3}
+      propertyPath: m_Parameters.widthCurve.m_Curve.Array.size
+      value: 2
+      objectReference: {fileID: 0}
+    - target: {fileID: 1210877851460425971, guid: f8e82ce3969e9b04c8f5e772185b718c, type: 3}
+      propertyPath: m_Parameters.widthCurve.m_Curve.Array.data[1].time
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 1210877851460425971, guid: f8e82ce3969e9b04c8f5e772185b718c, type: 3}
+      propertyPath: m_Parameters.widthCurve.m_Curve.Array.data[2].time
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 1210877851460425971, guid: f8e82ce3969e9b04c8f5e772185b718c, type: 3}
+      propertyPath: m_Parameters.widthCurve.m_Curve.Array.data[2].value
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 1210877851460425971, guid: f8e82ce3969e9b04c8f5e772185b718c, type: 3}
+      propertyPath: m_Parameters.widthCurve.m_Curve.Array.data[1].inWeight
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 1210877851460425971, guid: f8e82ce3969e9b04c8f5e772185b718c, type: 3}
+      propertyPath: m_Parameters.widthCurve.m_Curve.Array.data[1].outWeight
+      value: 0
+      objectReference: {fileID: 0}
     - target: {fileID: 3112569816307915108, guid: f8e82ce3969e9b04c8f5e772185b718c, type: 3}
       propertyPath: m_LocalPosition.x
       value: 0
@@ -2596,10 +2620,6 @@ PrefabInstance:
       propertyPath: statusManager
       value: 
       objectReference: {fileID: 1389818831}
-    - target: {fileID: 9142167173418991407, guid: f8e82ce3969e9b04c8f5e772185b718c, type: 3}
-      propertyPath: fireParticlePrefab
-      value: 
-      objectReference: {fileID: 3099934303986255966, guid: f928d0080b3576d4491f78e9edea3f95, type: 3}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []

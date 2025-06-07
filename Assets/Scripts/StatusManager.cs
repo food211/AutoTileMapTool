@@ -1504,17 +1504,11 @@ public void ChangeRopeColor(GameEvents.PlayerState state)
         }
         else if (state == GameEvents.PlayerState.Burning)
         {
-            // 应用燃烧颜色
-            lineRenderer.startColor = burningTint;
-            lineRenderer.endColor = burningTint;
             if(RopeburningMaterial != null)
             lineRenderer.material = RopeburningMaterial;
         }
         else if (state == GameEvents.PlayerState.Electrified)
         {
-            // 应用电击颜色
-            lineRenderer.startColor = electrifiedTint;
-            lineRenderer.endColor = electrifiedTint;
             if(RopeelectrifiedMaterial != null)
             lineRenderer.material = RopeelectrifiedMaterial;
         }
@@ -1529,10 +1523,11 @@ public void ChangeRopeColor(GameEvents.PlayerState state)
         }
 }
 
-    // 修改BurnRopeEffect方法，使用对象池创建火焰粒子
+    // 修改BurnRopeEffect方法，使用对象池创建火焰粒子，并与UpdateLineRenderer协同工作
     private IEnumerator BurnRopeEffect(RopeSystem ropeSystem)
     {
-        // 初始化燃烧效果
+        playerController.HandleCanShootRopeChanged(false); // 禁用玩家输入，防止在燃烧时移动
+                                                           // 初始化燃烧效果
         LineRenderer lineRenderer = ropeSystem.GetComponent<LineRenderer>();
         if (lineRenderer == null) yield break;
 
@@ -1547,35 +1542,16 @@ public void ChangeRopeColor(GameEvents.PlayerState state)
 
         // 使用RopeSystem的方法创建火焰粒子
         GameObject ropeFireParticle = ropeSystem.CreateFireParticle();
-        FireParticleAutoSize fireAutoSizer = ropeFireParticle.GetComponent<FireParticleAutoSize>();
-        fireAutoSizer.adjustOnStart = false;
+        FireParticleAutoSize fireAutoSizer = ropeFireParticle?.GetComponent<FireParticleAutoSize>();
+        if (fireAutoSizer != null)
+        {
+            fireAutoSizer.adjustOnStart = false;
+        }
 
         // 燃烧进度
         float burnProgress = 0f;
         float burnSpeed = ropeSystem.GetBurnPropagationSpeed();
         float burnThreshold = ropeSystem.GetBurnBreakThreshold();
-
-        // 获取锚点列表
-        List<Vector2> anchors = ropeSystem.GetAnchors();
-
-        // 保存原始宽度曲线
-        AnimationCurve originalWidthCurve = null;
-        if (lineRenderer.widthCurve != null)
-        {
-            // 复制原始曲线的所有关键帧
-            originalWidthCurve = new AnimationCurve();
-            foreach (Keyframe key in lineRenderer.widthCurve.keys)
-            {
-                originalWidthCurve.AddKey(key);
-            }
-        }
-        else
-        {
-            // 如果没有原始曲线，创建一个简单的线性曲线
-            originalWidthCurve = new AnimationCurve();
-            originalWidthCurve.AddKey(0f, originalStartWidth);
-            originalWidthCurve.AddKey(1f, originalEndWidth);
-        }
 
         while (burnProgress < 1.0f && currentRopeState == RopeState.Burning && ropeSystem.HasAnchors())
         {
@@ -1584,13 +1560,29 @@ public void ChangeRopeColor(GameEvents.PlayerState state)
             // 更新线渲染器颜色和宽度
             if (lineRenderer != null)
             {
-                // 从燃烧点开始向两端传播
+                // 获取最新的燃烧锚点索引
+                burnAnchorIndex = ropeSystem.GetBurningAnchorIndex();
+                if (burnAnchorIndex < 0) burnAnchorIndex = 0;
+
+                // 获取当前点数
                 int pointCount = lineRenderer.positionCount;
+                if (pointCount <= 1)
+                {
+                    yield return null;
+                    continue;
+                }
 
                 // 计算燃烧点在线渲染器中的索引
-                int burnPointIndex = burnAnchorIndex + 1;
+                // 注意：由于线渲染器的点列表方向与宽度曲线方向相反，需要反转索引
+                // 线渲染器中：索引0是玩家位置，最后一个索引是最远端锚点
+                // 宽度曲线中：时间0对应最远端锚点，时间1对应玩家位置
+                int burnPointIndex = burnAnchorIndex;
+                burnPointIndex = Mathf.Clamp(burnPointIndex, 0, pointCount - 1);
 
-                // 计算每个点的燃烧程度和颜色
+                // 计算燃烧点的归一化位置（0到1之间）
+                float burnPointPosition = (float)burnPointIndex / (pointCount - 1);
+
+                // 创建颜色数组，用于生成渐变
                 Color[] colors = new Color[pointCount];
 
                 // 定义颜色
@@ -1601,21 +1593,11 @@ public void ChangeRopeColor(GameEvents.PlayerState state)
                 float burnRange = 0.3f; // 燃烧影响的范围比例
                 float charRange = 0.1f; // 烧焦影响的范围比例（应小于burnRange）
 
+                // 为每个点设置颜色
                 for (int i = 0; i < pointCount; i++)
                 {
                     // 计算该点到燃烧起始点的归一化距离
-                    float normalizedDistance;
-
-                    if (pointCount <= 1)
-                    {
-                        normalizedDistance = 0;
-                    }
-                    else
-                    {
-                        float burnPointPos = (float)burnPointIndex / (pointCount - 1);
-                        float pointPos = (float)i / (pointCount - 1);
-                        normalizedDistance = Mathf.Abs(pointPos - burnPointPos);
-                    }
+                    float normalizedDistance = Mathf.Abs((float)i / (pointCount - 1) - burnPointPosition);
 
                     // 根据距离和燃烧进度计算颜色
                     if (normalizedDistance < charRange * burnProgress)
@@ -1638,31 +1620,48 @@ public void ChangeRopeColor(GameEvents.PlayerState state)
                     }
                 }
 
-                // 复制原始宽度曲线
-                AnimationCurve widthCurve = new AnimationCurve();
-                foreach (Keyframe key in originalWidthCurve.keys)
+                // 获取当前的宽度曲线（由UpdateLineRenderer设置）
+                AnimationCurve currentWidthCurve = lineRenderer.widthCurve;
+
+                // 创建新的宽度曲线，复制当前的关键帧
+                AnimationCurve newWidthCurve = new AnimationCurve();
+                if (currentWidthCurve != null && currentWidthCurve.keys.Length > 0)
                 {
-                    widthCurve.AddKey(key);
+                    foreach (Keyframe key in currentWidthCurve.keys)
+                    {
+                        newWidthCurve.AddKey(key);
+                    }
+                }
+                else
+                {
+                    // 如果没有当前曲线，创建一个基本的曲线
+                    for (int i = 0; i < pointCount; i++)
+                    {
+                        // 注意：宽度曲线的时间是反向的，0是最远端，1是玩家位置
+                        float time = (float)(pointCount - 1 - i) / (pointCount - 1);
+                        float width = Mathf.Lerp(originalStartWidth, originalEndWidth, time);
+                        newWidthCurve.AddKey(time, width);
+                    }
                 }
 
-                // 计算燃烧点的归一化位置
-                float burnPointPosition = (float)burnPointIndex / (pointCount - 1);
+                // 计算燃烧点应该在宽度曲线上的位置（需要反转）
+                // 线渲染器中的burnPointIndex对应到宽度曲线中的时间
+                float burnKeyTime = 1.0f - burnPointPosition; // 反转时间值
 
                 // 燃烧点宽度从原始宽度逐渐变细到0.01
                 float minWidth = 0.01f;
-                float burnWidth = Mathf.Lerp(originalEndWidth, minWidth, burnProgress * 0.8f);
+                float burnWidth = Mathf.Lerp(originalStartWidth, minWidth, burnProgress * 0.8f);
 
-                // 在燃烧点位置添加关键帧
-                // 先检查是否已经有接近该位置的关键帧
+                // 在燃烧点位置添加或更新关键帧
                 bool keyExists = false;
-                for (int i = 0; i < widthCurve.keys.Length; i++)
+                for (int i = 0; i < newWidthCurve.keys.Length; i++)
                 {
-                    if (Mathf.Abs(widthCurve.keys[i].time - burnPointPosition) < 0.01f)
+                    if (Mathf.Abs(newWidthCurve.keys[i].time - burnKeyTime) < 0.01f)
                     {
                         // 如果已有关键帧，更新它
-                        Keyframe existingKey = widthCurve.keys[i];
+                        Keyframe existingKey = newWidthCurve.keys[i];
                         existingKey.value = burnWidth;
-                        widthCurve.MoveKey(i, existingKey);
+                        newWidthCurve.MoveKey(i, existingKey);
                         keyExists = true;
                         break;
                     }
@@ -1671,23 +1670,23 @@ public void ChangeRopeColor(GameEvents.PlayerState state)
                 // 如果没有找到接近的关键帧，添加新的
                 if (!keyExists)
                 {
-                    int keyIndex = widthCurve.AddKey(burnPointPosition, burnWidth);
+                    int keyIndex = newWidthCurve.AddKey(burnKeyTime, burnWidth);
 
                     // 设置切线为0，使曲线在该点有尖锐的变化
                     if (keyIndex >= 0)
                     {
-                        Keyframe newKey = widthCurve.keys[keyIndex];
+                        Keyframe newKey = newWidthCurve.keys[keyIndex];
                         newKey.inTangent = 0;
                         newKey.outTangent = 0;
-                        widthCurve.MoveKey(keyIndex, newKey);
+                        newWidthCurve.MoveKey(keyIndex, newKey);
                     }
                 }
 
-                // 应用颜色
+                // 应用颜色渐变
                 lineRenderer.colorGradient = CreateGradient(colors);
 
                 // 应用宽度曲线
-                lineRenderer.widthCurve = widthCurve;
+                lineRenderer.widthCurve = newWidthCurve;
 
                 // 更新火焰粒子位置
                 if (ropeFireParticle != null && burnPointIndex < pointCount)
@@ -1756,7 +1755,7 @@ public void ChangeRopeColor(GameEvents.PlayerState state)
         // 回收火焰粒子到对象池
         if (ropeFireParticle != null)
         {
-            // // 在回收前，将其从绳索系统子对象中移除
+            // 在回收前，将其从绳索系统子对象中移除
             ropeFireParticle.transform.SetParent(null);
 
             // 使用FireParticleAutoSize组件淡出火焰
