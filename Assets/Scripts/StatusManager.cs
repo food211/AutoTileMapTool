@@ -620,7 +620,7 @@ public class StatusManager : MonoBehaviour
         // 恢复玩家输入控制
         if (playerController != null)
             playerController.SetPlayerMove(true);
-            
+
         // 恢复原始物理属性
         if (playerRigidbody != null)
         {
@@ -628,7 +628,7 @@ public class StatusManager : MonoBehaviour
             playerRigidbody.gravityScale = originalGravityScale;
             playerRigidbody.isKinematic = originalKinematic;
         }
-        
+
         // 恢复原始视觉效果，但保留特殊免疫状态的视觉效果
         if (playerRenderer != null)
         {
@@ -643,6 +643,7 @@ public class StatusManager : MonoBehaviour
                 playerRenderer.material = originalMaterial;
             }
         }
+        playerController.ResetJumpState();
     }
     #endregion
 
@@ -1162,7 +1163,7 @@ public class StatusManager : MonoBehaviour
         }
     }
 
-
+#region BurningPlayer
 // 应用燃烧状态
     private IEnumerator ApplyBurningState()
     {
@@ -1283,6 +1284,7 @@ public class StatusManager : MonoBehaviour
         if (currentPlayerState == PlayerState.Burning)
         {
             // 恢复发射绳索能力
+            playerController.SetPlayerMove(true);
             GameEvents.TriggerCanShootRopeChanged(true);
 
             // 重置玩家燃烧状态
@@ -1305,7 +1307,7 @@ public class StatusManager : MonoBehaviour
             CheckEnvironmentForStateTransition();
         }
     }
-
+#endregion
 
     // 应用麻痹状态
     private IEnumerator ApplyParalyzedState()

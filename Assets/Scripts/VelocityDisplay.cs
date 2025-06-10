@@ -101,11 +101,16 @@ public class VelocityDisplay : MonoBehaviour
             stateText.rectTransform.anchorMin = new Vector2(0, 1);
             stateText.rectTransform.anchorMax = new Vector2(0, 1);
         }
+        
+        // 初始化时根据showVelocity和showState设置组件可见性
+        UpdateComponentVisibility();
     }
     
     private void Update()
     {
         if (targetRigidbody == null) return;
+
+        UpdateComponentVisibility();
         
         // 获取速度信息
         Vector2 velocity = targetRigidbody.velocity;
@@ -173,22 +178,13 @@ public class VelocityDisplay : MonoBehaviour
         }
     }
     
-    // 切换显示
-    public void ToggleDisplay()
+    // 更新组件可见性
+    private void UpdateComponentVisibility()
     {
-        showVelocity = !showVelocity;
-        showState = !showState;
-        
         if (velocityText != null)
             velocityText.gameObject.SetActive(showVelocity);
-            
+
         if (stateText != null)
             stateText.gameObject.SetActive(showState);
-    }
-    
-    // 设置目标刚体
-    public void SetTargetRigidbody(Rigidbody2D rb)
-    {
-        targetRigidbody = rb;
     }
 }

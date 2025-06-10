@@ -50,8 +50,8 @@ MonoBehaviour:
   displayCanvas: {fileID: 0}
   velocityText: {fileID: 0}
   stateText: {fileID: 0}
-  showVelocity: 1
-  showState: 1
+  showVelocity: 0
+  showState: 0
   normalColor: {r: 1, g: 1, b: 1, a: 1}
   highSpeedColor: {r: 0, g: 1, b: 0, a: 1}
   highSpeedThreshold: 12

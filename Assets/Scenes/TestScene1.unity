@@ -1945,10 +1945,6 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 942610342}
     m_Modifications:
-    - target: {fileID: 72790869231794847, guid: 64f65beffb93e7c4e91c64d744f55993, type: 3}
-      propertyPath: cameraManager
-      value: 
-      objectReference: {fileID: 0}
     - target: {fileID: 4828988282495702378, guid: 64f65beffb93e7c4e91c64d744f55993, type: 3}
       propertyPath: m_LocalPosition.x
       value: 0
@@ -2532,34 +2528,6 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 942610342}
     m_Modifications:
-    - target: {fileID: 1210877851460425971, guid: f8e82ce3969e9b04c8f5e772185b718c, type: 3}
-      propertyPath: m_Parameters.widthMultiplier
-      value: 0.25
-      objectReference: {fileID: 0}
-    - target: {fileID: 1210877851460425971, guid: f8e82ce3969e9b04c8f5e772185b718c, type: 3}
-      propertyPath: m_Parameters.widthCurve.m_Curve.Array.size
-      value: 2
-      objectReference: {fileID: 0}
-    - target: {fileID: 1210877851460425971, guid: f8e82ce3969e9b04c8f5e772185b718c, type: 3}
-      propertyPath: m_Parameters.widthCurve.m_Curve.Array.data[1].time
-      value: 1
-      objectReference: {fileID: 0}
-    - target: {fileID: 1210877851460425971, guid: f8e82ce3969e9b04c8f5e772185b718c, type: 3}
-      propertyPath: m_Parameters.widthCurve.m_Curve.Array.data[2].time
-      value: 1
-      objectReference: {fileID: 0}
-    - target: {fileID: 1210877851460425971, guid: f8e82ce3969e9b04c8f5e772185b718c, type: 3}
-      propertyPath: m_Parameters.widthCurve.m_Curve.Array.data[2].value
-      value: 1
-      objectReference: {fileID: 0}
-    - target: {fileID: 1210877851460425971, guid: f8e82ce3969e9b04c8f5e772185b718c, type: 3}
-      propertyPath: m_Parameters.widthCurve.m_Curve.Array.data[1].inWeight
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 1210877851460425971, guid: f8e82ce3969e9b04c8f5e772185b718c, type: 3}
-      propertyPath: m_Parameters.widthCurve.m_Curve.Array.data[1].outWeight
-      value: 0
-      objectReference: {fileID: 0}
     - target: {fileID: 3112569816307915108, guid: f8e82ce3969e9b04c8f5e772185b718c, type: 3}
       propertyPath: m_LocalPosition.x
       value: 0
@@ -3298,11 +3266,7 @@ PrefabInstance:
     - target: {fileID: 5497208281958341362, guid: 134e45b842f704a47a62ba809357bb07, type: 3}
       propertyPath: m_Camera
       value: 
-      objectReference: {fileID: 0}
-    - target: {fileID: 5497208281958341362, guid: 134e45b842f704a47a62ba809357bb07, type: 3}
-      propertyPath: m_RenderMode
-      value: 1
-      objectReference: {fileID: 0}
+      objectReference: {fileID: 1585983203}
     - target: {fileID: 9137722897877809059, guid: 134e45b842f704a47a62ba809357bb07, type: 3}
       propertyPath: m_Pivot.x
       value: 0
@@ -3452,7 +3416,7 @@ PrefabInstance:
     - target: {fileID: 7177707252433775809, guid: 5c074e7994f501045a41bfb0759070cf, type: 3}
       propertyPath: ropeSystem
       value: 
-      objectReference: {fileID: 0}
+      objectReference: {fileID: 1888219646}
     - target: {fileID: 7177707252433775809, guid: 5c074e7994f501045a41bfb0759070cf, type: 3}
       propertyPath: velocityText
       value: 
@@ -3464,11 +3428,11 @@ PrefabInstance:
     - target: {fileID: 7177707252433775809, guid: 5c074e7994f501045a41bfb0759070cf, type: 3}
       propertyPath: targetRigidbody
       value: 
-      objectReference: {fileID: 0}
+      objectReference: {fileID: 1888219648}
     - target: {fileID: 7177707252433775809, guid: 5c074e7994f501045a41bfb0759070cf, type: 3}
       propertyPath: playerController
       value: 
-      objectReference: {fileID: 0}
+      objectReference: {fileID: 1888219647}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []

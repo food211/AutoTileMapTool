@@ -29,25 +29,46 @@ public class PlayerController : MonoBehaviour
     private float airControlTimeRemaining = 0f; // 剩余的空中控制时间
     private float initialJumpVelocity; // 计算得出的初始跳跃速度
     private bool isJumping = false; // 是否正在跳跃
+    private bool isAiming = false; // 是否正在瞄准
     private float currentSlopeAngle = 0f;
     private bool CanInput = true;
     private float originalgravityscale;
-    
+
     [Header("钩索设置")]
     [SerializeField] private Transform aimIndicator;
     [SerializeField] public GameObject Gun; // 添加对箭头的引用
     [SerializeField] private float aimRotationSpeed = 120f;
-    
+
     [Header("引用")]
     [SerializeField] private RopeSystem ropeSystem;
     [SerializeField] private StatusManager statusManager; // 添加对StatusManager的引用
     [SerializeField] private float swingForce = 5f;
     [SerializeField] private float maxSwingSpeed = 80f; // 调整这个值来设置最大速度
-    
+
     [Header("物理材质设置")]
     [SerializeField] private PhysicsMaterial2D bouncyBallMaterial; // BouncyBall物理材质
     private PhysicsMaterial2D originalMaterial; // 存储原始物理材质
-    
+
+    [Header("跳跃动画设置")]
+    private bool isPlayingJumpAnimation = false; // 是否正在播放跳跃动画
+    private bool isPlayingLandAnimation = false; // 是否正在播放着陆动画
+    private bool pendingJump = false; // 是否有待执行的跳跃
+    private bool isPendingBunnyHop = false;
+
+    // 落地挤压效果参数
+    [Header("落地挤压效果")]
+    [SerializeField] private bool enableLandingSquash = true;
+    [SerializeField] private float squashIntensity = 0.3f; // 挤压强度
+    [SerializeField] private float squashDuration = 0.2f; // 挤压持续时间
+    [SerializeField] private float stretchDuration = 0.15f; // 拉伸恢复时间
+    [SerializeField] private AnimationCurve squashCurve; // 挤压动画曲线
+    private Vector3 originalScale; // 原始缩放
+    private Coroutine squashCoroutine; // 当前运行的挤压协程
+    private bool isSquashing = false; // 是否正在执行挤压效果
+
+
+
+
     [Header("地面检测设置")]
     [SerializeField] private LayerMask groundLayers; // 地面层
     [SerializeField] private Vector2 groundCheckSize = new Vector2(0.9f, 0.1f); // 地面检测区域的大小
@@ -70,16 +91,17 @@ public class PlayerController : MonoBehaviour
     [SerializeField] private Color invincibleTint = new Color(1f, 1f, 1f, 1f); // 无敌时的颜色
     private SpriteRenderer playerRenderer;
     private Color originalColor;
-    
+
     // 内部变量
     private Rigidbody2D rb;
+    [SerializeField] private PlayerAnimatorController playerAnimatorController;
     private float aimAngle = 0f;
     private bool isGrounded = false;
     private bool isRopeMode = false;
     private bool CanShootRope = true;
     public bool debugmode = false;
     private DistanceJoint2D distanceJoint;
-    
+
     // 缓存变量，用于减少null检查
     private bool rbInitialized = false;
     private bool distanceJointInitialized = false;
@@ -88,7 +110,7 @@ public class PlayerController : MonoBehaviour
     private bool ropeSystemInitialized = false;
     private bool statusManagerInitialized = false;
     private bool invincibleEffectInitialized = false;
-    
+
     // 性能优化：缓存检测结果和时间
     private float lastGroundCheckTime = 0f;
     private float groundCheckInterval = 0.05f; // 每0.05秒检测一次地面
@@ -98,14 +120,14 @@ public class PlayerController : MonoBehaviour
     private bool cachedHeadCollisionState = false;
     private Vector2 cachedPosition;
     private Coroutine[] immunityCoroutines = new Coroutine[4]; // 存储免疫协程的引用
-    
+
     #region Unity methods
     private void Awake()
     {
         isRopeMode = false;
         rb = GetComponent<Rigidbody2D>();
         rbInitialized = rb != null;
-        
+
         if (rbInitialized)
         {
             originalgravityscale = rb.gravityScale;
@@ -117,11 +139,11 @@ public class PlayerController : MonoBehaviour
         if (ropeSystem == null)
             ropeSystem = GetComponentInChildren<RopeSystem>();
         ropeSystemInitialized = ropeSystem != null;
-        
+
         if (statusManager == null)
             statusManager = GetComponentInChildren<StatusManager>();
         statusManagerInitialized = statusManager != null;
-        
+
         // 获取SpriteRenderer组件
         playerRenderer = GetComponent<SpriteRenderer>();
         playerRendererInitialized = playerRenderer != null;
@@ -129,7 +151,7 @@ public class PlayerController : MonoBehaviour
         {
             originalColor = playerRenderer.color;
         }
-        
+
         // 初始化Gun
         gunInitialized = Gun != null;
         if (!gunInitialized)
@@ -140,20 +162,20 @@ public class PlayerController : MonoBehaviour
         {
             Gun.SetActive(CanShootRope);
         }
-        
+
         // 确保无敌特效初始状态为关闭
         invincibleEffectInitialized = invincibleEffect != null;
         if (invincibleEffectInitialized)
         {
             invincibleEffect.SetActive(false);
         }
-        
+
         // 保存原始物理材质
         if (rbInitialized)
         {
             originalMaterial = rb.sharedMaterial;
         }
-        
+
         // 获取或添加DistanceJoint2D
         distanceJoint = GetComponent<DistanceJoint2D>();
         if (distanceJoint == null)
@@ -161,7 +183,7 @@ public class PlayerController : MonoBehaviour
             distanceJoint = gameObject.AddComponent<DistanceJoint2D>();
         }
         distanceJointInitialized = distanceJoint != null;
-        
+
         // 确保初始时关节是禁用的
         if (distanceJointInitialized)
         {
@@ -170,7 +192,21 @@ public class PlayerController : MonoBehaviour
             distanceJoint.enableCollision = true;
         }
     }
-    
+
+    private void Start()
+    {
+        originalScale = transform.localScale;
+        // 如果需要，初始化挤压曲线
+        if (squashCurve == null || squashCurve.keys.Length == 0)
+        {
+            squashCurve = new AnimationCurve();
+            squashCurve.AddKey(0f, 0f);
+            squashCurve.AddKey(0.1f, 1f);
+            squashCurve.AddKey(0.6f, 0.8f);
+            squashCurve.AddKey(1f, 0f);
+        }
+    }
+
     private void Update()
     {
         // 性能优化：只在位置变化时更新缓存的位置
@@ -178,7 +214,7 @@ public class PlayerController : MonoBehaviour
         {
             cachedPosition = rb.position;
         }
-        
+
         // 性能优化：减少Gun状态检查频率
         if (gunInitialized)
         {
@@ -188,7 +224,7 @@ public class PlayerController : MonoBehaviour
                 Gun.SetActive(shouldShowGun);
             }
         }
-        
+
         if (isRopeMode)
         {
             HandleRopeMode();
@@ -196,17 +232,120 @@ public class PlayerController : MonoBehaviour
         else
         {
             HandleNormalMode();
-            
+
             // 性能优化：减少地面检测频率
             if (Time.time >= lastGroundCheckTime + groundCheckInterval)
             {
                 CheckGrounded();
                 lastGroundCheckTime = Time.time;
             }
-            
+
             // 处理下落加速
             HandleFallingGravity();
         }
+        CheckLandSpeed();
+    }
+
+    private void CheckLandSpeed()
+    {
+        if (enableLandingSquash && rbInitialized && !ropeSystem.IsRopeShootingOrHooked())
+        {
+            // 检测从空中落到地面的状态变化
+            if (isGrounded && rb.velocity.y < -5f) // 只有当下落速度足够大时才触发
+            {
+                // 记录落地速度，用于调整挤压强度
+                float landingVelocity = Mathf.Abs(rb.velocity.y);
+                
+                // 根据落地速度计算挤压强度，限制在合理范围内
+                float actualSquashIntensity = Mathf.Clamp(landingVelocity / 20f * squashIntensity, 0.1f, 0.5f);
+                
+                // 执行落地挤压效果
+                PlayLandingSquashEffect(actualSquashIntensity);
+                
+                #if UNITY_EDITOR
+                if (debugmode)
+                    Debug.LogFormat("检测到落地，速度: {0}, 挤压强度: {1}", landingVelocity, actualSquashIntensity);
+                #endif
+            }
+        }
+    }
+
+    // 播放落地挤压效果
+    private void PlayLandingSquashEffect(float intensity)
+    {
+        // 如果已经在执行挤压效果，先停止当前协程
+        if (isSquashing && squashCoroutine != null)
+        {
+            StopCoroutine(squashCoroutine);
+        }
+
+        // 启动新的挤压协程
+        squashCoroutine = StartCoroutine(SquashAndStretchCoroutine(intensity));
+#if UNITY_EDITOR
+        if (debugmode)
+            Debug.LogFormat("开始落地挤压效果，强度: {0}", intensity); 
+        #endif
+    }
+
+    // 挤压和拉伸协程
+    private IEnumerator SquashAndStretchCoroutine(float intensity)
+    {
+        isSquashing = true;
+
+        // 记录开始时间
+        float startTime = Time.time;
+        float elapsedTime = 0f;
+
+        // 第一阶段：挤压效果
+        while (elapsedTime < squashDuration)
+        {
+            // 计算当前时间点的插值比例
+            float t = elapsedTime / squashDuration;
+
+            // 使用动画曲线获取当前时间点的挤压值
+            float curveValue = squashCurve.Evaluate(t);
+
+            // 计算当前应用的挤压和拉伸值
+            float xScale = originalScale.x * (1f + intensity * curveValue);
+            float yScale = originalScale.y * (1f - intensity * curveValue);
+
+            // 应用缩放
+            transform.localScale = new Vector3(xScale, yScale, originalScale.z);
+
+            // 更新经过的时间
+            elapsedTime = Time.time - startTime;
+
+            yield return null;
+        }
+
+        // 第二阶段：恢复原状（拉伸效果）
+        startTime = Time.time;
+        elapsedTime = 0f;
+
+        // 记录挤压阶段结束时的缩放值
+        Vector3 squashedScale = transform.localScale;
+
+        while (elapsedTime < stretchDuration)
+        {
+            // 计算当前时间点的插值比例
+            float t = elapsedTime / stretchDuration;
+
+            // 使用平滑步进函数进行插值，实现弹性恢复效果
+            float smoothT = Mathf.SmoothStep(0f, 1f, t);
+
+            // 从挤压状态平滑过渡到原始缩放
+            transform.localScale = Vector3.Lerp(squashedScale, originalScale, smoothT);
+
+            // 更新经过的时间
+            elapsedTime = Time.time - startTime;
+
+            yield return null;
+        }
+
+        // 确保最终恢复到原始缩放
+        transform.localScale = originalScale;
+
+        isSquashing = false;
     }
 
     private void CalculateJumpParameters()
@@ -506,171 +645,49 @@ public class PlayerController : MonoBehaviour
         }
     }
     #endregion
-    
+
+
     #region handle Input
-private void HandleNormalMode()
+    private void HandleNormalMode()
 {
-    if(!CanInput)
+    if (!CanInput)
         return;
-    // 检查绳索是否正在发射或已钩住
+        
     bool isRopeBusy = ropeSystemInitialized && ropeSystem.IsRopeShootingOrHooked();
-    
-    // 左右移动 - 只在地面上时完全控制，在空中时保持惯性
     float horizontalInput = Input.GetAxis("Horizontal");
 
+    // 处理玩家朝向
+    HandleRunningFacing(horizontalInput);
+    
+    // 处理移动逻辑
+    HandleMovement(horizontalInput, isRopeBusy);
+    
+    // 处理瞄准控制
+    HandleAiming(isRopeBusy);
+    
+    // 处理跳跃输入和缓冲
+    HandleJumpInput(isRopeBusy);
+    
+    // 处理道具使用
+    HandleItemUse(isRopeBusy);
+    
+    // 处理绳索发射
+    HandleRopeShooting(isRopeBusy);
+}
+
+// 处理地面和空中移动
+private void HandleMovement(float horizontalInput, bool isRopeBusy)
+{
     if (isGrounded && rbInitialized)
     {
-        // 在地面上时完全控制移动
-        airControlTimeRemaining = airControlDuration;
-        
-        // 检查是否在斜坡上，以及移动方向是否是上坡
-        bool isMovingUpSlope = false;
-
-        // 如果有斜坡角度，检查移动方向
-        if (currentSlopeAngle > 0f)
-        {
-            // 获取当前站立的斜坡法线
-            RaycastHit2D hit = Physics2D.Raycast(transform.position, Vector2.down, 0.5f, groundLayers);
-            if (hit.collider != null)
-            {
-                Vector2 slopeNormal = hit.normal;
-
-                // 计算斜坡方向（垂直于法线）
-                Vector2 slopeDirection = new Vector2(slopeNormal.y, -slopeNormal.x);
-
-                // 判断玩家移动方向是否与斜坡上坡方向一致
-                if ((slopeDirection.x > 0 && horizontalInput > 0) ||
-                    (slopeDirection.x < 0 && horizontalInput < 0))
-                {
-                    isMovingUpSlope = true;
-                }
-            }
-        }
-
-        // 检查是否在兔子跳时间窗口内
-        bool inBunnyHopWindow = (Time.time - lastLandingTime) <= bunnyHopWindow;
-        
-        // 如果在兔子跳窗口内且没有输入，或输入方向与落地速度方向相反，应用摩擦力
-        if (inBunnyHopWindow && Mathf.Abs(lastLandingVelocityX) > 3f && 
-            (Mathf.Abs(horizontalInput) < 0.1f || Mathf.Sign(horizontalInput) != Mathf.Sign(lastLandingVelocityX)))
-        {
-            // 应用摩擦力，减缓水平速度
-            float frictionForce = landingFrictionMultiplier * Time.deltaTime;
-            float newVelocityX = Mathf.MoveTowards(rb.velocity.x, 0, frictionForce);
-            rb.velocity = new Vector2(newVelocityX, rb.velocity.y);
-            
-            #if UNITY_EDITOR
-            if (debugmode && Time.frameCount % 10 == 0)
-                Debug.LogFormat("应用落地摩擦力: {0} -> {1}", rb.velocity.x, newVelocityX);
-            #endif
-        }
-        // 如果在兔子跳窗口内且有输入且方向与落地速度相同，保持部分动量
-        else if (inBunnyHopWindow && Mathf.Abs(lastLandingVelocityX) > 3f && 
-                 Mathf.Sign(horizontalInput) == Mathf.Sign(lastLandingVelocityX))
-        {
-            // 计算目标速度 (结合输入和原有动量)
-            float targetSpeed = horizontalInput * moveSpeed;
-            // 如果落地速度更大，使用落地速度的一部分
-            if (Mathf.Abs(lastLandingVelocityX) > Mathf.Abs(targetSpeed))
-            {
-                targetSpeed = lastLandingVelocityX * 0.9f; // 保留90%的落地速度
-            }
-            rb.velocity = new Vector2(targetSpeed, rb.velocity.y);
-        }
-        // 正常地面移动逻辑
-        else
-        {
-            // 如果斜坡角度大于45度且正在尝试上坡，阻止水平移动
-            if (currentSlopeAngle > 45f && isMovingUpSlope)
-            {
-                rb.velocity = new Vector2(0, rb.velocity.y);
-            }
-            else
-            {
-                rb.velocity = new Vector2(horizontalInput * moveSpeed, rb.velocity.y);
-            }
-        }
-
-        // 如果刚刚落地，重置跳跃状态
-        if (isJumping)
-        {
-            isJumping = false;
-            // 可以在这里添加落地音效或动画触发
-        }
-        
-        // 检查跳跃缓冲，如果有缓冲的跳跃输入，立即执行跳跃
-        if (jumpBufferCounter > 0 && !isRopeBusy && !isJumping && rbInitialized)
-        {
-            // 默认使用当前水平速度
-            float jumpVelocityX = rb.velocity.x;
-            
-            // 检查是否可以执行兔子跳（在落地后的短时间窗口内）
-            bool canBunnyHop = (Time.time - lastLandingTime) <= bunnyHopWindow;
-            
-            // 如果可以执行兔子跳，并且落地速度足够大
-            if (canBunnyHop && Mathf.Abs(lastLandingVelocityX) > 3f)
-            {
-                // 从绳索脱离后的兔子跳保留更高比例的水平速度
-                float momentumRetention = justReleasedFromRope ? 0.98f : bunnyHopMomentumRetention;
-                jumpVelocityX = lastLandingVelocityX * momentumRetention;
-                
-                #if UNITY_EDITOR
-                if (debugmode)
-                    Debug.LogFormat("执行兔子跳: {0}", jumpVelocityX);
-                #endif
-            }
-            
-            // 执行跳跃
-            rb.velocity = new Vector2(jumpVelocityX, initialJumpVelocity);
-            isJumping = true;
-            jumpBufferCounter = 0; // 重置跳跃缓冲计时器
-            justReleasedFromRope = false; // 重置绳索脱离标记
-            
-            #if UNITY_EDITOR
-            if (debugmode)
-                Debug.LogFormat("执行跳跃，水平速度: {0}", jumpVelocityX);
-            #endif
-        }
+        HandleGroundMovement(horizontalInput);
     }
     else if (rbInitialized)
     {
-        // 空中控制逻辑保持不变
-        if (!isGrounded && airControlTimeRemaining > 0)
-        {
-            // 减少剩余控制时间
-            airControlTimeRemaining -= Time.deltaTime;
-
-            // 在有限时间内可以控制，但只有反方向的输入有效
-            if (airControlTimeRemaining > 0)
-            {
-                // 获取当前水平速度方向
-                float currentVelocityDirection = Mathf.Sign(rb.velocity.x);
-                
-                // 获取输入方向
-                float inputDirection = Mathf.Sign(horizontalInput);
-                
-                // 只有当输入方向与当前速度方向相反时才施加力
-                if (currentVelocityDirection != 0 && inputDirection != 0 && inputDirection != currentVelocityDirection)
-                {
-                    // 施加力以控制方向，但不影响原有动量
-                    rb.AddForce(new Vector2(horizontalInput * airControlForce, 0), ForceMode2D.Force);
-                }
-                // 如果玩家速度接近0，允许任意方向输入以开始移动
-                else if (Mathf.Abs(rb.velocity.x) < 0.5f)
-                {
-                    rb.AddForce(new Vector2(horizontalInput * airControlForce, 0), ForceMode2D.Force);
-                }
-            }
-
-            if (Mathf.Abs(rb.velocity.x) > maxAirSpeed)
-            {
-                float clampedXVelocity = Mathf.Clamp(rb.velocity.x, -maxAirSpeed * 1f, maxAirSpeed * 1f);
-                rb.velocity = new Vector2(clampedXVelocity, rb.velocity.y);
-            }
-        }
+        HandleAirMovement(horizontalInput);
     }
     
-    // 改变玩家朝向 - 只在绳索未发射时
+    // 根据移动方向更新玩家朝向 - 只在绳索未发射时
     if (horizontalInput != 0 && !isRopeBusy)
     {
         // 如果向右移动，朝向右边
@@ -684,70 +701,398 @@ private void HandleNormalMode()
             aimIndicator.transform.localScale = new Vector3(-1, 1, 1); // X轴反转，朝左
         }
     }
+}
 
-    // 瞄准控制 - 只在绳索未发射时
-    if (!isRopeBusy)
+// 处理地面移动
+private void HandleGroundMovement(float horizontalInput)
+{
+    // 在地面上时完全控制移动
+    airControlTimeRemaining = airControlDuration;
+
+    // 检查是否在斜坡上，以及移动方向是否是上坡
+    bool isMovingUpSlope = CheckIfMovingUpSlope(horizontalInput);
+
+    // 检查是否在兔子跳时间窗口内
+    bool inBunnyHopWindow = (Time.time - lastLandingTime) <= bunnyHopWindow;
+    bool hasSignificantLandingSpeed = Mathf.Abs(lastLandingVelocityX) > 3f;
+
+    // 根据不同情况应用不同的移动逻辑
+    if (inBunnyHopWindow && hasSignificantLandingSpeed)
     {
+        ApplyBunnyHopMovement(horizontalInput);
+    }
+    else
+    {
+        ApplyNormalGroundMovement(horizontalInput, isMovingUpSlope);
+    }
+
+    // 如果刚刚落地，重置跳跃状态
+    if (isJumping)
+    {
+        isJumping = false;
+        // 可以在这里添加落地音效或动画触发
+    }
+}
+
+// 检查是否在上坡移动
+private bool CheckIfMovingUpSlope(float horizontalInput)
+{
+    if (currentSlopeAngle <= 0f)
+        return false;
+        
+    // 获取当前站立的斜坡法线
+    RaycastHit2D hit = Physics2D.Raycast(transform.position, Vector2.down, 0.5f, groundLayers);
+    if (hit.collider != null)
+    {
+        Vector2 slopeNormal = hit.normal;
+
+        // 计算斜坡方向（垂直于法线）
+        Vector2 slopeDirection = new Vector2(slopeNormal.y, -slopeNormal.x);
+
+        // 判断玩家移动方向是否与斜坡上坡方向一致
+        return (slopeDirection.x > 0 && horizontalInput > 0) ||
+               (slopeDirection.x < 0 && horizontalInput < 0);
+    }
+    return false;
+}
+
+// 应用兔子跳移动逻辑
+private void ApplyBunnyHopMovement(float horizontalInput)
+{
+    // 如果没有输入，或输入方向与落地速度方向相反，应用摩擦力
+    if (Mathf.Abs(horizontalInput) < 0.1f || Mathf.Sign(horizontalInput) != Mathf.Sign(lastLandingVelocityX))
+    {
+        // 应用摩擦力，减缓水平速度
+        float frictionForce = landingFrictionMultiplier * Time.deltaTime;
+        float newVelocityX = Mathf.MoveTowards(rb.velocity.x, 0, frictionForce);
+        rb.velocity = new Vector2(newVelocityX, rb.velocity.y);
+
+#if UNITY_EDITOR
+        if (debugmode && Time.frameCount % 10 == 0)
+            Debug.LogFormat("应用落地摩擦力: {0} -> {1}", rb.velocity.x, newVelocityX);
+#endif
+    }
+    // 如果有输入且方向与落地速度相同，保持部分动量
+    else if (Mathf.Sign(horizontalInput) == Mathf.Sign(lastLandingVelocityX))
+    {
+        // 计算目标速度 (结合输入和原有动量)
+        float targetSpeed = horizontalInput * moveSpeed;
+        // 如果落地速度更大，使用落地速度的一部分
+        if (Mathf.Abs(lastLandingVelocityX) > Mathf.Abs(targetSpeed))
+        {
+            targetSpeed = lastLandingVelocityX * 0.9f; // 保留90%的落地速度
+        }
+        rb.velocity = new Vector2(targetSpeed, rb.velocity.y);
+    }
+}
+
+// 应用普通地面移动逻辑
+private void ApplyNormalGroundMovement(float horizontalInput, bool isMovingUpSlope)
+{
+    // 如果斜坡角度大于45度且正在尝试上坡，阻止水平移动
+    if (currentSlopeAngle > 45f && isMovingUpSlope)
+    {
+        rb.velocity = new Vector2(0, rb.velocity.y);
+    }
+    else
+    {
+        rb.velocity = new Vector2(horizontalInput * moveSpeed, rb.velocity.y);
+    }
+}
+
+// 处理空中移动
+private void HandleAirMovement(float horizontalInput)
+{
+    // 空中控制逻辑
+    if (!isGrounded && airControlTimeRemaining > 0)
+    {
+        // 减少剩余控制时间
+        airControlTimeRemaining -= Time.deltaTime;
+
+        // 在有限时间内可以控制，但只有反方向的输入有效
+        if (airControlTimeRemaining > 0)
+        {
+            ApplyAirControl(horizontalInput);
+        }
+
+        // 限制最大空中速度
+        LimitAirSpeed();
+    }
+}
+
+// 应用空中控制力
+private void ApplyAirControl(float horizontalInput)
+{
+    // 获取当前水平速度方向
+    float currentVelocityDirection = Mathf.Sign(rb.velocity.x);
+
+    // 获取输入方向
+    float inputDirection = Mathf.Sign(horizontalInput);
+
+    // 只有当输入方向与当前速度方向相反时才施加力
+    if (currentVelocityDirection != 0 && inputDirection != 0 && inputDirection != currentVelocityDirection)
+    {
+        // 施加力以控制方向，但不影响原有动量
+        rb.AddForce(new Vector2(horizontalInput * airControlForce, 0), ForceMode2D.Force);
+    }
+    // 如果玩家速度接近0，允许任意方向输入以开始移动
+    else if (Mathf.Abs(rb.velocity.x) < 0.5f)
+    {
+        rb.AddForce(new Vector2(horizontalInput * airControlForce, 0), ForceMode2D.Force);
+    }
+}
+
+// 限制空中最大速度
+private void LimitAirSpeed()
+{
+    if (Mathf.Abs(rb.velocity.x) > maxAirSpeed)
+    {
+        float clampedXVelocity = Mathf.Clamp(rb.velocity.x, -maxAirSpeed, maxAirSpeed);
+        rb.velocity = new Vector2(clampedXVelocity, rb.velocity.y);
+    }
+}
+
+// 处理瞄准控制
+private void HandleAiming(bool isRopeBusy)
+{
+    if (isRopeBusy)
+    {
+        // 在绳索模式下，设置isAiming为false
+        isAiming = false;
+        return;
+    }
+
+    // 检测是否按下上箭头或下箭头键
+    bool isPressingUpOrDown = Input.GetKey(KeyCode.UpArrow) || Input.GetKey(KeyCode.DownArrow);
+
+    // 如果按下了上箭头或下箭头键，设置isAiming为true
+    if (isPressingUpOrDown)
+    {
+        isAiming = true;
+
+        // 处理上箭头键
         if (Input.GetKey(KeyCode.UpArrow))
+        {
             aimAngle += aimRotationSpeed * Time.deltaTime;
+        }
+
+        // 处理下箭头键
         if (Input.GetKey(KeyCode.DownArrow))
+        {
             aimAngle -= aimRotationSpeed * Time.deltaTime;
-            
-        // 限制瞄准角度
-        aimAngle = Mathf.Clamp(aimAngle, -80f, 80f);
-        
-        // 根据 aimIndicator 的水平翻转调整旋转角度
-        float flipMultiplier = aimIndicator.localScale.x > 0 ? 1 : -1; // 如果翻转，角度需要反向
-        aimIndicator.rotation = UnityEngine.Quaternion.Euler(0, 0, aimAngle * flipMultiplier);
+        }
     }
-        
-    // 跳跃输入检测 - 无论是否在地面上都检测输入
-    if (Input.GetKeyDown(KeyCode.X) && !isRopeBusy)
+    else
     {
-        // 设置跳跃缓冲计时器
-        jumpBufferCounter = jumpBufferTime;
-        
-        // 如果在地面上，立即执行跳跃
-        if (isGrounded && !isJumping && rbInitialized)
+        // 如果没有按下上箭头或下箭头键，设置isAiming为false
+        isAiming = false;
+    }
+
+    // 限制瞄准角度
+    aimAngle = Mathf.Clamp(aimAngle, -80f, 80f);
+
+    // 根据 aimIndicator 的水平翻转调整旋转角度
+    float flipMultiplier = aimIndicator.localScale.x > 0 ? 1 : -1; // 如果翻转，角度需要反向
+    aimIndicator.rotation = UnityEngine.Quaternion.Euler(0, 0, aimAngle * flipMultiplier);
+}
+
+    // 处理跳跃输入和缓冲
+    private void HandleJumpInput(bool isRopeBusy)
+    {
+        // 如果已经在播放跳跃动画，直接返回
+        if (isPlayingJumpAnimation || pendingJump)
+            return;
+
+        // 跳跃输入检测 - 使用缓冲跳跃机制
+        if (Input.GetKeyDown(KeyCode.X) && !isRopeBusy)
         {
-            // 使用计算好的跳跃速度
-            rb.velocity = new Vector2(rb.velocity.x, initialJumpVelocity);
-            isJumping = true;
-            jumpBufferCounter = 0; // 已经跳跃，清除缓冲
+            // 设置跳跃缓冲计时器
+            jumpBufferCounter = jumpBufferTime;
             
-            #if UNITY_EDITOR
+#if UNITY_EDITOR
             if (debugmode)
-                Debug.LogFormat("立即执行跳跃");
-            #endif
+                Debug.LogFormat("跳跃输入已缓冲: {0}秒", jumpBufferTime);
+
+#endif
         }
-        #if UNITY_EDITOR
-        else if (debugmode)
+        // 检查跳跃缓冲，如果有缓冲的跳跃输入且现在可以跳跃，执行跳跃
+        if (jumpBufferCounter > 0 && isGrounded && !isJumping && !isRopeBusy && rbInitialized)
         {
-            Debug.LogFormat("跳跃输入已缓冲: {0}秒", jumpBufferTime);
+            TriggerJump();
+            return; // 执行跳跃后直接返回
         }
-        #endif
+
+        // 更新跳跃缓冲计时器
+        if (jumpBufferCounter > 0)
+        {
+            jumpBufferCounter -= Time.deltaTime;
+        }
     }
-    
-    // 更新跳跃缓冲计时器
-    if (jumpBufferCounter > 0)
+
+    // 触发跳跃
+    private void TriggerJump()
     {
-        jumpBufferCounter -= Time.deltaTime;
+        // 确保不会重复触发
+        if (isPlayingJumpAnimation || pendingJump)
+            return;
+
+        // 检查是否可以执行兔子跳（在落地后的短时间窗口内）
+        bool canBunnyHop = (Time.time - lastLandingTime) <= bunnyHopWindow;
+
+        // 标记是否为兔子跳
+        isPendingBunnyHop = canBunnyHop && Mathf.Abs(lastLandingVelocityX) > 3f;
+
+        // 启动跳跃动画，实际跳跃将在动画完成后执行
+        StartJumpAnimation();
+        jumpBufferCounter = 0; // 重置跳跃缓冲计时器
+
+#if UNITY_EDITOR
+        if (debugmode)
+            Debug.LogFormat("执行StartJumpAnimation，兔子跳状态: {0}", isPendingBunnyHop);
+#endif
     }
-    
-    // 使用道具 - 只在绳索未发射时
+
+// 处理道具使用
+private void HandleItemUse(bool isRopeBusy)
+{
     if (Input.GetKeyDown(KeyCode.Z) && ropeSystemInitialized && !ropeSystem.IsShooting())
     {
         UseItem();
     }
-    
-    // 发射钩索 - 只在绳索未发射时
+}
+
+// 处理绳索发射
+private void HandleRopeShooting(bool isRopeBusy)
+{
     if (Input.GetKeyDown(KeyCode.Space) && !isRopeBusy && CanShootRope && ropeSystemInitialized)
     {
         Vector2 direction = aimIndicator.right * (aimIndicator.localScale.x > 0 ? 1 : -1);
         ropeSystem.ShootRope(direction);
     }
 }
-    
+
+
+    private void HandleRunningFacing(float horizontalInput)
+    {
+        if (Mathf.Abs(horizontalInput) > 0.1f)
+        {
+            bool shouldFaceRight = horizontalInput > 0;
+            SetCharacterFacing(shouldFaceRight);
+        }
+    }
+
+    private void SetCharacterFacing(bool faceRight)
+    {
+        SpriteRenderer sr = GetComponent<SpriteRenderer>();
+        if (sr != null)
+        {
+            sr.flipX = !faceRight; // 默认sprite面向右
+        }
+    }
+
+    private void StartJumpAnimation()
+    {
+        // 添加更严格的检查，确保不会重复触发
+        if (isPlayingJumpAnimation || pendingJump)
+        {
+            Debug.LogWarning("尝试在已经播放跳跃动画时再次触发跳跃动画");
+            return;
+        }
+
+        isPlayingJumpAnimation = true;
+        pendingJump = true;
+
+        // 跳跃准备期间可以选择是否禁用水平移动
+        CanInput = false;
+
+        // 添加调试日志，帮助追踪问题
+#if UNITY_EDITOR
+        if (debugmode)
+        {
+            Debug.LogFormat("开始跳跃动画，isPlayingJumpAnimation={0}, pendingJump={1}",
+                           isPlayingJumpAnimation, pendingJump);
+        }
+#endif
+
+        playerAnimatorController.TriggerJumpAnimation();
+
+#if UNITY_EDITOR
+        if (debugmode)
+        {
+            Debug.LogFormat("广播OnPlayerJump事件，等待跳跃动画完成");
+        }
+#endif
+    }
+
+    // 由playerAnimationcontroller调用 - 着陆动画开始
+    public void OnLandAnimationStart()
+    {
+        isPlayingLandAnimation = true;
+    }
+
+    // 由playerAnimationcontroller调用 - 着陆动画完成
+    public void OnLandAnimationComplete()
+    {
+        isPlayingLandAnimation = false;
+    }
+
+    // 由playerAnimationcontroller调用 - 跳跃动画完成
+
+    public void OnJumpAnimationComplete()
+    {
+#if UNITY_EDITOR
+        if (debugmode)
+        {
+            Debug.Log("Playercontroller收到通知,跳跃动画播放完成，执行实际跳跃");
+        }
+#endif
+
+        if (pendingJump)
+        {
+            PerformJump();
+            pendingJump = false;
+        }
+    }
+
+    private void PerformJump()
+    {
+        if (!rbInitialized) return;
+
+        // 检查是否是兔子跳
+        if (isPendingBunnyHop)
+        {
+            // 计算兔子跳的水平速度
+            float momentumRetention = justReleasedFromRope ? 0.98f : bunnyHopMomentumRetention;
+            float bunnyHopVelocityX = lastLandingVelocityX * momentumRetention;
+
+            // 使用兔子跳的水平速度
+            rb.velocity = new Vector2(bunnyHopVelocityX, initialJumpVelocity);
+
+            // 重置标志
+            isPendingBunnyHop = false;
+            justReleasedFromRope = false; // 重置绳索脱离标记
+
+#if UNITY_EDITOR
+            if (debugmode)
+                Debug.LogFormat("执行兔子跳，水平速度: {0}", bunnyHopVelocityX);
+#endif
+        }
+        else
+        {
+            // 普通跳跃，保持水平速度不变
+            rb.velocity = new Vector2(rb.velocity.x, initialJumpVelocity);
+
+#if UNITY_EDITOR
+            if (debugmode)
+                Debug.LogFormat("执行普通跳跃，Y轴速度设为: {0}", initialJumpVelocity);
+#endif
+        }
+
+        isJumping = true;
+        isPlayingJumpAnimation = false;
+        CanInput = true; // 重新启用输入（如果之前禁用了）
+    }
+
     private void HandleRopeMode()
     {
         // 左右摆动
@@ -759,31 +1104,31 @@ private void HandleNormalMode()
         {
             ropeSystem.Swing(-1 * swingForce);
         }
-        
+
         // 收缩绳索 - 检查头部是否有障碍物
         if (Input.GetKey(KeyCode.UpArrow) && !CheckHeadCollision() && CanInput && ropeSystemInitialized)
         {
             ropeSystem.AdjustRopeLength(-5f);
         }
-        
+
         // 伸长绳索 - 检查脚下是否有障碍物
         if (Input.GetKey(KeyCode.DownArrow) && !CheckGroundCollision() && CanInput && ropeSystemInitialized)
         {
             ropeSystem.AdjustRopeLength(5f);
         }
-        
+
         // 释放绳索
         if (Input.GetKeyDown(KeyCode.Space) && CanShootRope && ropeSystemInitialized)
         {
             ropeSystem.ReleaseRope();
         }
-        
+
         // 添加使用道具的逻辑 - 只在绳索不处于发射状态时
         if (Input.GetKeyDown(KeyCode.Z) && ropeSystemInitialized && !ropeSystem.IsShooting() && CanInput)
         {
             UseItem();
         }
-        
+
         // 限制最大速度
         LimitMaxVelocity();
     }
@@ -1045,14 +1390,14 @@ public void ExitRopeMode()
     {
         return distanceJoint;
     }
-    
+
     #region OnCollision
     // 碰撞检测
     private void OnCollisionEnter2D(Collision2D collision)
     {
         // 如果处于无敌状态，直接返回
         if (isInvincible) return;
-        
+
         // 检查是否碰到冰面
         if (collision.gameObject.CompareTag("Ice") && !isIceImmune)
         {
@@ -1141,9 +1486,11 @@ public void ExitRopeMode()
             Gun.SetActive(false);
         }
 
+        
+
         #if UNITY_EDITOR
-        if(debugmode)
-        Debug.LogFormat("玩家死亡，已禁用所有输入和移动");
+        if (debugmode)
+            Debug.LogFormat("玩家死亡，已禁用所有输入和移动");
         #endif
     }
 
@@ -1151,7 +1498,8 @@ public void ExitRopeMode()
     {
         SetPlayerInput(true);
         ResetAllImmunities();
-        if(rbInitialized)
+        ResetJumpState();
+        if (rbInitialized)
         {
             rb.gravityScale = originalgravityscale;
             rb.constraints = RigidbodyConstraints2D.FreezeRotation;
@@ -1203,6 +1551,11 @@ public void ExitRopeMode()
         {
             Gun.SetActive(false);
         }
+    }
+
+    public bool isPlayerAiming()
+    {
+        return isAiming;
     }
 
     public float GetMoveSpeed()
@@ -1453,6 +1806,22 @@ public void ExitRopeMode()
             invincibleEffect.SetActive(false);
         }
     }
+    public void ResetJumpState()
+    {
+        // 重置跳跃相关变量
+        isJumping = false;
+        jumpBufferCounter = 0;
+
+        // 确保跳跃冷却已重置
+        isPlayingJumpAnimation = false;
+
+        // 记录日志以便调试
+#if UNITY_EDITOR
+        if (debugmode)
+            Debug.LogFormat("跳跃状态已重置");
+            #endif
+    }
+
     #endregion
 
     #region 免疫协程
@@ -1461,7 +1830,7 @@ public void ExitRopeMode()
     {
         // 使用缓存的WaitForSeconds对象
         yield return new WaitForSeconds(delay);
-        
+
         // 根据免疫类型禁用相应的免疫
         switch (immunityType)
         {
@@ -1478,7 +1847,7 @@ public void ExitRopeMode()
                 isElectricImmune = false;
                 break;
         }
-        
+
         // 清除协程引用
         immunityCoroutines[immunityType] = null;
     }
