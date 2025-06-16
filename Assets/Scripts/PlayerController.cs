@@ -51,7 +51,7 @@ public class PlayerController : MonoBehaviour
 
     [Header("跳跃动画设置")]
     private bool isPlayingJumpAnimation = false; // 是否正在播放跳跃动画
-    private bool isPlayingLandAnimation = false; // 是否正在播放着陆动画
+    // private bool isPlayingLandAnimation = false; // 是否正在播放着陆动画
     private bool pendingJump = false; // 是否有待执行的跳跃
     private bool isPendingBunnyHop = false;
 
@@ -1027,13 +1027,13 @@ private void HandleRopeShooting(bool isRopeBusy)
     // 由playerAnimationcontroller调用 - 着陆动画开始
     public void OnLandAnimationStart()
     {
-        isPlayingLandAnimation = true;
+        // isPlayingLandAnimation = true;
     }
 
     // 由playerAnimationcontroller调用 - 着陆动画完成
     public void OnLandAnimationComplete()
     {
-        isPlayingLandAnimation = false;
+        // isPlayingLandAnimation = false;
     }
 
     // 由playerAnimationcontroller调用 - 跳跃动画完成

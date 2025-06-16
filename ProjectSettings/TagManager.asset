@@ -10,6 +10,8 @@ TagManager:
   - Elect
   - Hookable
   - NotHookable
+  - HardSurface
+  - SoftSurface
   layers:
   - Default
   - TransparentFX

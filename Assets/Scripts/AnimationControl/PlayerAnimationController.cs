@@ -15,7 +15,7 @@ public class PlayerAnimatorController : MonoBehaviour
 [SerializeField] private string isGroundedParam = "IsGrounded";
 [SerializeField] private string isRopeModeParam = "IsRopeMode";
 [SerializeField] private string isAimingParam = "IsAiming"; // 是否瞄准
-[SerializeField] private string isJumpingParam = "IsJumping"; // 跳跃开始触发器
+// [SerializeField] private string isJumpingParam = "IsJumping"; // 跳跃开始触发器
 [SerializeField] private string jumpTrigger = "Jump";
 [SerializeField] private string landTrigger = "Land";
 [SerializeField] private string idleIndexParam = "IdleIndex";
