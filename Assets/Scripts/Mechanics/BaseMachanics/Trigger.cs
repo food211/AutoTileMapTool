@@ -22,7 +22,13 @@ public class Trigger : MonoBehaviour
     [SerializeField] private KeyCode triggerKey = KeyCode.Z;
     [SerializeField] private float triggerDelay = 0f;
     [SerializeField] private bool oneTimeOnly = false;
-    [SerializeField] private bool startActive = true;
+    [SerializeField] private bool startActive = false;
+    
+    [Header("碰撞器设置")]
+    [SerializeField] private bool useInteractionCollider = true; // 是否使用交互碰撞器
+    [SerializeField] private Collider2D interactionCollider; // 交互碰撞器引用
+    [SerializeField] private Collider2D physicsCollider; // 物理碰撞器引用
+    [SerializeField] private bool showInteractionRange = true; // 是否在编辑器中显示交互范围
     
     [Header("定时触发设置")]
     [SerializeField] private float initialDelay = 0f;     // 初始延迟时间
@@ -35,14 +41,22 @@ public class Trigger : MonoBehaviour
     
     // 事件系统，允许在编辑器中连接其他行为
     public UnityEvent onTriggerActivated;
+    public UnityEvent onPlayerEnterInteractionZone; // 当玩家进入交互区域时
+    public UnityEvent onPlayerExitInteractionZone; // 当玩家离开交互区域时
     
-    private bool hasTriggered = false;
-    private bool isActive = false;
-    private bool playerInTriggerArea = false;  // 跟踪玩家是否在触发区域内
-    private int currentRepeatCount = 0;        // 当前重复次数
-    private Coroutine timerCoroutine;          // 定时器协程引用
+    protected bool hasTriggered = false;
+    protected bool isActive = false;
+    protected bool playerInTriggerArea = false;  // 跟踪玩家是否在触发区域内
+    protected int currentRepeatCount = 0;        // 当前重复次数
+    protected Coroutine timerCoroutine;          // 定时器协程引用
     
-    private void Start()
+    protected virtual void Awake()
+    {
+        // 初始化碰撞器
+        SetupColliders();
+    }
+    
+    protected virtual void Start()
     {
         isActive = startActive;
         
@@ -53,7 +67,63 @@ public class Trigger : MonoBehaviour
         }
     }
     
-    private void Update()
+    /// <summary>
+    /// 设置碰撞器
+    /// </summary>
+    protected virtual void SetupColliders()
+    {
+        // 如果没有指定交互碰撞器，尝试查找
+        if (useInteractionCollider && interactionCollider == null)
+        {
+            // 首先尝试查找圆形碰撞器
+            interactionCollider = GetComponent<CircleCollider2D>();
+            
+            // 如果没有找到圆形碰撞器，查找任何触发器碰撞器
+            if (interactionCollider == null)
+            {
+                Collider2D[] colliders = GetComponents<Collider2D>();
+                foreach (var collider in colliders)
+                {
+                    if (collider.isTrigger)
+                    {
+                        interactionCollider = collider;
+                        break;
+                    }
+                }
+            }
+            
+            // 如果仍然没有找到，创建一个新的圆形碰撞器
+            if (interactionCollider == null && useInteractionCollider)
+            {
+                CircleCollider2D circleCollider = gameObject.AddComponent<CircleCollider2D>();
+                circleCollider.isTrigger = true;
+                circleCollider.radius = 1.5f; // 默认交互半径
+                interactionCollider = circleCollider;
+            }
+        }
+        
+        // 确保交互碰撞器是触发器
+        if (interactionCollider != null)
+        {
+            interactionCollider.isTrigger = true;
+        }
+        
+        // 如果没有指定物理碰撞器，尝试查找
+        if (physicsCollider == null)
+        {
+            Collider2D[] colliders = GetComponents<Collider2D>();
+            foreach (var collider in colliders)
+            {
+                if (!collider.isTrigger && collider != interactionCollider)
+                {
+                    physicsCollider = collider;
+                    break;
+                }
+            }
+        }
+    }
+    
+    protected virtual void Update()
     {
         if (!isActive) return;
         
@@ -66,7 +136,7 @@ public class Trigger : MonoBehaviour
         // 这里可以添加其他类型的触发检测
     }
     
-    private void OnEnable()
+    protected virtual void OnEnable()
     {
         // 订阅交互事件
         if (triggerType == TriggerType.ButtonPress)
@@ -75,8 +145,8 @@ public class Trigger : MonoBehaviour
         }
     }
     
-    private void OnDisable()
-    {
+    protected virtual void OnDisable()
+    {       
         // 取消订阅交互事件
         if (triggerType == TriggerType.ButtonPress)
         {
@@ -89,10 +159,17 @@ public class Trigger : MonoBehaviour
             StopCoroutine(timerCoroutine);
             timerCoroutine = null;
         }
+        
+        // 取消事件订阅（如果有必要）
+        if (onPlayerEnterInteractionZone != null)
+            onPlayerEnterInteractionZone.RemoveAllListeners();
+            
+        if (onPlayerExitInteractionZone != null)
+            onPlayerExitInteractionZone.RemoveAllListeners();
     }
     
     // 处理玩家交互事件
-    private void HandlePlayerInteract()
+    protected virtual void HandlePlayerInteract()
     {
         if (isActive && playerInTriggerArea && triggerType == TriggerType.ButtonPress)
         {
@@ -100,14 +177,18 @@ public class Trigger : MonoBehaviour
         }
     }
     
-    private void OnTriggerEnter2D(Collider2D other)
+    protected virtual void OnTriggerEnter2D(Collider2D other)
     {
         if (!isActive) return;
         
-        if (other.CompareTag(playerTag))
+        // 确保是交互碰撞器触发的事件
+        if (interactionCollider != null && other.IsTouching(interactionCollider) && other.CompareTag(playerTag))
         {
             // 更新玩家在触发区域内的状态
             playerInTriggerArea = true;
+            
+            // 触发玩家进入交互区域事件
+            onPlayerEnterInteractionZone?.Invoke();
             
             // 如果是按钮类型的触发器，通知 GameEvents 玩家进入了交互区域
             if (triggerType == TriggerType.ButtonPress)
@@ -122,14 +203,18 @@ public class Trigger : MonoBehaviour
         }
     }
     
-    private void OnTriggerExit2D(Collider2D other)
+    protected virtual void OnTriggerExit2D(Collider2D other)
     {
         if (!isActive) return;
         
-        if (other.CompareTag(playerTag))
+        // 确保是交互碰撞器触发的事件
+        if (interactionCollider != null && other.CompareTag(playerTag))
         {
             // 更新玩家离开触发区域的状态
             playerInTriggerArea = false;
+            
+            // 触发玩家离开交互区域事件
+            onPlayerExitInteractionZone?.Invoke();
             
             // 如果是按钮类型的触发器，通知 GameEvents 玩家离开了交互区域
             if (triggerType == TriggerType.ButtonPress)
@@ -144,11 +229,13 @@ public class Trigger : MonoBehaviour
         }
     }
     
-    private void OnTriggerStay2D(Collider2D other)
+    protected virtual void OnTriggerStay2D(Collider2D other)
     {
         if (!isActive) return;
         
-        if (triggerType == TriggerType.PlayerStay && other.CompareTag(playerTag))
+        // 确保是交互碰撞器触发的事件
+        if (interactionCollider != null && other.IsTouching(interactionCollider) && 
+            triggerType == TriggerType.PlayerStay && other.CompareTag(playerTag))
         {
             ActivateTrigger();
         }
@@ -157,7 +244,7 @@ public class Trigger : MonoBehaviour
     /// <summary>
     /// 激活触发器，通知所有关联的接收器
     /// </summary>
-    public void ActivateTrigger()
+    public virtual void ActivateTrigger()
     {
         if (oneTimeOnly && hasTriggered) return;
         
@@ -171,13 +258,13 @@ public class Trigger : MonoBehaviour
         }
     }
     
-    private IEnumerator DelayedTrigger()
+    protected virtual IEnumerator DelayedTrigger()
     {
         yield return new WaitForSeconds(triggerDelay);
         ExecuteTrigger();
     }
     
-    private void ExecuteTrigger()
+    protected virtual void ExecuteTrigger()
     {
         hasTriggered = true;
         
@@ -197,7 +284,7 @@ public class Trigger : MonoBehaviour
     /// <summary>
     /// 设置触发器的激活状态
     /// </summary>
-    public void SetActive(bool active)
+    public virtual void SetActive(bool active)
     {
         isActive = active;
         
@@ -219,7 +306,7 @@ public class Trigger : MonoBehaviour
     /// <summary>
     /// 重置触发器状态，允许再次触发
     /// </summary>
-    public void ResetTrigger()
+    public virtual void ResetTrigger()
     {
         hasTriggered = false;
         currentRepeatCount = 0;
@@ -238,7 +325,7 @@ public class Trigger : MonoBehaviour
     /// <summary>
     /// 启动定时触发器
     /// </summary>
-    private void StartTimerTrigger()
+    protected virtual void StartTimerTrigger()
     {
         if (triggerType == TriggerType.TimerBased)
         {
@@ -256,7 +343,7 @@ public class Trigger : MonoBehaviour
     /// <summary>
     /// 定时触发器协程
     /// </summary>
-    private IEnumerator TimerTriggerCoroutine()
+    protected virtual IEnumerator TimerTriggerCoroutine()
     {
         // 初始延迟
         if (initialDelay > 0)
@@ -295,7 +382,7 @@ public class Trigger : MonoBehaviour
     /// 外部调用触发 - 供其他脚本调用
     /// </summary>
     /// <param name="callerName">调用者名称，用于调试</param>
-    public void ExternalActivate(string callerName = "")
+    public virtual void ExternalActivate(string callerName = "")
     {
         if (triggerType == TriggerType.ExternalCall)
         {
@@ -317,18 +404,81 @@ public class Trigger : MonoBehaviour
     }
     
     /// <summary>
-    /// 获取触发器类型
-    /// </summary>
-    public TriggerType GetTriggerType()
-    {
-        return triggerType;
-    }
-    
-    /// <summary>
     /// 获取触发器是否已经触发过
     /// </summary>
     public bool HasTriggered()
     {
         return hasTriggered;
     }
+    
+    /// <summary>
+    /// 获取目标接收器数组
+    /// </summary>
+    public Reciever[] GetTargetRecievers()
+    {
+        return targetRecievers;
+    }
+    
+    /// <summary>
+    /// 添加目标接收器
+    /// </summary>
+    public void AddTargetReciever(Reciever reciever)
+    {
+        if (reciever != null)
+        {
+            // 创建新数组并添加接收器
+            List<Reciever> recievers = new List<Reciever>(targetRecievers);
+            if (!recievers.Contains(reciever))
+            {
+                recievers.Add(reciever);
+                targetRecievers = recievers.ToArray();
+            }
+        }
+    }
+    
+    /// <summary>
+    /// 获取玩家是否在交互区域内
+    /// </summary>
+    public bool IsPlayerInInteractionZone()
+    {
+        return playerInTriggerArea;
+    }
+    
+    #if UNITY_EDITOR
+    // 在编辑器中可视化交互范围
+    protected virtual void OnDrawGizmos()
+    {
+        if (showInteractionRange && useInteractionCollider)
+        {
+            // 绘制交互范围
+            Gizmos.color = new Color(0.2f, 0.8f, 0.2f, 0.3f);
+            
+            // 如果有交互碰撞器，使用它的实际尺寸
+            if (interactionCollider != null)
+            {
+                if (interactionCollider is CircleCollider2D circleCollider)
+                {
+                    // 绘制圆形交互区域
+                    Gizmos.DrawSphere(transform.position + (Vector3)circleCollider.offset, circleCollider.radius);
+                }
+                else if (interactionCollider is BoxCollider2D boxCollider)
+                {
+                    // 绘制方形交互区域
+                    Gizmos.matrix = Matrix4x4.TRS(
+                        transform.position + (Vector3)boxCollider.offset,
+                        transform.rotation,
+                        transform.lossyScale
+                    );
+                    Gizmos.DrawCube(Vector3.zero, boxCollider.size);
+                    Gizmos.matrix = Matrix4x4.identity;
+                }
+            }
+            else
+            {
+                // 如果没有碰撞器，使用默认半径
+                Gizmos.DrawSphere(transform.position, 1.5f);
+            }
+        }
+    }
+    #endif
 }
