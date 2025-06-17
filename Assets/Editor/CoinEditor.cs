@@ -232,4 +232,82 @@ public class CoinEditor : Editor
                 "确定");
         }
     }
+    
+    // 添加菜单项强制更新所有金币ID
+    [MenuItem("Tools/金币工具/强制更新所有金币ID")]
+    public static void ForceUpdateAllCoinIDs()
+    {
+        // 查找场景中所有的金币
+        Coin[] allCoins = GameObject.FindObjectsOfType<Coin>();
+        
+        if (allCoins.Length == 0)
+        {
+            EditorUtility.DisplayDialog("金币工具", "场景中没有找到金币对象！", "确定");
+            return;
+        }
+        
+        // 询问用户是否确定要强制更新所有ID
+        bool proceed = EditorUtility.DisplayDialog("强制更新金币ID", 
+            "此操作将重新生成所有金币的ID，可能会导致已保存的收集状态失效。\n\n确定要继续吗？", 
+            "确定", "取消");
+            
+        if (!proceed)
+        {
+            return;
+        }
+        
+        string sceneName = UnityEngine.SceneManagement.SceneManager.GetActiveScene().name;
+        int updatedCount = 0;
+        List<string> generatedIDs = new List<string>();
+        
+        // 开始记录撤销操作
+        Undo.RecordObjects(allCoins, "Force Update Coin IDs");
+        
+        // 为每个金币生成新ID
+        foreach (Coin coin in allCoins)
+        {
+            // 获取SerializedObject以便修改属性
+            SerializedObject serializedCoin = new SerializedObject(coin);
+            SerializedProperty idProperty = serializedCoin.FindProperty("coinID");
+            
+            // 生成新ID
+            Vector3 pos = coin.transform.position;
+            string newID = $"{sceneName}_Coin_{pos.x:F2}_{pos.y:F2}_{pos.z:F2}";
+            
+            // 确保ID唯一
+            int counter = 1;
+            string baseID = newID;
+            while (generatedIDs.Contains(newID))
+            {
+                newID = $"{baseID}_{counter}";
+                counter++;
+            }
+            
+            // 记录旧ID用于日志
+            string oldID = idProperty.stringValue;
+            
+            // 设置新ID
+            idProperty.stringValue = newID;
+            serializedCoin.ApplyModifiedProperties();
+            
+            generatedIDs.Add(newID);
+            updatedCount++;
+            
+            // 记录ID变更日志
+            if (!string.IsNullOrEmpty(oldID) && oldID != newID)
+            {
+                Debug.Log($"金币ID已更新: {oldID} -> {newID}", coin);
+            }
+        }
+        
+        // 标记场景为已修改
+        UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(
+            UnityEditor.SceneManagement.EditorSceneManager.GetActiveScene());
+        
+        EditorUtility.DisplayDialog("金币工具", 
+            $"强制更新完成!\n\n共找到 {allCoins.Length} 个金币\n已更新 {updatedCount} 个金币ID", 
+            "确定");
+        
+        Debug.Log($"金币ID强制更新完成: 共找到 {allCoins.Length} 个金币，已更新 {updatedCount} 个金币ID");
+    }
 }
