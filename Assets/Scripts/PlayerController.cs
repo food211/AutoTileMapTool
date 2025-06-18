@@ -94,7 +94,7 @@ public class PlayerController : MonoBehaviour
 
     // 内部变量
     private Rigidbody2D rb;
-    [SerializeField] private PlayerAnimatorController playerAnimatorController;
+    [SerializeField] private PlayerAnimationController playerAnimationController;
     private float aimAngle = 0f;
     private bool isGrounded = false;
     private bool isRopeMode = false;
@@ -1014,7 +1014,7 @@ private void HandleRopeShooting(bool isRopeBusy)
         }
 #endif
 
-        playerAnimatorController.TriggerJumpAnimation();
+        playerAnimationController.TriggerJumpAnimation();
 
 #if UNITY_EDITOR
         if (debugmode)

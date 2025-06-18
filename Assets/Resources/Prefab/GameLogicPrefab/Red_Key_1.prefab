@@ -13,7 +13,7 @@ GameObject:
   - component: {fileID: 1142323333586474671}
   - component: {fileID: 198233786518967182}
   - component: {fileID: 1919767248865823883}
-  m_Layer: 0
+  m_Layer: 8
   m_Name: Red_Key_1
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -116,7 +116,7 @@ BoxCollider2D:
   m_CallbackLayers:
     serializedVersion: 2
     m_Bits: 4294967295
-  m_IsTrigger: 1
+  m_IsTrigger: 0
   m_UsedByEffector: 0
   m_UsedByComposite: 0
   m_Offset: {x: 0, y: 0}
@@ -147,7 +147,7 @@ CircleCollider2D:
     m_Bits: 0
   m_ExcludeLayers:
     serializedVersion: 2
-    m_Bits: 0
+    m_Bits: 1024
   m_LayerOverridePriority: 0
   m_ForceSendLayers:
     serializedVersion: 2
@@ -166,7 +166,7 @@ CircleCollider2D:
   m_UsedByComposite: 0
   m_Offset: {x: 0, y: 0}
   serializedVersion: 2
-  m_Radius: 0.5
+  m_Radius: 1.82
 --- !u!114 &1919767248865823883
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -185,12 +185,22 @@ MonoBehaviour:
   triggerDelay: 0.5
   oneTimeOnly: 0
   startActive: 0
+  useInteractionCollider: 1
+  interactionCollider: {fileID: 198233786518967182}
+  physicsCollider: {fileID: 1142323333586474671}
+  showInteractionRange: 1
   initialDelay: 0
   repeatInterval: 5
   repeatTrigger: 1
   maxRepeatCount: 0
   targetRecievers: []
   onTriggerActivated:
+    m_PersistentCalls:
+      m_Calls: []
+  onPlayerEnterInteractionZone:
+    m_PersistentCalls:
+      m_Calls: []
+  onPlayerExitInteractionZone:
     m_PersistentCalls:
       m_Calls: []
   targetLock: {fileID: 0}
@@ -202,6 +212,8 @@ MonoBehaviour:
   unlockerAnimator: {fileID: 0}
   activateAnimTrigger: Activate
   deactivateAnimTrigger: Deactivate
+  interactionPrompt: {fileID: 0}
+  promptOffset: 1
   audioSource: {fileID: 0}
   activateSound: {fileID: 0}
   deactivateSound: {fileID: 0}

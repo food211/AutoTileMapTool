@@ -389,8 +389,8 @@ GameObject:
   - component: {fileID: 6506614103827697823}
   - component: {fileID: 6686334195298017003}
   - component: {fileID: 6603980903830980839}
-  - component: {fileID: 7538043934316890052}
   - component: {fileID: 3156414638838583058}
+  - component: {fileID: 8764406433208910332}
   m_Layer: 0
   m_Name: Player
   m_TagString: Player
@@ -611,27 +611,6 @@ MonoBehaviour:
   arrow: {fileID: 9072072273875727217}
   checkpointManager: {fileID: 0}
   respawnDelay: 0.1
---- !u!95 &7538043934316890052
-Animator:
-  serializedVersion: 5
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 5091384070288941404}
-  m_Enabled: 1
-  m_Avatar: {fileID: 0}
-  m_Controller: {fileID: 9100000, guid: 0065ca236e2740d4d84079ddc0537d70, type: 2}
-  m_CullingMode: 0
-  m_UpdateMode: 0
-  m_ApplyRootMotion: 0
-  m_LinearVelocityBlending: 0
-  m_StabilizeFeet: 0
-  m_WarningMessage: 
-  m_HasTransformHierarchy: 1
-  m_AllowConstantClipSamplingOptimization: 1
-  m_KeepAnimatorStateOnDisable: 0
-  m_WriteDefaultValuesOnDisable: 0
 --- !u!114 &3156414638838583058
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -644,23 +623,35 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c63849bbaa9e7f74dac94b5cdc44cfab, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  animator: {fileID: 7538043934316890052}
+  animator: {fileID: 8764406433208910332}
+  animStateParam: AnimState
   idleRandomInterval: 3
   idleRandomRange: 2
-  speedParam: Speed
-  isGroundedParam: IsGrounded
-  isRopeModeParam: IsRopeMode
-  isAimingParam: IsAiming
-  isJumpingParam: IsJumping
-  jumpTrigger: Jump
-  landTrigger: Land
   idleIndexParam: IdleIndex
+  aimIdleTimeoutDuration: 2.5
   velocityYParam: VelocityY
-  playerStateParam: PlayerState
-  ropeStateParam: RopeState
-  damagedTrigger: Damaged
-  dieTrigger: Die
-  respawnTrigger: Respawn
+  isAimingParam: IsAiming
   playerController: {fileID: 6686334195298017003}
   playerRb: {fileID: 6506614103827697823}
   debugMode: 0
+--- !u!95 &8764406433208910332
+Animator:
+  serializedVersion: 5
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5091384070288941404}
+  m_Enabled: 1
+  m_Avatar: {fileID: 0}
+  m_Controller: {fileID: 9100000, guid: a3166a5f6dc79f34982cdcf891e1a2e6, type: 2}
+  m_CullingMode: 0
+  m_UpdateMode: 0
+  m_ApplyRootMotion: 0
+  m_LinearVelocityBlending: 0
+  m_StabilizeFeet: 0
+  m_WarningMessage: 
+  m_HasTransformHierarchy: 1
+  m_AllowConstantClipSamplingOptimization: 1
+  m_KeepAnimatorStateOnDisable: 0
+  m_WriteDefaultValuesOnDisable: 0

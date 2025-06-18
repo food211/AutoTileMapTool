@@ -10,7 +10,8 @@ public class MovingObject : MonoBehaviour, IMechanicAction
         Linear,         // 线性移动
         PingPong,       // 来回移动
         Loop,           // 循环路径移动
-        OneTime         // 一次性移动
+        OneTime,        // 一次性移动
+        Toggle          // 切换端点移动（新增）
     }
     
     [Header("移动设置")]
@@ -27,6 +28,7 @@ public class MovingObject : MonoBehaviour, IMechanicAction
     private int currentWaypointIndex = 0;
     private Vector3 startPosition;
     private Coroutine movementCoroutine;
+    private bool isMovingForward = true; // 用于Toggle模式，标记移动方向
     
     public bool IsActive => isActive;
     
@@ -52,6 +54,22 @@ public class MovingObject : MonoBehaviour, IMechanicAction
         if (movementCoroutine != null)
         {
             StopCoroutine(movementCoroutine);
+        }
+        
+        // 对于Toggle模式，每次激活时切换方向
+        if (movementType == MovementType.Toggle)
+        {
+            isMovingForward = !isMovingForward;
+            
+            // 设置起始点和目标点
+            if (isMovingForward)
+            {
+                currentWaypointIndex = 0; // 从第一个点开始
+            }
+            else
+            {
+                currentWaypointIndex = waypoints.Length - 1; // 从最后一个点开始
+            }
         }
         
         movementCoroutine = StartCoroutine(MoveObject());
@@ -105,6 +123,18 @@ public class MovingObject : MonoBehaviour, IMechanicAction
                 isActive = false;
                 yield break;
             }
+            
+            // 如果是Toggle模式，当到达终点时自动停用
+            if (movementType == MovementType.Toggle)
+            {
+                // 如果正向移动且到达最后一个点，或反向移动且到达第一个点
+                if ((isMovingForward && currentWaypointIndex == 0) || 
+                    (!isMovingForward && currentWaypointIndex == waypoints.Length - 1))
+                {
+                    isActive = false;
+                    yield break;
+                }
+            }
         }
     }
     
@@ -154,6 +184,30 @@ public class MovingObject : MonoBehaviour, IMechanicAction
                     currentWaypointIndex = 0;
                 }
                 break;
+                
+            case MovementType.Toggle:
+                // Toggle模式：在两个端点之间切换
+                if (isMovingForward)
+                {
+                    // 正向移动：从第一个点到最后一个点
+                    currentWaypointIndex++;
+                    if (currentWaypointIndex >= waypoints.Length)
+                    {
+                        // 到达终点，准备下次从终点返回
+                        currentWaypointIndex = waypoints.Length - 1;
+                    }
+                }
+                else
+                {
+                    // 反向移动：从最后一个点到第一个点
+                    currentWaypointIndex--;
+                    if (currentWaypointIndex < 0)
+                    {
+                        // 到达起点，准备下次从起点出发
+                        currentWaypointIndex = 0;
+                    }
+                }
+                break;
         }
     }
     
@@ -173,6 +227,34 @@ public class MovingObject : MonoBehaviour, IMechanicAction
     private Vector3 GetCurrentPosition()
     {
         return useLocalSpace ? transform.localPosition : transform.position;
+    }
+    
+    // 获取当前移动方向（用于Toggle模式）
+    public bool IsMovingForward()
+    {
+        return isMovingForward;
+    }
+    
+    // 设置初始状态（对于Toggle模式很有用）
+    public void SetInitialState(bool startAtFirstPoint)
+    {
+        if (movementType == MovementType.Toggle)
+        {
+            // 设置初始位置和方向
+            isMovingForward = !startAtFirstPoint; // 下次激活时会切换
+            
+            // 直接设置位置到对应端点
+            if (startAtFirstPoint && waypoints.Length > 0 && waypoints[0] != null)
+            {
+                transform.position = waypoints[0].position;
+                currentWaypointIndex = 0;
+            }
+            else if (!startAtFirstPoint && waypoints.Length > 0 && waypoints[waypoints.Length - 1] != null)
+            {
+                transform.position = waypoints[waypoints.Length - 1].position;
+                currentWaypointIndex = waypoints.Length - 1;
+            }
+        }
     }
     
     // 用于在编辑器中可视化路径
@@ -202,6 +284,23 @@ public class MovingObject : MonoBehaviour, IMechanicAction
                 i == waypoints.Length - 1 && waypoints[0] != null)
             {
                 Gizmos.DrawLine(position, waypoints[0].position);
+            }
+        }
+        
+        // 为Toggle模式添加特殊标记
+        if (movementType == MovementType.Toggle && waypoints.Length >= 2)
+        {
+            // 标记起点和终点
+            if (waypoints[0] != null)
+            {
+                Gizmos.color = Color.green;
+                Gizmos.DrawSphere(waypoints[0].position, 0.25f);
+            }
+            
+            if (waypoints[waypoints.Length - 1] != null)
+            {
+                Gizmos.color = Color.red;
+                Gizmos.DrawSphere(waypoints[waypoints.Length - 1].position, 0.25f);
             }
         }
     }
