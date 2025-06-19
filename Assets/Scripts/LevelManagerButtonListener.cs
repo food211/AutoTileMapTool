@@ -62,7 +62,7 @@ public class LevelManagerButtonListener : MonoBehaviour
                 break;
                 
             case ButtonAction.ReloadCurrentLevel:
-                LevelManager.Instance.ReloadCurrentLevel();
+                LevelManager.Instance.RestartCurrentLevel();
                 break;
                 
             case ButtonAction.LoadMainMenu:

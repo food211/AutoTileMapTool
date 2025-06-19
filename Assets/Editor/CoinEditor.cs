@@ -34,7 +34,15 @@ public class CoinEditor : Editor
                 ProgressManager manager = FindObjectOfType<ProgressManager>();
                 if (manager != null)
                 {
-                    manager.SaveCoinCollected(idProperty.stringValue);
+                    // 创建一个SaveData对象
+                    SaveData data = new SaveData();
+                    data.objectType = "Coin";
+                    data.boolValue = true; // 标记为已收集
+                    
+                    // 保存对象数据
+                    manager.LoadPlayerData().SaveObject(idProperty.stringValue, "Coin", data);
+                    manager.SavePlayerData();
+                    
                     Debug.LogFormat($"已将金币 {idProperty.stringValue} 标记为已收集");
                 }
                 else
@@ -49,13 +57,16 @@ public class CoinEditor : Editor
                 ProgressManager manager = FindObjectOfType<ProgressManager>();
                 if (manager != null)
                 {
-                    PlayerData data = manager.LoadPlayerData();
-                    if (data.collectedCoins.Contains(idProperty.stringValue))
-                    {
-                        data.collectedCoins.Remove(idProperty.stringValue);
-                        manager.SavePlayerData();
-                        Debug.LogFormat($"已将金币 {idProperty.stringValue} 标记为未收集");
-                    }
+                    // 创建一个SaveData对象
+                    SaveData data = new SaveData();
+                    data.objectType = "Coin";
+                    data.boolValue = false; // 标记为未收集
+                    
+                    // 保存对象数据
+                    manager.LoadPlayerData().SaveObject(idProperty.stringValue, "Coin", data);
+                    manager.SavePlayerData();
+                    
+                    Debug.LogFormat($"已将金币 {idProperty.stringValue} 标记为未收集");
                 }
                 else
                 {
@@ -69,12 +80,45 @@ public class CoinEditor : Editor
                 ProgressManager manager = FindObjectOfType<ProgressManager>();
                 if (manager != null)
                 {
-                    bool isCollected = manager.IsCoinCollected(idProperty.stringValue);
+                    PlayerData playerData = manager.LoadPlayerData();
+                    bool isCollected = false;
+                    
+                    if (playerData.HasObjectData(idProperty.stringValue))
+                    {
+                        SaveData data = playerData.GetObjectData(idProperty.stringValue);
+                        isCollected = data.boolValue;
+                    }
+                    
                     Debug.LogFormat($"金币 {idProperty.stringValue} 状态: {(isCollected ? "已收集" : "未收集")}");
                 }
                 else
                 {
                     Debug.LogError("未找到ProgressManager实例，无法检查金币状态");
+                }
+            }
+            
+            if (GUILayout.Button("测试 - 删除此金币数据"))
+            {
+                // 确保ProgressManager实例存在
+                ProgressManager manager = FindObjectOfType<ProgressManager>();
+                if (manager != null)
+                {
+                    PlayerData playerData = manager.LoadPlayerData();
+                    
+                    if (playerData.HasObjectData(idProperty.stringValue))
+                    {
+                        playerData.RemoveObjectData(idProperty.stringValue);
+                        manager.SavePlayerData();
+                        Debug.LogFormat($"已删除金币 {idProperty.stringValue} 的保存数据");
+                    }
+                    else
+                    {
+                        Debug.LogFormat($"金币 {idProperty.stringValue} 没有保存数据");
+                    }
+                }
+                else
+                {
+                    Debug.LogError("未找到ProgressManager实例，无法删除金币数据");
                 }
             }
         }
@@ -309,5 +353,145 @@ public class CoinEditor : Editor
             "确定");
         
         Debug.Log($"金币ID强制更新完成: 共找到 {allCoins.Length} 个金币，已更新 {updatedCount} 个金币ID");
+    }
+    
+    // 添加菜单项检查所有金币的保存状态
+    [MenuItem("Tools/金币工具/检查所有金币保存状态")]
+    public static void CheckAllCoinsSaveStatus()
+    {
+        // 查找场景中所有的金币
+        Coin[] allCoins = GameObject.FindObjectsOfType<Coin>();
+        
+        if (allCoins.Length == 0)
+        {
+            EditorUtility.DisplayDialog("金币工具", "场景中没有找到金币对象！", "确定");
+            return;
+        }
+        
+        // 确保ProgressManager实例存在
+        ProgressManager manager = FindObjectOfType<ProgressManager>();
+        if (manager == null)
+        {
+            EditorUtility.DisplayDialog("金币工具", "未找到ProgressManager实例，无法检查金币状态！", "确定");
+            return;
+        }
+        
+        PlayerData playerData = manager.LoadPlayerData();
+        int collectedCount = 0;
+        int notCollectedCount = 0;
+        int noDataCount = 0;
+        
+        // 检查每个金币的状态
+        foreach (Coin coin in allCoins)
+        {
+            SerializedObject serializedCoin = new SerializedObject(coin);
+            SerializedProperty idProperty = serializedCoin.FindProperty("coinID");
+            string id = idProperty.stringValue;
+            
+            if (string.IsNullOrEmpty(id))
+            {
+                noDataCount++;
+                continue;
+            }
+            
+            if (playerData.HasObjectData(id))
+            {
+                SaveData data = playerData.GetObjectData(id);
+                if (data.boolValue)
+                {
+                    collectedCount++;
+                    Debug.Log($"金币 {id} 状态: 已收集", coin);
+                }
+                else
+                {
+                    notCollectedCount++;
+                    Debug.Log($"金币 {id} 状态: 未收集", coin);
+                }
+            }
+            else
+            {
+                noDataCount++;
+                Debug.Log($"金币 {id} 状态: 无数据", coin);
+            }
+        }
+        
+        // 显示结果
+        EditorUtility.DisplayDialog("金币保存状态检查结果", 
+            $"共找到 {allCoins.Length} 个金币:\n\n" +
+            $"已收集: {collectedCount} 个\n" +
+            $"未收集: {notCollectedCount} 个\n" +
+            $"无数据: {noDataCount} 个", 
+            "确定");
+    }
+    
+    // 添加菜单项重置所有金币的保存状态
+    [MenuItem("Tools/金币工具/重置所有金币保存状态")]
+    public static void ResetAllCoinsSaveStatus()
+    {
+        // 查找场景中所有的金币
+        Coin[] allCoins = GameObject.FindObjectsOfType<Coin>();
+        
+        if (allCoins.Length == 0)
+        {
+            EditorUtility.DisplayDialog("金币工具", "场景中没有找到金币对象！", "确定");
+            return;
+        }
+        
+        // 确保ProgressManager实例存在
+        ProgressManager manager = FindObjectOfType<ProgressManager>();
+        if (manager == null)
+        {
+            EditorUtility.DisplayDialog("金币工具", "未找到ProgressManager实例，无法重置金币状态！", "确定");
+            return;
+        }
+        
+        // 询问用户是否确定要重置所有金币状态
+        bool proceed = EditorUtility.DisplayDialog("重置金币状态", 
+            "此操作将重置所有金币的收集状态为未收集。\n\n确定要继续吗？", 
+            "确定", "取消");
+            
+        if (!proceed)
+        {
+            return;
+        }
+        
+        PlayerData playerData = manager.LoadPlayerData();
+        int resetCount = 0;
+        
+        // 重置每个金币的状态
+        foreach (Coin coin in allCoins)
+        {
+            SerializedObject serializedCoin = new SerializedObject(coin);
+            SerializedProperty idProperty = serializedCoin.FindProperty("coinID");
+            string id = idProperty.stringValue;
+            
+            if (string.IsNullOrEmpty(id))
+                continue;
+            
+            if (playerData.HasObjectData(id))
+            {
+                SaveData data = playerData.GetObjectData(id);
+                data.boolValue = false; // 设置为未收集
+                playerData.SaveObject(id, "Coin", data);
+                resetCount++;
+            }
+            else
+            {
+                // 如果没有数据，创建一个新的未收集状态
+                SaveData data = new SaveData();
+                data.objectType = "Coin";
+                data.boolValue = false;
+                playerData.SaveObject(id, "Coin", data);
+                resetCount++;
+            }
+        }
+        
+        // 保存更改
+        manager.SavePlayerData();
+        
+        // 显示结果
+        EditorUtility.DisplayDialog("金币状态重置结果", 
+            $"已重置 {resetCount} 个金币的收集状态为未收集。", 
+            "确定");
     }
 }

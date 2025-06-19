@@ -1,6 +1,6 @@
 using UnityEngine;
 
-public class Coin : MonoBehaviour
+public class Coin : MonoBehaviour, ISaveable
 {
     private Animator animator;
     private bool isCollected = false;
@@ -23,31 +23,7 @@ public class Coin : MonoBehaviour
     {
         animator = GetComponent<Animator>();
         
-        // 订阅场景完全加载事件
-        GameEvents.OnSceneFullyLoaded += CheckCollectionStatus;
-        
-        // 立即检查一次
-        CheckCollectionStatus();
-    }
-    
-    private void OnDestroy()
-    {
-        // 取消订阅事件
-        GameEvents.OnSceneFullyLoaded -= CheckCollectionStatus;
-    }
-    
-    private void CheckCollectionStatus(string sceneName = null)
-    {
-        // 确保ProgressManager实例存在
-        if (ProgressManager.Instance != null)
-        {
-            // 检查是否已收集
-            if (ProgressManager.Instance.IsCoinCollected(coinID))
-            {
-                gameObject.SetActive(false);
-                isCollected = true;
-            }
-        }
+        // 不再需要手动检查收集状态，SaveManager会自动加载状态
     }
     
     void OnTriggerEnter2D(Collider2D other)
@@ -58,32 +34,37 @@ public class Coin : MonoBehaviour
         // 检查是否是玩家
         if (other.CompareTag("Player"))
         {
-            isCollected = true;
-            
-            // 触发收集动画
-            if (animator != null)
-            {
-                animator.SetTrigger("Collect");
-            }
-            
-            // 禁用碰撞体防止重复触发
-            Collider2D col = GetComponent<Collider2D>();
-            if (col != null)
-            {
-                col.enabled = false;
-            }
-            
-            // 保存收集状态
-            if (ProgressManager.Instance != null)
-            {
-                ProgressManager.Instance.SaveCoinCollected(coinID);
-            }
-            
-            // 如果没有动画组件，直接隐藏
-            if (animator == null)
-            {
-                gameObject.SetActive(false);
-            }
+            Collect();
+        }
+    }
+    
+    private void Collect()
+    {
+        isCollected = true;
+        
+        // 触发收集动画
+        if (animator != null)
+        {
+            animator.SetTrigger("Collect");
+        }
+        
+        // 禁用碰撞体防止重复触发
+        Collider2D col = GetComponent<Collider2D>();
+        if (col != null)
+        {
+            col.enabled = false;
+        }
+        
+        // 保存收集状态
+        if (ProgressManager.Instance != null)
+        {
+            ProgressManager.Instance.SaveObject(this);
+        }
+        
+        // 如果没有动画组件，直接隐藏
+        if (animator == null)
+        {
+            gameObject.SetActive(false);
         }
     }
     
@@ -92,4 +73,35 @@ public class Coin : MonoBehaviour
     {
         gameObject.SetActive(false);
     }
+    
+    #region ISaveable Implementation
+    
+    public string GetUniqueID()
+    {
+        return coinID;
+    }
+    
+    public SaveData Save()
+    {
+        SaveData data = new SaveData();
+        data.objectType = "Coin";
+        data.boolValue = isCollected;
+        return data;
+    }
+    
+    public void Load(SaveData data)
+    {
+        if (data != null && data.objectType == "Coin")
+        {
+            isCollected = data.boolValue;
+            
+            // 如果已收集，直接禁用游戏对象
+            if (isCollected)
+            {
+                gameObject.SetActive(false);
+            }
+        }
+    }
+    
+    #endregion
 }

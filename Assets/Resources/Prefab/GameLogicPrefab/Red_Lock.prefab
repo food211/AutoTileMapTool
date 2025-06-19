@@ -153,7 +153,19 @@ MonoBehaviour:
       m_Calls: []
   onUnlockComplete:
     m_PersistentCalls:
-      m_Calls: []
+      m_Calls:
+      - m_Target: {fileID: 0}
+        m_TargetAssemblyTypeName: MovingObject, Assembly-CSharp
+        m_MethodName: Activate
+        m_Mode: 1
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+          m_IntArgument: 0
+          m_FloatArgument: 0
+          m_StringArgument: 
+          m_BoolArgument: 0
+        m_CallState: 2
   onResetLock:
     m_PersistentCalls:
       m_Calls: []
@@ -200,16 +212,8 @@ MonoBehaviour:
   blinkSpeed: 2
   blinkIntensity: 0.3
   useBlinkEffect: 1
-  actionComponents: []
-  unlockActionDelay: 0.5
-  lockMechanism: {fileID: 0}
-  lockSpriteRenderer: {fileID: 0}
-  onAllLightsOn:
-    m_PersistentCalls:
-      m_Calls: []
-  onLightChange:
-    m_PersistentCalls:
-      m_Calls: []
+  lockMechanism: {fileID: 4081401202827391474}
+  lockSpriteRenderer: {fileID: 1455331814688383585}
 --- !u!61 &4156614632887706888
 BoxCollider2D:
   m_ObjectHideFlags: 0

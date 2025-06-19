@@ -32,6 +32,7 @@ public static class GameEvents
     // 玩家移动相关事件
     public static event Action OnPlayerJump;
     public static event Action<bool> OnPlayerGroundedStateChanged; // true=着地，false=离地
+    
 
     // 相机缩放相关事件
     public static event Action OnCameraZoomIn;
@@ -225,21 +226,47 @@ public static class GameEvents
     {
         OnLevelLoaded?.Invoke(sceneName);
     }
-
+#region 交互相关事件
     // 交互相关事件
-    public static event Action<bool> OnPlayerInInteractiveZoneChanged; // 玩家进入/离开交互区域
-    public static event Action OnPlayerInteract; // 玩家执行交互
+    public static event Action<bool, InteractionType> OnPlayerInInteractiveZoneChanged; // 玩家进入/离开交互区域，以及交互类型
+        public enum InteractionType
+    {
+        Merchant,        // 商人交互
+        Environmental,  // 环境交互（如开关、门等）
+        Item,           // 道具使用
+        NPC            // NPC对话
+    }
+
+    // 交互事件委托，返回布尔值表示是否已处理此交互
+    public delegate bool PlayerInteractHandler(InteractionType interactionType);
+    public static event PlayerInteractHandler OnPlayerInteract;
+
+    // 触发交互事件，返回是否有任何监听器处理了此交互
+    public static bool TriggerPlayerInteract(InteractionType interactionType = InteractionType.Item)
+    {
+        if (OnPlayerInteract != null)
+        {
+            // 使用Delegate.GetInvocationList获取所有订阅者
+            foreach (PlayerInteractHandler handler in OnPlayerInteract.GetInvocationList())
+            {
+                // 如果任何处理器返回true，表示交互已被处理
+                if (handler(interactionType))
+                {
+                    return true;
+                }
+            }
+        }
+        return false; // 没有处理器处理此交互
+    }
 
     // 在触发方法部分添加以下内容
-    public static void TriggerPlayerInInteractiveZoneChanged(bool inZone)
+    public static void TriggerPlayerInInteractiveZoneChanged(bool inZone, InteractionType interactionType = InteractionType.Environmental)
     {
-        OnPlayerInInteractiveZoneChanged?.Invoke(inZone);
+        OnPlayerInInteractiveZoneChanged?.Invoke(inZone, interactionType);
     }
 
-    public static void TriggerPlayerInteract()
-    {
-        OnPlayerInteract?.Invoke();
-    }
+    #endregion
+
     public static event Action<Transform> OnPlayerReachedEndpointCenter;
 
     public static void TriggerPlayerReachedEndpointCenter(Transform endpoint)

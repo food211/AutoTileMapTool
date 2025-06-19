@@ -530,6 +530,26 @@ public class PlayerHealthManager : MonoBehaviour
     {
         return currentHealth;
     }
+
+    public void SetHealth(int health)
+    {
+        // 设置当前生命值，但不超过最大值
+        currentHealth = Mathf.Clamp(health, 0, maxHealth);
+        // 触发生命值变化事件
+        GameEvents.TriggerPlayerHealthChanged(currentHealth, maxHealth);
+    }
+
+    public void SetMaxHealth(int health)
+    {
+        // 设置最大生命值，但不小于1
+        maxHealth = Mathf.Max(1, health);
+        // 如果当前生命值超过最大值，调整为最大值
+        if (currentHealth > maxHealth)
+        {
+            currentHealth = maxHealth;
+            GameEvents.TriggerPlayerHealthChanged(currentHealth, maxHealth);
+        }
+    }
     
     /// <summary>
     /// 获取最大生命值

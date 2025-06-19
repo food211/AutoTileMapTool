@@ -51,6 +51,10 @@ public class LoadManager : MonoBehaviour
     [Header("输入控制")]
     [SerializeField] private bool disableInputWhileLoading = true;
     
+    [Header("进度加载")]
+    [SerializeField] private bool loadProgressInLoadingScene = true;
+    [SerializeField] private float progressLoadingTime = 0.5f;
+    
     // UI组件
     private Canvas fadeCanvas;
     private CanvasGroup fadeCanvasGroup;
@@ -62,6 +66,9 @@ public class LoadManager : MonoBehaviour
     // 事件
     public event Action OnFadeInStarted;
     public event Action OnFadeOutStarted;
+    
+    // 保存目标起始点ID，用于在加载场景中传递
+    private string targetStartPointID;
     
     private void Awake()
     {
@@ -160,7 +167,7 @@ public class LoadManager : MonoBehaviour
     /// <summary>
     /// 加载场景
     /// </summary>
-    public void LoadScene(string sceneName, bool? useLoadingUI = null)
+    public void LoadScene(string sceneName, bool? useLoadingUI = null, string startPointID = null)
     {
         // 如果已经在加载，则忽略
         if (isLoading)
@@ -168,6 +175,9 @@ public class LoadManager : MonoBehaviour
             LogWarning($"已经在加载场景 {currentLoadingScene}，忽略加载请求: {sceneName}");
             return;
         }
+        
+        // 保存目标起始点ID
+        targetStartPointID = startPointID;
         
         bool shouldUseLoadingUI = useLoadingUI ?? useLoadingScene;
         
@@ -235,6 +245,49 @@ public class LoadManager : MonoBehaviour
         {
             Log("找到 LoadingUIController");
             loadingUIController.SetLoadingScene(targetSceneName);
+            
+            // 设置目标起始点ID
+            if (!string.IsNullOrEmpty(targetStartPointID))
+            {
+                loadingUIController.SetTargetStartPointID(targetStartPointID);
+            }
+            
+            // 在加载场景中预加载游戏进度
+            if (loadProgressInLoadingScene)
+            {
+                // 更新进度条显示
+                loadingUIController.UpdateProgress(0.1f);
+                yield return new WaitForSeconds(0.1f);
+                
+                // 预加载游戏进度
+                Log("在加载界面中预加载游戏进度");
+                loadingUIController.UpdateProgress(0.2f);
+                
+                // 获取ProgressManager实例
+                ProgressManager progressManager = ProgressManager.Instance;
+                if (progressManager != null)
+                {
+                    // 加载玩家数据
+                    loadingUIController.UpdateProgress(0.3f);
+                    yield return new WaitForSeconds(0.1f);
+                    
+                    PlayerData playerData = progressManager.LoadPlayerData();
+                    loadingUIController.UpdateProgress(0.4f);
+                    yield return new WaitForSeconds(progressLoadingTime * 0.5f);
+                    
+                    // 预处理可保存对象数据
+                    loadingUIController.UpdateProgress(0.5f);
+                    progressManager.PreloadSaveData(targetSceneName);
+                    yield return new WaitForSeconds(progressLoadingTime * 0.5f);
+                    
+                    loadingUIController.UpdateProgress(0.6f);
+                    Log("游戏进度预加载完成");
+                }
+                else
+                {
+                    LogWarning("未找到ProgressManager实例，无法预加载游戏进度");
+                }
+            }
         }
         else
         {
@@ -263,13 +316,17 @@ public class LoadManager : MonoBehaviour
         AsyncOperation operation = SceneManager.LoadSceneAsync(sceneName, useAdditiveLoading ? LoadSceneMode.Additive : LoadSceneMode.Single);
         operation.allowSceneActivation = false;
         
-        float currentDisplayProgress = 0f;
+        float currentDisplayProgress = loadProgressInLoadingScene ? 0.6f : 0f;
         float targetProgress = 0f;
         
         // 加载循环
         while (!operation.isDone)
         {
-            targetProgress = operation.progress / 0.9f;
+            // 如果启用了进度预加载，则从0.6开始计算场景加载进度
+            float progressOffset = loadProgressInLoadingScene ? 0.6f : 0f;
+            float progressScale = loadProgressInLoadingScene ? 0.4f : 1f;
+            
+            targetProgress = progressOffset + (operation.progress / 0.9f) * progressScale;
             currentDisplayProgress = Mathf.Lerp(currentDisplayProgress, targetProgress, progressSmoothSpeed * Time.deltaTime);
 
             // 更新UI进度
@@ -278,7 +335,7 @@ public class LoadManager : MonoBehaviour
                 loadingUIController.UpdateProgress(currentDisplayProgress);
             
             // 检查是否加载完成
-            if (operation.progress >= 0.9f && currentDisplayProgress >= 0.95f)
+            if (operation.progress >= 0.9f && currentDisplayProgress >= (loadProgressInLoadingScene ? 0.98f : 0.95f))
             {
                 // 确保显示100%
                 Log($"更新100%进度 {sceneName}");
@@ -295,6 +352,10 @@ public class LoadManager : MonoBehaviour
                 // 淡出效果
                 if (useFadeEffect)
                     yield return StartCoroutine(FadeOut());
+                
+                // 通知加载UI控制器场景即将激活
+                if (loadingUIController != null)
+                    loadingUIController.OnSceneActivating();
                 
                 operation.allowSceneActivation = true;
             }
@@ -431,7 +492,7 @@ public class LoadManager : MonoBehaviour
         fadeCanvas.enabled = false;
     }
 
-        private void PerformGarbageCollection()
+    private void PerformGarbageCollection()
     {
         // 强制垃圾回收
         System.GC.Collect();

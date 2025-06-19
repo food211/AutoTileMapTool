@@ -5,7 +5,7 @@ using UnityEngine;
 /// <summary>
 /// 关卡终点，用于处理玩家进入下一个关卡
 /// </summary>
-public class Endpoint : MonoBehaviour
+public class Endpoint : MonoBehaviour, ISaveable
 {
     [Header("基本设置")]
     [Tooltip("终点唯一ID")]
@@ -54,6 +54,9 @@ public class Endpoint : MonoBehaviour
     // 是否已经触发
     private bool isTriggered = false;
     
+    // 是否已经使用过
+    private bool isUsed = false;
+    
     /// <summary>
     /// 获取终点ID
     /// </summary>
@@ -83,6 +86,15 @@ public class Endpoint : MonoBehaviour
         set => isEnabled = value; 
     }
     
+    /// <summary>
+    /// 是否已经使用过
+    /// </summary>
+    public bool IsUsed
+    {
+        get => isUsed;
+        set => isUsed = value;
+    }
+    
     private void Awake()
     {
         // 如果没有设置ID，使用对象名称作为ID
@@ -90,6 +102,12 @@ public class Endpoint : MonoBehaviour
         {
             endpointID = name;
         }
+    }
+    
+    private void Start()
+    {
+        // 在Start中加载状态，确保所有组件都已初始化
+        LoadEndpointState();
     }
     
     private void OnTriggerEnter2D(Collider2D other)
@@ -137,6 +155,7 @@ public class Endpoint : MonoBehaviour
         if (isTriggered || !isEnabled) return;
         
         isTriggered = true;
+        isUsed = true;
         
         // 播放特效
         if (playEffectsOnEnter && endpointEffectPrefab != null)
@@ -150,11 +169,8 @@ public class Endpoint : MonoBehaviour
             AudioSource.PlayClipAtPoint(endpointSound, transform.position);
         }
         
-        // 保存进度
-        if (ProgressManager.Instance != null)
-        {
-            ProgressManager.Instance.SaveEndpointUsed(EndpointID, targetSceneName, targetStartPointID);
-        }
+        // 保存状态
+        SaveEndpointState();
         
         // 触发终点事件 - 通知LevelManager处理场景切换
         GameEvents.TriggerEndpointReached(this.transform);
@@ -163,7 +179,80 @@ public class Endpoint : MonoBehaviour
         Debug.Log($"终点 {name} 已触发，目标场景: {targetSceneName}，目标起始点: {targetStartPointID}");
         #endif
     }
-
+    
+    /// <summary>
+    /// 保存终点状态
+    /// </summary>
+    private void SaveEndpointState()
+    {
+        if (ProgressManager.Instance != null)
+        {
+            // 使用新的保存系统
+            ProgressManager.Instance.SaveObject(this);
+        }
+    }
+    
+    /// <summary>
+    /// 加载终点状态
+    /// </summary>
+    private void LoadEndpointState()
+    {
+        // 状态将通过ISaveable接口的Load方法自动加载
+    }
+    
+    #region ISaveable Implementation
+    
+    /// <summary>
+    /// 获取对象的唯一ID
+    /// </summary>
+    public string GetUniqueID()
+    {
+        return "Endpoint_" + EndpointID;
+    }
+    
+    /// <summary>
+    /// 保存对象状态
+    /// </summary>
+    public SaveData Save()
+    {
+        SaveData data = new SaveData();
+        data.objectType = "Endpoint";
+        data.boolValue = isUsed;
+        data.stringValue = $"{targetSceneName}|{targetStartPointID}";
+        return data;
+    }
+    
+    /// <summary>
+    /// 加载对象状态
+    /// </summary>
+    public void Load(SaveData data)
+    {
+        if (data != null && data.objectType == "Endpoint")
+        {
+            isUsed = data.boolValue;
+            
+            // 如果有目标信息，解析它
+            if (!string.IsNullOrEmpty(data.stringValue))
+            {
+                string[] parts = data.stringValue.Split('|');
+                if (parts.Length >= 2)
+                {
+                    // 只有在未设置目标的情况下才加载保存的目标
+                    if (string.IsNullOrEmpty(targetSceneName))
+                    {
+                        targetSceneName = parts[0];
+                    }
+                    
+                    if (string.IsNullOrEmpty(targetStartPointID))
+                    {
+                        targetStartPointID = parts[1];
+                    }
+                }
+            }
+        }
+    }
+    
+    #endregion
     
     #if UNITY_EDITOR
     private void OnDrawGizmos()
@@ -214,7 +303,7 @@ public enum EndpointTriggerType
     /// 玩家进入触发
     /// </summary>
     PlayerEnter,
-    
+
     /// <summary>
     /// 手动触发（通过脚本调用）
     /// </summary>

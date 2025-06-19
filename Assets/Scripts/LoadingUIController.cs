@@ -1,95 +1,87 @@
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
-using System.Diagnostics;
+using System.Collections;
 
-/// <summary>
-/// 加载UI控制器 - 负责管理加载界面的UI元素和动画
-/// </summary>
 public class LoadingUIController : MonoBehaviour
 {
-    [Header("UI References")]
-    [SerializeField] private GameObject loadingScreen;
+    [Header("UI引用")]
     [SerializeField] private Slider progressBar;
     [SerializeField] private TextMeshProUGUI progressText;
-    [SerializeField] private Camera loadingCamera;
+    [SerializeField] private TextMeshProUGUI sceneNameText;
+    [SerializeField] private Image backgroundImage;
     
-    // 当前场景名
-    private string currentSceneName = "";
+    [Header("加载提示")]
+    [SerializeField] private TextMeshProUGUI tipText;
+    [SerializeField] private string[] loadingTips;
+    [SerializeField] private float tipChangeInterval = 5f;
     
-    // 调试模式
-    public bool isDebugMode = true;
+    [Header("动画设置")]
+    [SerializeField] private bool useProgressAnimation = true;
+    [SerializeField] private float progressAnimationSpeed = 2f;
+    
+    private string targetSceneName;
+    private float currentProgress = 0f;
+    private float targetProgress = 0f;
+    private Coroutine tipChangeCoroutine;
+    
+    // 目标起始点ID
+    private string targetStartPointID;
     
     private void Awake()
     {
-        // 检查UI引用
-        if (progressBar == null)
-        {
-            LogError("LoadingUIController: progressBar 引用为空! 请在Inspector中设置.");
-        }
-        
-        if (progressText == null)
-        {
-            LogError("LoadingUIController: progressText 引用为空! 请在Inspector中设置.");
-        }
-        
-        // 确保加载相机深度最高
-        if (loadingCamera != null)
-        {
-            loadingCamera.depth = 100;
-            
-            // 移除音频监听器（避免多个AudioListener冲突）
-            AudioListener audioListener = loadingCamera.GetComponent<AudioListener>();
-            if (audioListener != null)
-            {
-                Destroy(audioListener);
-            }
-        }
-        else
-        {
-            LogWarning("LoadingUIController: loadingCamera 引用为空! 可能会导致渲染问题.");
-        }
-        
         // 初始化UI
         if (progressBar != null)
-        {
             progressBar.value = 0;
-        }
-        
+            
         if (progressText != null)
-        {
             progressText.text = "0%";
-        }
-        
-        // 显示加载界面
-        if (loadingScreen != null)
+            
+        if (sceneNameText != null)
+            sceneNameText.text = "加载中...";
+            
+        if (tipText != null && loadingTips.Length > 0)
         {
-            loadingScreen.SetActive(true);
+            // 随机选择一个提示
+            tipText.text = loadingTips[Random.Range(0, loadingTips.Length)];
+            
+            // 启动提示切换协程
+            if (loadingTips.Length > 1)
+                tipChangeCoroutine = StartCoroutine(ChangeTipsPeriodically());
         }
-        
-        Log("LoadingUIController: 初始化完成");
+    }
+    
+    private void Update()
+    {
+        // 平滑进度条动画
+        if (useProgressAnimation && progressBar != null)
+        {
+            currentProgress = Mathf.Lerp(currentProgress, targetProgress, Time.deltaTime * progressAnimationSpeed);
+            progressBar.value = currentProgress;
+            
+            if (progressText != null)
+                progressText.text = $"{Mathf.RoundToInt(currentProgress * 100)}%";
+        }
     }
     
     /// <summary>
-    /// 设置当前加载的场景名
+    /// 设置正在加载的场景名称
     /// </summary>
     public void SetLoadingScene(string sceneName)
     {
-        currentSceneName = sceneName;
-        Log($"LoadingUIController: 设置当前加载场景为 {sceneName}");
+        targetSceneName = sceneName;
         
-        // 重置进度条
-        if (progressBar != null)
-        {
-            progressBar.value = 0;
-            Log("LoadingUIController: 重置进度条为 0");
-        }
-        
-        if (progressText != null)
-        {
-            progressText.text = "0%";
-            Log("LoadingUIController: 重置进度文本为 0%");
-        }
+        if (sceneNameText != null)
+            sceneNameText.text = $"正在加载 {sceneName}...";
+    }
+    
+    /// <summary>
+    /// 设置目标起始点ID
+    /// </summary>
+    public void SetTargetStartPointID(string startPointID)
+    {
+        targetStartPointID = startPointID;
+        Debug.Log($"LoadingUIController: 设置目标起始点ID为 {startPointID}");
     }
     
     /// <summary>
@@ -97,75 +89,84 @@ public class LoadingUIController : MonoBehaviour
     /// </summary>
     public void UpdateProgress(float progress)
     {
-        Log($"LoadingUIController: 更新进度 {currentSceneName}: {progress:P0}");
+        targetProgress = Mathf.Clamp01(progress);
         
-        // 更新进度条
-        if (progressBar != null)
+        // 如果不使用动画，直接设置值
+        if (!useProgressAnimation)
         {
-            Log($"LoadingUIController: 设置进度条值为 {progress:F2}");
-            progressBar.value = progress;
+            currentProgress = targetProgress;
             
-            // 强制刷新UI
-            Canvas.ForceUpdateCanvases();
-        }
-        else
-        {
-            LogError("LoadingUIController: progressBar 引用为空，无法更新进度条!");
-        }
-        
-        // 更新进度文本
-        if (progressText != null)
-        {
-            string newText = $"{Mathf.Round(progress * 100)}%";
-            progressText.text = newText;
-            Log($"LoadingUIController: 设置进度文本为 {newText}");
-        }
-        else
-        {
-            LogError("LoadingUIController: progressText 引用为空，无法更新进度文本!");
+            if (progressBar != null)
+                progressBar.value = currentProgress;
+                
+            if (progressText != null)
+                progressText.text = $"{Mathf.RoundToInt(currentProgress * 100)}%";
         }
     }
     
     /// <summary>
-    /// 加载完成
+    /// 加载完成时调用
     /// </summary>
     public void LoadingCompleted()
     {
-        Log($"LoadingUIController: 完成加载场景 {currentSceneName}");
-        
-        // 确保进度条显示100%
-        if (progressBar != null)
+        // 停止提示切换协程
+        if (tipChangeCoroutine != null)
         {
-            progressBar.value = 1f;
-            Log("LoadingUIController: 设置进度条为 100%");
-        }
-        
-        if (progressText != null)
-        {
-            progressText.text = "100%";
-            Log("LoadingUIController: 设置进度文本为 100%");
+            StopCoroutine(tipChangeCoroutine);
+            tipChangeCoroutine = null;
         }
     }
     
-    // 以下是条件日志方法，仅在编辑器模式或开发构建中执行
-    
-    [Conditional("UNITY_EDITOR"), Conditional("DEVELOPMENT_BUILD")]
-    private void Log(string message)
+    /// <summary>
+    /// 场景即将激活时调用
+    /// </summary>
+    public void OnSceneActivating()
     {
-        if (isDebugMode)
-            UnityEngine.Debug.Log(message);
+        // 确保ProgressManager实例存在
+        ProgressManager progressManager = ProgressManager.Instance;
+        if (progressManager != null)
+        {
+            // 设置LevelManager的目标起始点ID
+            LevelManager levelManager = FindObjectOfType<LevelManager>();
+            if (levelManager != null && !string.IsNullOrEmpty(targetStartPointID))
+            {
+                Debug.Log($"LoadingUIController: 传递目标起始点ID {targetStartPointID} 给LevelManager");
+                levelManager.SetTargetStartPointID(targetStartPointID);
+            }
+        }
     }
     
-    [Conditional("UNITY_EDITOR"), Conditional("DEVELOPMENT_BUILD")]
-    private void LogWarning(string message)
+    /// <summary>
+    /// 定期切换加载提示
+    /// </summary>
+    private IEnumerator ChangeTipsPeriodically()
     {
-        if (isDebugMode)
-            UnityEngine.Debug.LogWarning(message);
+        int currentTipIndex = Random.Range(0, loadingTips.Length);
+        
+        while (true)
+        {
+            yield return new WaitForSeconds(tipChangeInterval);
+            
+            // 选择一个不同的提示
+            int newIndex;
+            do
+            {
+                newIndex = Random.Range(0, loadingTips.Length);
+            } while (newIndex == currentTipIndex && loadingTips.Length > 1);
+            
+            currentTipIndex = newIndex;
+            
+            if (tipText != null)
+                tipText.text = loadingTips[currentTipIndex];
+        }
     }
     
-    [Conditional("UNITY_EDITOR"), Conditional("DEVELOPMENT_BUILD")]
-    private void LogError(string message)
+    private void OnDestroy()
     {
-        UnityEngine.Debug.LogError(message);
+        if (tipChangeCoroutine != null)
+        {
+            StopCoroutine(tipChangeCoroutine);
+            tipChangeCoroutine = null;
+        }
     }
 }

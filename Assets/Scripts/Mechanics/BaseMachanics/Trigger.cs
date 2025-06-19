@@ -18,8 +18,7 @@ public class Trigger : MonoBehaviour
 
     [Header("触发设置")]
     [SerializeField] private TriggerType triggerType = TriggerType.PlayerEnter;
-    [SerializeField] private string playerTag = "Player";
-    [SerializeField] private KeyCode triggerKey = KeyCode.Z;
+    [SerializeField] public string playerTag = "Player";
     [SerializeField] private float triggerDelay = 0f;
     [SerializeField] private bool oneTimeOnly = false;
     [SerializeField] private bool startActive = false;
@@ -38,6 +37,9 @@ public class Trigger : MonoBehaviour
     
     [Header("目标接收器")]
     [SerializeField] private Reciever[] targetRecievers;
+
+    [Header("交互设置")]
+    [SerializeField] protected GameEvents.InteractionType interactionType = GameEvents.InteractionType.Environmental; // 触发器的交互类型
     
     // 事件系统，允许在编辑器中连接其他行为
     public UnityEvent onTriggerActivated;
@@ -126,14 +128,6 @@ public class Trigger : MonoBehaviour
     protected virtual void Update()
     {
         if (!isActive) return;
-        
-        // 检查按键触发 - 修改为需要玩家在触发区域内
-        if (triggerType == TriggerType.ButtonPress && Input.GetKeyDown(triggerKey) && playerInTriggerArea)
-        {
-            ActivateTrigger();
-        }
-
-        // 这里可以添加其他类型的触发检测
     }
     
     protected virtual void OnEnable()
@@ -167,61 +161,65 @@ public class Trigger : MonoBehaviour
         if (onPlayerExitInteractionZone != null)
             onPlayerExitInteractionZone.RemoveAllListeners();
     }
-    
+
     // 处理玩家交互事件
-    protected virtual void HandlePlayerInteract()
+    protected virtual bool HandlePlayerInteract(GameEvents.InteractionType interactionType)
     {
-        if (isActive && playerInTriggerArea && triggerType == TriggerType.ButtonPress)
+        // 检查传入的交互类型是否与此触发器的交互类型匹配
+        if (isActive && playerInTriggerArea && interactionType == this.interactionType)
         {
             ActivateTrigger();
+            return true;
         }
+        return false;
     }
-    
+
     protected virtual void OnTriggerEnter2D(Collider2D other)
     {
         if (!isActive) return;
-        
+
         // 确保是交互碰撞器触发的事件
         if (interactionCollider != null && other.IsTouching(interactionCollider) && other.CompareTag(playerTag))
         {
             // 更新玩家在触发区域内的状态
             playerInTriggerArea = true;
-            
+
             // 触发玩家进入交互区域事件
             onPlayerEnterInteractionZone?.Invoke();
-            
-            // 如果是按钮类型的触发器，通知 GameEvents 玩家进入了交互区域
+
+            // 如果是按钮类型的触发器，通知 GameEvents 玩家进入了交互区域，并传递交互类型
             if (triggerType == TriggerType.ButtonPress)
             {
-                GameEvents.TriggerPlayerInInteractiveZoneChanged(true);
+                GameEvents.TriggerPlayerInInteractiveZoneChanged(true, interactionType);
             }
-            
+
             if (triggerType == TriggerType.PlayerEnter)
             {
                 ActivateTrigger();
             }
         }
     }
-    
+
     protected virtual void OnTriggerExit2D(Collider2D other)
     {
         if (!isActive) return;
-        
+
         // 确保是交互碰撞器触发的事件
         if (interactionCollider != null && other.CompareTag(playerTag))
         {
             // 更新玩家离开触发区域的状态
             playerInTriggerArea = false;
-            
+
             // 触发玩家离开交互区域事件
             onPlayerExitInteractionZone?.Invoke();
-            
+
             // 如果是按钮类型的触发器，通知 GameEvents 玩家离开了交互区域
             if (triggerType == TriggerType.ButtonPress)
             {
-                GameEvents.TriggerPlayerInInteractiveZoneChanged(false);
+                // 离开时使用默认的Item类型，表示恢复到默认交互状态
+                GameEvents.TriggerPlayerInInteractiveZoneChanged(false, GameEvents.InteractionType.Item);
             }
-            
+
             if (triggerType == TriggerType.PlayerExit)
             {
                 ActivateTrigger();

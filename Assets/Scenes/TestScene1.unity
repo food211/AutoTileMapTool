@@ -182,6 +182,17 @@ MonoBehaviour:
   pointLight: {fileID: 0}
   activationAreaColor: {r: 0.2, g: 0.8, b: 0.2, a: 0.3}
   respawnPointColor: {r: 0.2, g: 0.2, b: 0.8, a: 0.7}
+--- !u!114 &93173102 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 3156414638838583058, guid: f8e82ce3969e9b04c8f5e772185b718c, type: 3}
+  m_PrefabInstance: {fileID: 1888219644}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1888219651}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c63849bbaa9e7f74dac94b5cdc44cfab, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
 --- !u!4 &173176292 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 4480490896723715849, guid: 6070c8333d57c7042a0833d9dc9abd57, type: 3}
@@ -2584,6 +2595,10 @@ PrefabInstance:
       propertyPath: statusManager
       value: 
       objectReference: {fileID: 1389818831}
+    - target: {fileID: 6686334195298017003, guid: f8e82ce3969e9b04c8f5e772185b718c, type: 3}
+      propertyPath: playerAnimationController
+      value: 
+      objectReference: {fileID: 93173102}
     - target: {fileID: 9142167173418991407, guid: f8e82ce3969e9b04c8f5e772185b718c, type: 3}
       propertyPath: statusManager
       value: 
@@ -3193,6 +3208,18 @@ PrefabInstance:
     - target: {fileID: 1655636073523687918, guid: 6070c8333d57c7042a0833d9dc9abd57, type: 3}
       propertyPath: m_Name
       value: EndPoint
+      objectReference: {fileID: 0}
+    - target: {fileID: 1741686922174875949, guid: 6070c8333d57c7042a0833d9dc9abd57, type: 3}
+      propertyPath: endpointID
+      value: TestEndPoint_1
+      objectReference: {fileID: 0}
+    - target: {fileID: 1741686922174875949, guid: 6070c8333d57c7042a0833d9dc9abd57, type: 3}
+      propertyPath: targetSceneName
+      value: TestScene
+      objectReference: {fileID: 0}
+    - target: {fileID: 1741686922174875949, guid: 6070c8333d57c7042a0833d9dc9abd57, type: 3}
+      propertyPath: targetStartPointID
+      value: TestStartPoint_0
       objectReference: {fileID: 0}
     - target: {fileID: 4480490896723715849, guid: 6070c8333d57c7042a0833d9dc9abd57, type: 3}
       propertyPath: m_LocalScale.x

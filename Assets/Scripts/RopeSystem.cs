@@ -161,7 +161,7 @@ public class RopeSystem : MonoBehaviour
 
         // 将箭头设为该脚本的子对象，便于管理
         arrowObject.transform.SetParent(transform);
-        arrowObject.transform.localScale = transform.localScale * 1.5f;
+        arrowObject.transform.localScale = Vector3.Scale(transform.localScale, new Vector3(0.15f, 0.1f, 1f));
 
         // 初始时隐藏箭头
         arrowObject.SetActive(false);

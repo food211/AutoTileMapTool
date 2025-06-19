@@ -55,7 +55,7 @@ SpriteRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: 5ed6a9b6f7a940a44a6d29e6567076c8, type: 2}
+  - {fileID: 10754, guid: 0000000000000000f000000000000000, type: 0}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -181,10 +181,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   triggerType: 3
   playerTag: Player
-  triggerKey: 122
   triggerDelay: 0.5
   oneTimeOnly: 0
-  startActive: 0
+  startActive: 1
   useInteractionCollider: 1
   interactionCollider: {fileID: 198233786518967182}
   physicsCollider: {fileID: 1142323333586474671}
@@ -194,6 +193,7 @@ MonoBehaviour:
   repeatTrigger: 1
   maxRepeatCount: 0
   targetRecievers: []
+  interactionType: 1
   onTriggerActivated:
     m_PersistentCalls:
       m_Calls: []

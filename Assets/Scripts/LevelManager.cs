@@ -4,6 +4,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.SceneManagement;
 using TMPro;
+using System.Linq;
 
 /// <summary>
 /// 关卡管理器 - 负责关卡加载和场景转换
@@ -38,7 +39,7 @@ public class LevelManager : MonoBehaviour
     [SerializeField] private GameObject confirmationDialog;
     [SerializeField] private Button confirmButton;
     [SerializeField] private Button cancelButton;
-    
+    bool debugmode = false; // 调试模式开关
     // 当前场景名称
     private string currentSceneName;
     
@@ -89,10 +90,13 @@ public class LevelManager : MonoBehaviour
         SceneManager.sceneLoaded += OnSceneLoaded;
         
         // 订阅终点到达事件
-        GameEvents.OnPlayerReachedEndpointCenter += HandlePlayerReachedEndpointCenter;
+        GameEvents.OnPlayerReachedEndpointCenter += HandleEndpointReached;
         
         // 订阅玩家重生事件
         GameEvents.OnPlayerRespawn += HandlePlayerRespawn;
+        
+        // 订阅ProgressManager初始化完成事件
+        GameEvents.OnProgressManagerInitialized += HandleProgressManagerInitialized;
         
         // 记录当前场景名称
         currentSceneName = SceneManager.GetActiveScene().name;
@@ -109,17 +113,46 @@ public class LevelManager : MonoBehaviour
         {
             // 取消订阅事件
             SceneManager.sceneLoaded -= OnSceneLoaded;
-            GameEvents.OnPlayerReachedEndpointCenter -= HandlePlayerReachedEndpointCenter;
+            GameEvents.OnEndpointReached -= HandleEndpointReached;
             GameEvents.OnPlayerRespawn -= HandlePlayerRespawn;
+            GameEvents.OnProgressManagerInitialized -= HandleProgressManagerInitialized;
+        }
+    }
+    
+    /// <summary>
+    /// 处理ProgressManager初始化完成事件
+    /// </summary>
+    private void HandleProgressManagerInitialized()
+    {
+        // 重新获取ProgressManager引用
+        progressManager = ProgressManager.Instance;
+        
+        // 如果在菜单场景，更新菜单状态
+        if (IsMenuScene(currentSceneName))
+        {
+            InitializeMenu();
         }
     }
     
     /// <summary>
     /// 场景加载完成回调
     /// </summary>
-private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
+    private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
     {
         currentSceneName = scene.name;
+
+        // 检查是否是重置场景加载
+        bool resetScene = PlayerPrefs.GetInt("ResetCurrentScene", 0) == 1;
+        if (resetScene)
+        {
+            // 清除标志
+            PlayerPrefs.DeleteKey("ResetCurrentScene");
+            PlayerPrefs.Save();
+            
+            #if UNITY_EDITOR
+            Debug.LogFormat("正在重置场景状态，不应用保存的物体状态");
+            #endif
+        }
         
         // 获取CheckpointManager引用（可能在新场景中）
         checkpointManager = FindObjectOfType<CheckpointManager>();
@@ -255,7 +288,7 @@ private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
     /// <summary>
     /// 处理终点到达事件
     /// </summary>
-    private void HandlePlayerReachedEndpointCenter(Transform endpointTransform)
+    private void HandleEndpointReached(Transform endpointTransform)
     {
         Endpoint endpoint = endpointTransform.GetComponent<Endpoint>();
         
@@ -402,24 +435,24 @@ private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
                     #endif
                 }
             }
-            
-        // 如果有保存的玩家数据，应用它
-        if (progressManager != null && player != null)
-        {
-            progressManager.ApplyPlayerData();
-        }
         }
     }
-    
+
     /// <summary>
     /// 加载关卡
     /// </summary>
     public void LoadLevel(string levelName, float delay = 0)
     {
         if (isLoadingScene) return;
-        
+
         isLoadingScene = true;
-        
+
+        // 保存当前游戏状态（如果不是菜单场景）
+        if (!IsMenuScene(currentSceneName) && progressManager != null)
+        {
+            progressManager.SavePlayerData();
+        }
+
         // 如果有延迟，等待后再加载
         if (delay > 0)
         {
@@ -427,11 +460,11 @@ private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
         }
         else
         {
-            // 使用LoadManager加载场景
+            // 使用LoadManager加载场景，传递目标起始点ID
             LoadManager loadManager = LoadManager.Instance;
             if (loadManager != null)
             {
-                loadManager.LoadScene(levelName);
+                loadManager.LoadScene(levelName, null, targetStartPointID);
             }
             else
             {
@@ -578,22 +611,22 @@ private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
     {
         if (progressManager != null)
         {
-            // 获取最后保存的场景
-            string lastScene = progressManager.GetLastScene();
+            // 加载玩家数据
+            PlayerData playerData = progressManager.LoadPlayerData();
             
-            // 获取最后保存的起始点
-            string lastStartPoint = progressManager.GetLastStartPoint();
-            
-            if (!string.IsNullOrEmpty(lastScene))
+            if (playerData != null && !string.IsNullOrEmpty(playerData.currentScene))
             {
-                // 设置目标起始点
-                if (!string.IsNullOrEmpty(lastStartPoint))
+                // 设置目标场景和起始点
+                string targetScene = playerData.currentScene;
+                
+                // 如果有最后一个存档点，使用它
+                if (!string.IsNullOrEmpty(playerData.lastCheckpointID))
                 {
-                    targetStartPointID = lastStartPoint;
+                    targetStartPointID = playerData.lastCheckpointID;
                 }
                 
-                // 加载最后保存的场景
-                LoadLevel(lastScene);
+                // 加载目标场景
+                LoadLevel(targetScene);
             }
             else if (!string.IsNullOrEmpty(firstLevelName))
             {
@@ -624,7 +657,10 @@ private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
         #endif
     }
 
-        public void SaveAndExitGame()
+    /// <summary>
+    /// 保存并退出游戏
+    /// </summary>
+    public void SaveAndExitGame()
     {
         // 保存游戏状态
         if (progressManager != null && !IsMenuScene(currentSceneName))
@@ -638,12 +674,39 @@ private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
         Application.Quit();
         #endif
     }
-    
+
     /// <summary>
-    /// 重新加载当前关卡
+    /// 重新加载当前关卡，重置所有物体状态
     /// </summary>
-    public void ReloadCurrentLevel()
+    public void RestartCurrentLevel()
     {
+        // 设置一个标志，表示这是一个场景重置加载
+        PlayerPrefs.SetInt("ResetCurrentScene", 1);
+        PlayerPrefs.Save();
+
+        // 如果有ProgressManager，清除当前场景中的所有可保存对象状态
+        if (progressManager != null)
+        {
+            // 查找当前场景中所有实现了ISaveable接口的对象
+            var saveableObjects = FindObjectsOfType<MonoBehaviour>().OfType<ISaveable>().ToArray();
+
+#if UNITY_EDITOR
+if (debugmode)
+            Debug.LogFormat($"正在重置 {saveableObjects.Length} 个可保存对象的状态");
+#endif
+
+            // 重置所有可保存对象的状态
+            foreach (var saveable in saveableObjects)
+            {
+                // 从玩家数据中移除此对象的保存状态
+                progressManager.RemoveObjectState(saveable.GetUniqueID());
+            }
+
+            // 保存更改后的玩家数据（不包含已重置的对象状态）
+            progressManager.SavePlayerData();
+        }
+
+        // 加载当前场景
         LoadLevel(currentSceneName);
     }
     
@@ -653,5 +716,46 @@ private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
     public void LoadMainMenu()
     {
         LoadLevel(initialScene);
+    }
+
+    /// <summary>
+    /// 设置目标起始点ID
+    /// </summary>
+    public void SetTargetStartPointID(string startPointID)
+    {
+        if (!string.IsNullOrEmpty(startPointID))
+        {
+            targetStartPointID = startPointID;
+#if UNITY_EDITOR
+            Debug.Log($"LevelManager: 设置目标起始点ID为 {startPointID}");
+#endif
+        }
+    }
+
+    
+    /// <summary>
+    /// 获取最后一个场景名称
+    /// </summary>
+    public string GetLastScene()
+    {
+        if (progressManager != null)
+        {
+            PlayerData playerData = progressManager.LoadPlayerData();
+            return !string.IsNullOrEmpty(playerData?.currentScene) ? playerData.currentScene : firstLevelName;
+        }
+        return firstLevelName;
+    }
+    
+    /// <summary>
+    /// 获取最后一个起始点ID
+    /// </summary>
+    public string GetLastStartPoint()
+    {
+        if (progressManager != null)
+        {
+            PlayerData playerData = progressManager.LoadPlayerData();
+            return !string.IsNullOrEmpty(playerData?.lastCheckpointID) ? playerData.lastCheckpointID : firstLevelStartPoint;
+        }
+        return firstLevelStartPoint;
     }
 }

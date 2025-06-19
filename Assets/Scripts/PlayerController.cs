@@ -649,112 +649,112 @@ public class PlayerController : MonoBehaviour
 
     #region handle Input
     private void HandleNormalMode()
-{
-    if (!CanInput)
-        return;
-        
-    bool isRopeBusy = ropeSystemInitialized && ropeSystem.IsRopeShootingOrHooked();
-    float horizontalInput = Input.GetAxis("Horizontal");
+    {
+        if (!CanInput)
+            return;
 
-    // 处理玩家朝向
-    HandleRunningFacing(horizontalInput);
-    
-    // 处理移动逻辑
-    HandleMovement(horizontalInput, isRopeBusy);
-    
-    // 处理瞄准控制
-    HandleAiming(isRopeBusy);
-    
-    // 处理跳跃输入和缓冲
-    HandleJumpInput(isRopeBusy);
-    
-    // 处理道具使用
-    HandleItemUse(isRopeBusy);
-    
-    // 处理绳索发射
-    HandleRopeShooting(isRopeBusy);
-}
+        bool isRopeBusy = ropeSystemInitialized && ropeSystem.IsRopeShootingOrHooked();
+        float horizontalInput = Input.GetAxis("Horizontal");
 
-// 处理地面和空中移动
-private void HandleMovement(float horizontalInput, bool isRopeBusy)
-{
-    if (isGrounded && rbInitialized)
-    {
-        HandleGroundMovement(horizontalInput);
+        // 处理玩家朝向
+        HandleRunningFacing(horizontalInput);
+
+        // 处理移动逻辑
+        HandleMovement(horizontalInput, isRopeBusy);
+
+        // 处理瞄准控制
+        HandleAiming(isRopeBusy);
+
+        // 处理跳跃输入和缓冲
+        HandleJumpInput(isRopeBusy);
+
+        // 处理道具使用
+        HandleItemUse(isRopeBusy);
+
+        // 处理绳索发射
+        HandleRopeShooting(isRopeBusy);
     }
-    else if (rbInitialized)
+
+    // 处理地面和空中移动
+    private void HandleMovement(float horizontalInput, bool isRopeBusy)
     {
-        HandleAirMovement(horizontalInput);
-    }
-    
-    // 根据移动方向更新玩家朝向 - 只在绳索未发射时
-    if (horizontalInput != 0 && !isRopeBusy)
-    {
-        // 如果向右移动，朝向右边
-        if (horizontalInput > 0)
+        if (isGrounded && rbInitialized)
         {
-            aimIndicator.transform.localScale = new Vector3(1, 1, 1); // 正常比例，朝右
+            HandleGroundMovement(horizontalInput);
         }
-        // 如果向左移动，朝向左边
-        else if (horizontalInput < 0)
+        else if (rbInitialized)
         {
-            aimIndicator.transform.localScale = new Vector3(-1, 1, 1); // X轴反转，朝左
+            HandleAirMovement(horizontalInput);
+        }
+
+        // 根据移动方向更新玩家朝向 - 只在绳索未发射时
+        if (horizontalInput != 0 && !isRopeBusy)
+        {
+            // 如果向右移动，朝向右边
+            if (horizontalInput > 0)
+            {
+                aimIndicator.transform.localScale = new Vector3(1, 1, 1); // 正常比例，朝右
+            }
+            // 如果向左移动，朝向左边
+            else if (horizontalInput < 0)
+            {
+                aimIndicator.transform.localScale = new Vector3(-1, 1, 1); // X轴反转，朝左
+            }
         }
     }
-}
 
-// 处理地面移动
-private void HandleGroundMovement(float horizontalInput)
-{
-    // 在地面上时完全控制移动
-    airControlTimeRemaining = airControlDuration;
-
-    // 检查是否在斜坡上，以及移动方向是否是上坡
-    bool isMovingUpSlope = CheckIfMovingUpSlope(horizontalInput);
-
-    // 检查是否在兔子跳时间窗口内
-    bool inBunnyHopWindow = (Time.time - lastLandingTime) <= bunnyHopWindow;
-    bool hasSignificantLandingSpeed = Mathf.Abs(lastLandingVelocityX) > 3f;
-
-    // 根据不同情况应用不同的移动逻辑
-    if (inBunnyHopWindow && hasSignificantLandingSpeed)
+    // 处理地面移动
+    private void HandleGroundMovement(float horizontalInput)
     {
-        ApplyBunnyHopMovement(horizontalInput);
-    }
-    else
-    {
-        ApplyNormalGroundMovement(horizontalInput, isMovingUpSlope);
+        // 在地面上时完全控制移动
+        airControlTimeRemaining = airControlDuration;
+
+        // 检查是否在斜坡上，以及移动方向是否是上坡
+        bool isMovingUpSlope = CheckIfMovingUpSlope(horizontalInput);
+
+        // 检查是否在兔子跳时间窗口内
+        bool inBunnyHopWindow = (Time.time - lastLandingTime) <= bunnyHopWindow;
+        bool hasSignificantLandingSpeed = Mathf.Abs(lastLandingVelocityX) > 3f;
+
+        // 根据不同情况应用不同的移动逻辑
+        if (inBunnyHopWindow && hasSignificantLandingSpeed)
+        {
+            ApplyBunnyHopMovement(horizontalInput);
+        }
+        else
+        {
+            ApplyNormalGroundMovement(horizontalInput, isMovingUpSlope);
+        }
+
+        // 如果刚刚落地，重置跳跃状态
+        if (isJumping)
+        {
+            isJumping = false;
+            // 可以在这里添加落地音效或动画触发
+        }
     }
 
-    // 如果刚刚落地，重置跳跃状态
-    if (isJumping)
+    // 检查是否在上坡移动
+    private bool CheckIfMovingUpSlope(float horizontalInput)
     {
-        isJumping = false;
-        // 可以在这里添加落地音效或动画触发
-    }
-}
+        if (currentSlopeAngle <= 0f)
+            return false;
 
-// 检查是否在上坡移动
-private bool CheckIfMovingUpSlope(float horizontalInput)
-{
-    if (currentSlopeAngle <= 0f)
+        // 获取当前站立的斜坡法线
+        RaycastHit2D hit = Physics2D.Raycast(transform.position, Vector2.down, 0.5f, groundLayers);
+        if (hit.collider != null)
+        {
+            Vector2 slopeNormal = hit.normal;
+
+            // 计算斜坡方向（垂直于法线）
+            Vector2 slopeDirection = new Vector2(slopeNormal.y, -slopeNormal.x);
+
+            // 判断玩家移动方向是否与斜坡上坡方向一致
+            return (slopeDirection.x > 0 && horizontalInput > 0) ||
+                   (slopeDirection.x < 0 && horizontalInput < 0);
+        }
         return false;
-        
-    // 获取当前站立的斜坡法线
-    RaycastHit2D hit = Physics2D.Raycast(transform.position, Vector2.down, 0.5f, groundLayers);
-    if (hit.collider != null)
-    {
-        Vector2 slopeNormal = hit.normal;
-
-        // 计算斜坡方向（垂直于法线）
-        Vector2 slopeDirection = new Vector2(slopeNormal.y, -slopeNormal.x);
-
-        // 判断玩家移动方向是否与斜坡上坡方向一致
-        return (slopeDirection.x > 0 && horizontalInput > 0) ||
-               (slopeDirection.x < 0 && horizontalInput < 0);
     }
-    return false;
-}
 
 // 应用兔子跳移动逻辑
 private void ApplyBunnyHopMovement(float horizontalInput)
@@ -952,14 +952,18 @@ private void HandleAiming(bool isRopeBusy)
 #endif
     }
 
-// 处理道具使用
-private void HandleItemUse(bool isRopeBusy)
-{
-    if (Input.GetKeyDown(KeyCode.Z) && ropeSystemInitialized && !ropeSystem.IsShooting())
+    // 处理道具使用
+    private void HandleItemUse(bool isRopeBusy)
     {
-        UseItem();
+        if (Input.GetKeyDown(KeyCode.Z) && ropeSystemInitialized && !ropeSystem.IsShooting() && Input.GetKey(KeyCode.LeftShift) == false)
+        {
+            UseItem();
+        }
+        if (Input.GetKey(KeyCode.LeftShift) && Input.GetKeyDown(KeyCode.Z) && ropeSystemInitialized && !ropeSystem.IsShooting())
+        {
+            ForceUseItem();
+        }
     }
-}
 
 // 处理绳索发射
 private void HandleRopeShooting(bool isRopeBusy)
@@ -1094,43 +1098,107 @@ private void HandleRopeShooting(bool isRopeBusy)
     }
 
     private void HandleRopeMode()
+{
+    if (!CanInput || !ropeSystemInitialized)
+        return;
+
+    // 获取输入
+    float horizontalInput = Input.GetAxis("Horizontal");
+    bool isPressingUp = Input.GetKey(KeyCode.UpArrow);
+    bool isPressingDown = Input.GetKey(KeyCode.DownArrow);
+    bool isPressingSpace = Input.GetKeyDown(KeyCode.Space);
+
+    // 处理绳索摆动
+    HandleRopeSwinging(horizontalInput);
+
+    // 处理绳索长度调整
+    HandleRopeLengthAdjustment(isPressingUp, isPressingDown);
+
+    // 处理绳索释放
+    HandleRopeRelease(isPressingSpace);
+
+    // 处理道具使用
+    HandleItemUseInRopeMode();
+
+    // 限制最大速度
+    LimitMaxVelocity();
+}
+
+// 处理绳索摆动
+private void HandleRopeSwinging(float horizontalInput)
+{
+    // 只有当有明显的水平输入时才摆动
+    if (Mathf.Abs(horizontalInput) > 0.1f)
     {
-        // 左右摆动
-        if (Input.GetKey(KeyCode.LeftArrow) && CanInput && ropeSystemInitialized)
-        {
-            ropeSystem.Swing(1 * swingForce);
-        }
-        else if (Input.GetKey(KeyCode.RightArrow) && CanInput && ropeSystemInitialized)
-        {
-            ropeSystem.Swing(-1 * swingForce);
-        }
+        // 根据输入方向应用摆动力
+        float direction = -Mathf.Sign(horizontalInput); // 反向是因为力的应用方式
+        ropeSystem.Swing(direction * swingForce);
 
-        // 收缩绳索 - 检查头部是否有障碍物
-        if (Input.GetKey(KeyCode.UpArrow) && !CheckHeadCollision() && CanInput && ropeSystemInitialized)
-        {
-            ropeSystem.AdjustRopeLength(-5f);
-        }
+#if UNITY_EDITOR
+        if (debugmode && Time.frameCount % 30 == 0)
+            Debug.LogFormat("绳索摆动: 方向={0}, 力={1}", direction, direction * swingForce);
+#endif
+    }
+}
 
-        // 伸长绳索 - 检查脚下是否有障碍物
-        if (Input.GetKey(KeyCode.DownArrow) && !CheckGroundCollision() && CanInput && ropeSystemInitialized)
-        {
-            ropeSystem.AdjustRopeLength(5f);
-        }
+// 处理绳索长度调整
+private void HandleRopeLengthAdjustment(bool isPressingUp, bool isPressingDown)
+{
+    // 收缩绳索 - 检查头部是否有障碍物
+    if (isPressingUp && !CheckHeadCollision())
+    {
+        ropeSystem.AdjustRopeLength(-5f);
 
-        // 释放绳索
-        if (Input.GetKeyDown(KeyCode.Space) && CanShootRope && ropeSystemInitialized)
-        {
-            ropeSystem.ReleaseRope();
-        }
+#if UNITY_EDITOR
+        if (debugmode && Time.frameCount % 30 == 0)
+            Debug.LogFormat("绳索收缩");
+#endif
+    }
 
-        // 添加使用道具的逻辑 - 只在绳索不处于发射状态时
-        if (Input.GetKeyDown(KeyCode.Z) && ropeSystemInitialized && !ropeSystem.IsShooting() && CanInput)
+    // 伸长绳索 - 检查脚下是否有障碍物
+    if (isPressingDown && !CheckGroundCollision())
+    {
+        ropeSystem.AdjustRopeLength(5f);
+
+#if UNITY_EDITOR
+        if (debugmode && Time.frameCount % 30 == 0)
+            Debug.LogFormat("绳索伸长");
+#endif
+    }
+}
+
+// 处理绳索释放
+private void HandleRopeRelease(bool isPressingSpace)
+{
+    if (isPressingSpace && CanShootRope)
+    {
+        ropeSystem.ReleaseRope();
+
+#if UNITY_EDITOR
+        if (debugmode)
+            Debug.LogFormat("释放绳索");
+#endif
+    }
+}
+
+    // 处理绳索模式下的道具使用
+    private void HandleItemUseInRopeMode()
+    {
+        // 确保绳索不处于发射状态
+        if (ropeSystem.IsShooting())
+            return;
+
+        // 普通道具使用
+        if (Input.GetKeyDown(KeyCode.Z) && Input.GetKey(KeyCode.LeftShift) == false)
         {
             UseItem();
         }
 
-        // 限制最大速度
-        LimitMaxVelocity();
+        // 强制道具使用
+        if (Input.GetKey(KeyCode.LeftShift) && Input.GetKeyDown(KeyCode.Z))
+        {
+            ForceUseItem();
+        }
     }
 
     #endregion
@@ -1364,13 +1432,26 @@ public void ExitRopeMode()
     }
 
 
+    // 修改UseItem方法，使用新的交互系统
     public void UseItem()
     {
-        // 触发交互事件，让 Trigger 脚本可以响应
-        GameEvents.TriggerPlayerInteract();
+        // 调用交互事件并获取返回值
+        bool handled = GameEvents.TriggerPlayerInteract(currentInteractionType);
 
 #if UNITY_EDITOR
-        Debug.LogFormat("使用道具或交互");
+        if (debugmode)
+            Debug.LogFormat("使用道具或交互，交互类型: {0}，是否被处理: {1}", currentInteractionType, handled);
+#endif
+    }
+
+    public void ForceUseItem()
+    {
+        // 强制使用Item类型交互，无论当前交互类型是什么
+        bool handled = GameEvents.TriggerPlayerInteract(GameEvents.InteractionType.Item);
+
+#if UNITY_EDITOR
+        if (debugmode)
+            Debug.LogFormat("强制使用道具交互，是否被处理: {0}", handled);
 #endif
     }
     
@@ -1748,10 +1829,20 @@ public void ExitRopeMode()
     }
 
     // 添加处理玩家进入/离开交互区域的方法
-    private bool playerInInteractiveZone = false;
-    private void HandlePlayerInInteractiveZoneChanged(bool inZone)
+
+    private GameEvents.InteractionType currentInteractionType = GameEvents.InteractionType.Item; // 默认为道具交互
+    private void HandleInteractiveZoneChanged(bool inZone, GameEvents.InteractionType interactionType)
     {
-        playerInInteractiveZone = inZone;
+        if (inZone)
+        {
+            // 玩家进入交互区域，更新当前交互类型
+            currentInteractionType = interactionType;
+        }
+        else
+        {
+            // 玩家离开交互区域，恢复默认交互类型
+            currentInteractionType = GameEvents.InteractionType.Item;
+        }
     }
 
     /// 获取无敌状态
@@ -1859,7 +1950,7 @@ public void ExitRopeMode()
         GameEvents.OnCanShootRopeChanged += HandleCanShootRopeChanged;
         GameEvents.OnPlayerDied += HandlePlayerDied;
         GameEvents.OnPlayerRespawnCompleted += HandlePlayerRespawn;
-        GameEvents.OnPlayerInInteractiveZoneChanged += HandlePlayerInInteractiveZoneChanged;
+        GameEvents.OnPlayerInInteractiveZoneChanged += HandleInteractiveZoneChanged;
         GameEvents.OnEndpointReached += HandleEndpointReached;
     }
         
@@ -1869,7 +1960,7 @@ public void ExitRopeMode()
         GameEvents.OnCanShootRopeChanged -= HandleCanShootRopeChanged;
         GameEvents.OnPlayerDied -= HandlePlayerDied;
         GameEvents.OnPlayerRespawnCompleted -= HandlePlayerRespawn;
-        GameEvents.OnPlayerInInteractiveZoneChanged -= HandlePlayerInInteractiveZoneChanged;
+        GameEvents.OnPlayerInInteractiveZoneChanged -= HandleInteractiveZoneChanged;
         GameEvents.OnEndpointReached -= HandleEndpointReached;
         
         // 停止所有协程

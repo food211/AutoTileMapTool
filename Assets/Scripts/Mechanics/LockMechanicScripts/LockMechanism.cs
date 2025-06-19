@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Events;
 
-public class LockMechanism : MonoBehaviour, IMechanicAction
+public class LockMechanism : MonoBehaviour, IMechanicAction, ISaveable
 {
     [System.Serializable]
     public enum LockState
@@ -18,6 +18,10 @@ public class LockMechanism : MonoBehaviour, IMechanicAction
     [SerializeField] private bool resetOnDeactivate = false;
     [SerializeField] private float unlockDelay = 1.0f;
     [SerializeField] private bool allowUnlockerDeactivation = true; // 允许解锁器取消激活
+    
+    [Header("保存设置")]
+    [Tooltip("锁的唯一ID，用于保存状态")]
+    [SerializeField] private string lockID;
 
     [Header("视觉反馈")]
     [SerializeField] private SpriteRenderer lockSpriteRenderer;
@@ -46,6 +50,17 @@ public class LockMechanism : MonoBehaviour, IMechanicAction
     private bool isProcessingUnlock = false;
 
     public bool IsActive { get; private set; }
+
+    private void Awake()
+    {
+        // 如果没有设置ID，自动生成一个
+        if (string.IsNullOrEmpty(lockID))
+        {
+            string sceneName = UnityEngine.SceneManagement.SceneManager.GetActiveScene().name;
+            Vector3 pos = transform.position;
+            lockID = $"{sceneName}_Lock_{pos.x:F2}_{pos.y:F2}_{pos.z:F2}";
+        }
+    }
 
     private void Start()
     {
@@ -92,6 +107,9 @@ public class LockMechanism : MonoBehaviour, IMechanicAction
         {
             StartCoroutine(ProcessUnlock());
         }
+        
+        // 保存状态
+        SaveState();
     }
     
     /// <summary>
@@ -125,6 +143,9 @@ public class LockMechanism : MonoBehaviour, IMechanicAction
             {
                 currentState = LockState.Locked;
             }
+            
+            // 保存状态
+            SaveState();
         }
     }
 
@@ -170,6 +191,9 @@ public class LockMechanism : MonoBehaviour, IMechanicAction
         UpdateVisuals();
         
         isProcessingUnlock = false;
+        
+        // 保存状态
+        SaveState();
     }
 
     /// <summary>
@@ -215,6 +239,11 @@ public class LockMechanism : MonoBehaviour, IMechanicAction
         
         // 更新视觉效果
         UpdateVisuals();
+        // 重置锁的动画
+        if (lockAnimator != null)
+        {
+            lockAnimator.SetFloat(progressAnimParam, 0f);
+        }
         
         // 重置所有解锁器
         foreach (var unlocker in unlockerTriggers)
@@ -224,6 +253,9 @@ public class LockMechanism : MonoBehaviour, IMechanicAction
                 unlocker.ResetTrigger();
             }
         }
+        
+        // 保存状态
+        SaveState();
     }
 
     /// <summary>
@@ -249,6 +281,18 @@ public class LockMechanism : MonoBehaviour, IMechanicAction
     {
         requiredUnlockers = Mathf.Max(1, count);
         UpdateVisuals();
+    }
+
+    /// <summary>
+    /// 保存锁的状态
+    /// </summary>
+    private void SaveState()
+    {
+        // 使用ProgressManager保存状态
+        if (ProgressManager.Instance != null)
+        {
+            ProgressManager.Instance.SaveObject(this);
+        }
     }
 
     #region IMechanicAction Implementation
@@ -278,6 +322,61 @@ public class LockMechanism : MonoBehaviour, IMechanicAction
         if (resetOnDeactivate)
         {
             ResetLock();
+        }
+    }
+    
+    #endregion
+
+    #region ISaveable Implementation
+    
+    /// <summary>
+    /// 获取对象的唯一ID
+    /// </summary>
+    public string GetUniqueID()
+    {
+        return lockID;
+    }
+    
+    /// <summary>
+    /// 保存对象状态
+    /// </summary>
+    public SaveData Save()
+    {
+        SaveData data = new SaveData();
+        data.objectType = "LockMechanism";
+        data.intValue = currentUnlockCount;
+        data.boolValue = currentState == LockState.Unlocked;
+        return data;
+    }
+    
+    /// <summary>
+    /// 加载对象状态
+    /// </summary>
+    public void Load(SaveData data)
+    {
+        if (data != null && data.objectType == "LockMechanism")
+        {
+            // 恢复解锁计数
+            currentUnlockCount = data.intValue;
+            
+            // 恢复锁状态
+            if (data.boolValue)
+            {
+                currentState = LockState.Unlocked;
+                
+                // 如果锁已解锁，触发解锁完成事件
+                if (IsActive)
+                {
+                    onUnlockComplete?.Invoke();
+                }
+            }
+            else
+            {
+                currentState = LockState.Locked;
+            }
+            
+            // 更新视觉效果
+            UpdateVisuals();
         }
     }
     

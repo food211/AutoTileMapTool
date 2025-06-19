@@ -6,22 +6,22 @@ using UnityEngine.Events;
 /// <summary>
 /// 可被钩中一次后自动计时禁用的物体，冷却期间不可见，冷却结束后自动恢复
 /// </summary>
-public class OneTimeHookableAction : MonoBehaviour, IMechanicAction
+public class OneTimeHookableAction : MonoBehaviour, IMechanicAction, ISaveable
 {
     [Header("钩中设置")]
     [SerializeField] private float disableDuration = 3f;       // 禁用持续时间（变色后隐藏）
     [SerializeField] private float cooldownTime = 5f;          // 冷却时间（隐藏后多久才能再次出现）
-    
+
     [Header("视觉效果")]
     [SerializeField] private bool useVisualFeedback = true;    // 是否使用视觉反馈
     [SerializeField] private Color disablingColor = new Color(1f, 0.5f, 0.5f, 0.7f); // 禁用过程中的颜色
     [SerializeField] private float fadeTime = 0.5f;            // 颜色过渡时间
-    
+
     [Header("事件")]
     public UnityEvent onHooked;                               // 被钩中时触发
     public UnityEvent onDisabled;                             // 被禁用时触发
     public UnityEvent onEnabled;                              // 被启用时触发
-    
+
     // 内部变量
     private bool isActive = false;
     private bool isDisabled = false;
@@ -30,7 +30,14 @@ public class OneTimeHookableAction : MonoBehaviour, IMechanicAction
     private Coroutine cooldownRoutine = null;
     private Dictionary<Renderer, Color[]> originalColors = new Dictionary<Renderer, Color[]>();
     private List<Collider2D> objectColliders = new List<Collider2D>();
-    
+
+    // 添加一个唯一ID字段
+    [SerializeField] private string uniqueID;
+
+    // 添加字段记录禁用和冷却的开始时间
+    private float disableStartTime;
+    private float cooldownStartTime;
+
     private void Awake()
     {
         // 收集所有渲染器的原始颜色
@@ -54,30 +61,30 @@ public class OneTimeHookableAction : MonoBehaviour, IMechanicAction
                 }
             }
         }
-        
+
         // 收集所有碰撞体
         Collider2D[] colliders = GetComponentsInChildren<Collider2D>();
         objectColliders.AddRange(colliders);
     }
-    
+
     private void OnEnable()
     {
         // 订阅绳索钩中事件
         GameEvents.OnRopeHooked += CheckIfHooked;
     }
-    
+
     private void OnDisable()
     {
         // 取消订阅绳索钩中事件
         GameEvents.OnRopeHooked -= CheckIfHooked;
     }
-    
+
     public void Activate()
     {
         if (isActive) return;
-        
+
         isActive = true;
-        
+
         // 如果当前处于禁用或冷却状态，不立即恢复
         // 让计时器自然结束
         if (!isDisabled && !isInCooldown)
@@ -91,7 +98,7 @@ public class OneTimeHookableAction : MonoBehaviour, IMechanicAction
                     collider.enabled = true;
                 }
             }
-            
+
             // 恢复原始颜色
             if (useVisualFeedback)
             {
@@ -99,39 +106,39 @@ public class OneTimeHookableAction : MonoBehaviour, IMechanicAction
             }
         }
     }
-    
+
     public void Deactivate()
     {
         if (!isActive) return;
-        
+
         isActive = false;
-        
+
         // 停止所有协程
         if (disableRoutine != null)
         {
             StopCoroutine(disableRoutine);
             disableRoutine = null;
         }
-        
+
         if (cooldownRoutine != null)
         {
             StopCoroutine(cooldownRoutine);
             cooldownRoutine = null;
         }
-        
+
         // 重置状态
         isDisabled = false;
         isInCooldown = false;
-        
+
         // 恢复原始颜色
         if (useVisualFeedback)
         {
             RestoreOriginalColors();
         }
-        
+
         // 确保物体可见
         gameObject.SetActive(true);
-        
+
         // 启用所有碰撞体
         foreach (var collider in objectColliders)
         {
@@ -141,16 +148,16 @@ public class OneTimeHookableAction : MonoBehaviour, IMechanicAction
             }
         }
     }
-    
+
     public bool IsActive => isActive;
-    
+
     /// <summary>
     /// 检查是否被绳索钩中
     /// </summary>
     private void CheckIfHooked(Vector2 hookPosition)
     {
         if (!isActive || isDisabled || isInCooldown) return;
-        
+
         // 检查钩点是否在碰撞体内
         foreach (var collider in objectColliders)
         {
@@ -165,7 +172,7 @@ public class OneTimeHookableAction : MonoBehaviour, IMechanicAction
             }
         }
     }
-    
+
     /// <summary>
     /// 处理被钩中的逻辑
     /// </summary>
@@ -173,11 +180,11 @@ public class OneTimeHookableAction : MonoBehaviour, IMechanicAction
     {
         // 触发钩中事件
         onHooked?.Invoke();
-        
+
         // 开始禁用过程
         StartDisablingProcess();
     }
-    
+
     /// <summary>
     /// 开始禁用过程
     /// </summary>
@@ -187,6 +194,7 @@ public class OneTimeHookableAction : MonoBehaviour, IMechanicAction
         if (isDisabled || disableRoutine != null) return;
         
         isDisabled = true;
+        disableStartTime = Time.time; // 记录禁用开始时间
         
         // 应用禁用颜色
         if (useVisualFeedback)
@@ -197,7 +205,7 @@ public class OneTimeHookableAction : MonoBehaviour, IMechanicAction
         // 启动禁用计时器
         disableRoutine = StartCoroutine(DisableTimer());
     }
-    
+
     /// <summary>
     /// 禁用计时器
     /// </summary>
@@ -205,16 +213,16 @@ public class OneTimeHookableAction : MonoBehaviour, IMechanicAction
     {
         // 等待颜色过渡完成
         yield return new WaitForSeconds(fadeTime);
-        
+
         // 等待禁用持续时间
         yield return new WaitForSeconds(disableDuration - fadeTime);
-        
+
         // 禁用物体
         DisableObject();
-        
+
         disableRoutine = null;
     }
-    
+
     /// <summary>
     /// 禁用物体
     /// </summary>
@@ -238,11 +246,12 @@ public class OneTimeHookableAction : MonoBehaviour, IMechanicAction
         // 进入冷却状态
         isDisabled = false;
         isInCooldown = true;
+        cooldownStartTime = Time.time; // 记录冷却开始时间
         
         // 启动冷却计时器
         cooldownRoutine = StartCoroutine(CooldownTimer());
     }
-    
+
     /// <summary>
     /// 冷却计时器
     /// </summary>
@@ -250,26 +259,26 @@ public class OneTimeHookableAction : MonoBehaviour, IMechanicAction
     {
         // 冷却期间物体保持隐藏状态
         yield return new WaitForSeconds(cooldownTime);
-        
+
         // 冷却结束，恢复物体
         EnableObject();
-        
+
         cooldownRoutine = null;
     }
-    
+
     /// <summary>
     /// 启用物体
     /// </summary>
     private void EnableObject()
     {
         isInCooldown = false;
-        
+
         // 只有在组件仍处于活动状态时才恢复物体
         if (isActive)
         {
             // 显示物体
             gameObject.SetActive(true);
-            
+
             // 启用所有碰撞体
             foreach (var collider in objectColliders)
             {
@@ -278,18 +287,18 @@ public class OneTimeHookableAction : MonoBehaviour, IMechanicAction
                     collider.enabled = true;
                 }
             }
-            
+
             // 恢复原始颜色
             if (useVisualFeedback)
             {
                 RestoreOriginalColors();
             }
-            
+
             // 触发启用事件
             onEnabled?.Invoke();
         }
     }
-    
+
     /// <summary>
     /// 颜色渐变到指定颜色
     /// </summary>
@@ -297,12 +306,12 @@ public class OneTimeHookableAction : MonoBehaviour, IMechanicAction
     {
         float elapsedTime = 0f;
         Dictionary<Renderer, Color[]> startColors = new Dictionary<Renderer, Color[]>();
-        
+
         // 保存当前颜色
         foreach (var rendererEntry in originalColors)
         {
             Renderer renderer = rendererEntry.Key;
-            
+
             if (renderer is SpriteRenderer spriteRenderer)
             {
                 startColors[renderer] = new Color[] { spriteRenderer.color };
@@ -317,17 +326,17 @@ public class OneTimeHookableAction : MonoBehaviour, IMechanicAction
                 startColors[renderer] = colors;
             }
         }
-        
+
         // 执行渐变
         while (elapsedTime < fadeTime)
         {
             float normalizedTime = elapsedTime / fadeTime;
-            
+
             foreach (var rendererEntry in originalColors)
             {
                 Renderer renderer = rendererEntry.Key;
                 Color[] startColorArray = startColors[renderer];
-                
+
                 if (renderer is SpriteRenderer spriteRenderer)
                 {
                     Color startColor = startColorArray[0];
@@ -342,16 +351,16 @@ public class OneTimeHookableAction : MonoBehaviour, IMechanicAction
                     }
                 }
             }
-            
+
             elapsedTime += Time.deltaTime;
             yield return null;
         }
-        
+
         // 确保最终颜色是精确的
         foreach (var rendererEntry in originalColors)
         {
             Renderer renderer = rendererEntry.Key;
-            
+
             if (renderer is SpriteRenderer spriteRenderer)
             {
                 spriteRenderer.color = targetColor;
@@ -365,7 +374,7 @@ public class OneTimeHookableAction : MonoBehaviour, IMechanicAction
             }
         }
     }
-    
+
     /// <summary>
     /// 立即恢复原始颜色
     /// </summary>
@@ -375,7 +384,7 @@ public class OneTimeHookableAction : MonoBehaviour, IMechanicAction
         {
             Renderer renderer = rendererEntry.Key;
             Color[] originalColorArray = rendererEntry.Value;
-            
+
             if (renderer is SpriteRenderer spriteRenderer)
             {
                 spriteRenderer.color = originalColorArray[0];
@@ -389,37 +398,37 @@ public class OneTimeHookableAction : MonoBehaviour, IMechanicAction
             }
         }
     }
-    
+
     // 在编辑器中可视化禁用和冷却时间
     private void OnDrawGizmosSelected()
     {
         Gizmos.color = disablingColor;
-        
+
         // 绘制一个表示禁用时间的圆
         float radius = 1f;
         Vector3 center = transform.position + Vector3.up * 2f;
-        
+
         // 绘制完整循环
         DrawGizmosCircle(center, radius, 32);
-        
+
         // 绘制禁用部分
         float totalTime = disableDuration + cooldownTime;
         float disablePortion = disableDuration / totalTime;
         DrawGizmosArc(center, radius, 0, disablePortion * 360f, 32, disablingColor);
-        
+
         // 绘制冷却部分
         DrawGizmosArc(center, radius, disablePortion * 360f, 360f, 32, Color.gray);
-        
+
         // 添加标签
-        UnityEditor.Handles.Label(center + Vector3.up * radius * 1.2f, 
+        UnityEditor.Handles.Label(center + Vector3.up * radius * 1.2f,
             $"禁用: {disableDuration}s (变色后隐藏), 冷却: {cooldownTime}s (隐藏)");
     }
-    
+
     private void DrawGizmosCircle(Vector3 center, float radius, int segments)
     {
         float angleStep = 360f / segments;
         Vector3 prevPoint = center + new Vector3(radius, 0, 0);
-        
+
         for (int i = 1; i <= segments; i++)
         {
             float angle = i * angleStep * Mathf.Deg2Rad;
@@ -428,32 +437,205 @@ public class OneTimeHookableAction : MonoBehaviour, IMechanicAction
             prevPoint = newPoint;
         }
     }
-    
+
     private void DrawGizmosArc(Vector3 center, float radius, float startAngle, float endAngle, int segments, Color color)
     {
         Color originalColor = Gizmos.color;
         Gizmos.color = color;
-        
+
         float angleRange = endAngle - startAngle;
         float angleStep = angleRange / segments;
         Vector3 prevPoint = center + new Vector3(
-            Mathf.Cos(startAngle * Mathf.Deg2Rad) * radius, 
-            Mathf.Sin(startAngle * Mathf.Deg2Rad) * radius, 
+            Mathf.Cos(startAngle * Mathf.Deg2Rad) * radius,
+            Mathf.Sin(startAngle * Mathf.Deg2Rad) * radius,
             0
         );
-        
+
         for (int i = 1; i <= segments; i++)
         {
             float angle = startAngle + i * angleStep;
             Vector3 newPoint = center + new Vector3(
-                Mathf.Cos(angle * Mathf.Deg2Rad) * radius, 
-                Mathf.Sin(angle * Mathf.Deg2Rad) * radius, 
+                Mathf.Cos(angle * Mathf.Deg2Rad) * radius,
+                Mathf.Sin(angle * Mathf.Deg2Rad) * radius,
                 0
             );
             Gizmos.DrawLine(prevPoint, newPoint);
             prevPoint = newPoint;
         }
-        
+
         Gizmos.color = originalColor;
     }
+    
+    #region ISaveable Implementation
+    
+    public string GetUniqueID()
+    {
+        // 如果没有设置ID，自动生成一个
+        if (string.IsNullOrEmpty(uniqueID))
+        {
+            uniqueID = $"HookableAction_{gameObject.name}_{GetInstanceID()}";
+        }
+        return uniqueID;
+    }
+    
+    public SaveData Save()
+    {
+        SaveData data = new SaveData();
+        data.objectType = "OneTimeHookableAction";
+        
+        // 保存基本状态
+        data.boolValue = isActive;
+        
+        // 保存禁用和冷却状态
+        // 0=正常, 1=禁用中, 2=冷却中
+        int state = 0;
+        if (isDisabled) state = 1;
+        else if (isInCooldown) state = 2;
+        data.intValue = state;
+        
+        // 保存禁用和冷却的进度
+        if (isDisabled)
+        {
+            // 计算禁用进度（0-1之间）
+            float elapsedTime = Time.time - disableStartTime;
+            float progress = elapsedTime / disableDuration;
+            data.floatValue = progress;
+        }
+        else if (isInCooldown)
+        {
+            // 计算冷却进度（0-1之间）
+            float elapsedTime = Time.time - cooldownStartTime;
+            float progress = elapsedTime / cooldownTime;
+            data.floatValue = progress;
+        }
+        
+        return data;
+    }
+    
+    public void Load(SaveData data)
+    {
+        if (data == null || data.objectType != "OneTimeHookableAction") return;
+        
+        // 停止所有当前协程
+        if (disableRoutine != null)
+        {
+            StopCoroutine(disableRoutine);
+            disableRoutine = null;
+        }
+        
+        if (cooldownRoutine != null)
+        {
+            StopCoroutine(cooldownRoutine);
+            cooldownRoutine = null;
+        }
+        
+        // 加载基本状态
+        isActive = data.boolValue;
+        
+        // 加载禁用和冷却状态
+        int state = data.intValue;
+        float progress = data.floatValue;
+        
+        isDisabled = false;
+        isInCooldown = false;
+        
+        switch (state)
+        {
+            case 0: // 正常状态
+                // 恢复正常状态
+                gameObject.SetActive(true);
+                foreach (var collider in objectColliders)
+                {
+                    if (collider != null) collider.enabled = true;
+                }
+                RestoreOriginalColors();
+                break;
+                
+            case 1: // 禁用中
+                if (isActive)
+                {
+                    // 计算剩余禁用时间
+                    float remainingTime = disableDuration * (1 - progress);
+                    
+                    // 设置禁用状态
+                    isDisabled = true;
+                    disableStartTime = Time.time - (disableDuration * progress);
+                    
+                    // 应用禁用颜色
+                    if (useVisualFeedback)
+                    {
+                        foreach (var rendererEntry in originalColors)
+                        {
+                            Renderer renderer = rendererEntry.Key;
+                            
+                            if (renderer is SpriteRenderer spriteRenderer)
+                            {
+                                spriteRenderer.color = disablingColor;
+                            }
+                            else
+                            {
+                                for (int i = 0; i < renderer.materials.Length; i++)
+                                {
+                                    renderer.materials[i].color = disablingColor;
+                                }
+                            }
+                        }
+                    }
+                    
+                    // 启动新的禁用协程
+                    disableRoutine = StartCoroutine(DisableTimerFromProgress(remainingTime));
+                }
+                break;
+                
+            case 2: // 冷却中
+                if (isActive)
+                {
+                    // 计算剩余冷却时间
+                    float remainingTime = cooldownTime * (1 - progress);
+                    
+                    // 设置冷却状态
+                    isInCooldown = true;
+                    cooldownStartTime = Time.time - (cooldownTime * progress);
+                    
+                    // 禁用物体
+                    gameObject.SetActive(false);
+                    foreach (var collider in objectColliders)
+                    {
+                        if (collider != null) collider.enabled = false;
+                    }
+                    
+                    // 启动新的冷却协程
+                    cooldownRoutine = StartCoroutine(CooldownTimerFromProgress(remainingTime));
+                }
+                break;
+        }
+    }
+    
+    // 添加从指定进度开始的禁用计时器
+    private IEnumerator DisableTimerFromProgress(float remainingTime)
+    {
+        // 等待剩余的禁用时间
+        yield return new WaitForSeconds(remainingTime);
+        
+        // 禁用物体
+        DisableObject();
+        
+        disableRoutine = null;
+    }
+    
+    // 添加从指定进度开始的冷却计时器
+    private IEnumerator CooldownTimerFromProgress(float remainingTime)
+    {
+        // 等待剩余的冷却时间
+        yield return new WaitForSeconds(remainingTime);
+        
+        // 冷却结束，恢复物体
+        EnableObject();
+        
+        cooldownRoutine = null;
+    }
+    
+
+    
+    #endregion
 }

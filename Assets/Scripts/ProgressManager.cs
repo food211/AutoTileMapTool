@@ -2,6 +2,9 @@ using UnityEngine.UI;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using System.Collections;
+using System.Collections.Generic;
+using System;
+using System.Text;
 
 /// <summary>
 /// 游戏进度管理器 - 负责保存和加载游戏进度
@@ -14,10 +17,10 @@ public class ProgressManager : MonoBehaviour
     [Header("存档设置")]
     [Tooltip("是否在存档时显示保存图标")]
     [SerializeField] private bool showSaveIcon = true;
+    
     // Canvas实例，用于显示UI元素
     private Canvas uiCanvas;
     [SerializeField] private Canvas mainUICanvas; // 在Inspector手动指定
-
 
     [Header("自动保存设置")]
     [Tooltip("是否启用自动保存")]
@@ -33,7 +36,7 @@ public class ProgressManager : MonoBehaviour
     [SerializeField] private GameObject saveIconPrefab;
 
     [Tooltip("保存图标在屏幕上的位置")]
-    [SerializeField] private Vector2 saveIconScreenPosition = new Vector2(50f, 50f); // 默认右下角，距离边缘50像素
+    [SerializeField] private Vector2 saveIconScreenPosition = new Vector2(50f, 50f);
 
     [Tooltip("保存图标大小")]
     [SerializeField] private Vector2 saveIconSize = new Vector2(16f, 16f);
@@ -44,26 +47,27 @@ public class ProgressManager : MonoBehaviour
     [Tooltip("像素完美渲染")]
     [SerializeField] private bool pixelPerfect = true;
 
-    // 存档键名
-    private const string LAST_SCENE_KEY = "LastScene";
-    private const string LAST_STARTPOINT_KEY = "LastStartPoint";
-    private const string LAST_CHECKPOINT_KEY = "LastCheckpointID";
-    private const string ENDPOINT_PREFIX = "Endpoint_";
-    private const string CHECKPOINT_PREFIX = "Checkpoint_";
-    private const string ITEM_PREFIX = "Item_";
-    private const string COIN_PREFIX = "Coin_";
+    [Header("调试设置")]
+    [SerializeField] private bool debugMode = false;
+
+    [Header("加密设置")]
+    [Tooltip("是否加密存档")]
+    [SerializeField] private bool encryptSaveData = true;
+    
+    [Tooltip("加密强度 (1-10)")]
+    [Range(1, 10)]
+    [SerializeField] private int encryptionStrength = 5;
 
     // 当前玩家数据
     private PlayerData currentPlayerData = new PlayerData();
 
-    // 是否正在保存
-    private bool isSaving = false;
-    public bool debugCoinMode = false;
-
-    // 保存图标实例（持久保留）
+    // 保存图标实例
     private GameObject saveIconInstance;
     private CanvasGroup saveIconCanvasGroup;
     private Coroutine fadeCoroutine;
+
+    // 当前场景中的可保存对象缓存
+    private Dictionary<string, ISaveable> currentSceneSaveables = new Dictionary<string, ISaveable>();
 
     private void Start()
     {
@@ -72,8 +76,6 @@ public class ProgressManager : MonoBehaviour
         {
             Instance = this;
             DontDestroyOnLoad(gameObject);
-
-            // 初始化
             Initialize();
         }
         else
@@ -97,18 +99,8 @@ public class ProgressManager : MonoBehaviour
                 if (player != null && player.isPlayerGrounded())
                 {
                     // 执行自动保存
-                    SavePlayerData();
+                    SaveGame();
                     lastAutoSaveTime = Time.time;
-
-                    // 显示保存图标
-                    if (showSaveIcon)
-                    {
-                        ShowSaveIcon();
-                    }
-
-#if UNITY_EDITOR
-                    Debug.LogFormat("已执行自动保存");
-#endif
                 }
             }
         }
@@ -125,22 +117,22 @@ public class ProgressManager : MonoBehaviour
         // 订阅存档点激活事件
         GameEvents.OnCheckpointActivated += HandleCheckpointActivated;
 
-        // 订阅终点到达事件
-        GameEvents.OnEndpointReached += HandleEndpointReached;
-
         // 创建UI Canvas和保存图标
         CreateUICanvas();
         CreateSaveIcon();
+
         // 立即加载玩家数据
         LoadPlayerData();
-        // 添加一个事件，通知其他对象ProgressManager已初始化完成
 
+        // 查找当前场景中的所有可保存对象
+        StartCoroutine(FindSaveablesDelayed());
+
+        // 通知其他对象ProgressManager已初始化完成
         GameEvents.TriggerOnProgressManagerInitialized();
-
-
-#if UNITY_EDITOR
-        Debug.LogFormat("ProgressManager 初始化完成");
-#endif
+        #if UNITY_EDITOR
+        if (debugMode)
+            Debug.LogFormat("ProgressManager 初始化完成");
+        #endif
     }
 
     private void OnDestroy()
@@ -148,7 +140,6 @@ public class ProgressManager : MonoBehaviour
         // 取消订阅事件
         SceneManager.sceneLoaded -= OnSceneLoaded;
         GameEvents.OnCheckpointActivated -= HandleCheckpointActivated;
-        GameEvents.OnEndpointReached -= HandleEndpointReached;
 
         // 停止所有协程
         if (fadeCoroutine != null)
@@ -176,14 +167,109 @@ public class ProgressManager : MonoBehaviour
         {
             CreateSaveIcon();
         }
+
+        // 清除上一个场景的可保存对象缓存
+        currentSceneSaveables.Clear();
+        
         // 重新加载玩家数据，确保数据是最新的
         LoadPlayerData();
-        // 通知其他对象场景已加载完成
-        GameEvents.TriggerOnSceneFullyLoaded(sceneName);
+        
+        // 延迟查找可保存对象，确保所有对象都已初始化
+        StartCoroutine(FindSaveablesDelayed());
+        
+        if (debugMode)
+            Debug.Log($"ProgressManager: 场景 {sceneName} 已加载");
+    }
 
-#if UNITY_EDITOR
-        Debug.LogFormat($"ProgressManager: 场景 {sceneName} 已加载");
-#endif
+    /// <summary>
+    /// 延迟查找可保存对象
+    /// </summary>
+    private IEnumerator FindSaveablesDelayed()
+    {
+        // 等待一帧，确保所有对象都已初始化
+        yield return null;
+
+        // 查找当前场景中的所有可保存对象
+        FindAllSaveables();
+
+        // 加载所有可保存对象的状态
+        LoadAllSaveables();
+
+        // 通知其他对象场景已完全加载
+        GameEvents.TriggerOnSceneFullyLoaded(SceneManager.GetActiveScene().name);
+        // 添加游戏进度加载完成的调试信息
+        Debug.LogFormat($"游戏进度加载完成 - 场景: {SceneManager.GetActiveScene().name}");
+    }
+
+    /// <summary>
+    /// 查找当前场景中的所有可保存对象
+    /// </summary>
+    private void FindAllSaveables()
+    {
+        // 查找实现了ISaveable接口的所有MonoBehaviour
+        MonoBehaviour[] allMonoBehaviours = FindObjectsOfType<MonoBehaviour>();
+
+        foreach (MonoBehaviour mb in allMonoBehaviours)
+        {
+            if (mb is ISaveable saveable)
+            {
+                string uniqueID = saveable.GetUniqueID();
+
+                if (!string.IsNullOrEmpty(uniqueID) && !currentSceneSaveables.ContainsKey(uniqueID))
+                {
+                    currentSceneSaveables.Add(uniqueID, saveable);
+                }
+                else if (string.IsNullOrEmpty(uniqueID))
+                {
+                    Debug.LogWarning($"对象 {mb.name} 实现了ISaveable接口但返回了空的UniqueID");
+                }
+            }
+        }
+
+        if (debugMode)
+            Debug.Log($"找到 {currentSceneSaveables.Count} 个可保存对象");
+    }
+
+    /// <summary>
+    /// 加载所有可保存对象的状态
+    /// </summary>
+    private void LoadAllSaveables()
+    {
+        foreach (KeyValuePair<string, ISaveable> pair in currentSceneSaveables)
+        {
+            string uniqueID = pair.Key;
+            ISaveable saveable = pair.Value;
+            
+            if (currentPlayerData.HasObjectData(uniqueID))
+            {
+                SaveData data = currentPlayerData.GetObjectData(uniqueID);
+                saveable.Load(data);
+                
+                if (debugMode)
+                    Debug.Log($"已加载对象 {uniqueID} 的状态");
+            }
+        }
+    }
+
+    /// <summary>
+    /// 保存所有可保存对象的状态
+    /// </summary>
+    private void SaveAllSaveables()
+    {
+        foreach (KeyValuePair<string, ISaveable> pair in currentSceneSaveables)
+        {
+            string uniqueID = pair.Key;
+            ISaveable saveable = pair.Value;
+            
+            SaveData data = saveable.Save();
+            if (data != null)
+            {
+                currentPlayerData.SaveObject(uniqueID, saveable.GetType().Name, data);
+                
+                if (debugMode)
+                    Debug.Log($"已保存对象 {uniqueID} 的状态");
+            }
+        }
     }
 
     /// <summary>
@@ -191,32 +277,13 @@ public class ProgressManager : MonoBehaviour
     /// </summary>
     private void HandleCheckpointActivated(Transform checkpointTransform)
     {
-        Checkpoint checkpoint = checkpointTransform.GetComponent<Checkpoint>();
-        if (checkpoint != null)
+        // 保存游戏
+        SaveGame();
+        
+        // 显示保存图标
+        if (showSaveIcon)
         {
-            // 保存存档点信息
-            SaveCheckpointActivated(checkpoint.CheckpointID, SceneManager.GetActiveScene().name);
-
-            // 显示保存图标
-            if (showSaveIcon)
-            {
-                ShowSaveIcon();
-            }
-        }
-    }
-
-    /// <summary>
-    /// 处理终点到达事件
-    /// </summary>
-    private void HandleEndpointReached(Transform endpointTransform)
-    {
-        Endpoint endpoint = endpointTransform.GetComponent<Endpoint>();
-        if (endpoint != null)
-        {
-            // 这里我们不直接保存，因为终点信息应该由Endpoint组件调用SaveEndpointUsed方法保存
-#if UNITY_EDITOR
-            Debug.LogFormat($"ProgressManager: 终点 {endpoint.name} 已到达");
-#endif
+            ShowSaveIcon();
         }
     }
 
@@ -224,29 +291,29 @@ public class ProgressManager : MonoBehaviour
     /// 创建UI Canvas
     /// </summary>
     private void CreateUICanvas()
-{
-    if (mainUICanvas != null)
     {
-        uiCanvas = mainUICanvas;
-        return;
-    }
-
-    // 获取当前激活场景
-    var activeScene = UnityEngine.SceneManagement.SceneManager.GetActiveScene();
-
-    // 查找当前场景下的主 Canvas
-    Canvas[] canvases = FindObjectsOfType<Canvas>();
-    foreach (Canvas canvas in canvases)
-    {
-        if (canvas.gameObject.scene == activeScene &&
-            canvas.name == "Canvas" &&
-            canvas.renderMode == RenderMode.ScreenSpaceOverlay &&
-            canvas.gameObject.activeInHierarchy)
+        if (mainUICanvas != null)
         {
-            uiCanvas = canvas;
-            break;
+            uiCanvas = mainUICanvas;
+            return;
         }
-    }
+
+        // 获取当前激活场景
+        var activeScene = SceneManager.GetActiveScene();
+
+        // 查找当前场景下的主 Canvas
+        Canvas[] canvases = FindObjectsOfType<Canvas>();
+        foreach (Canvas canvas in canvases)
+        {
+            if (canvas.gameObject.scene == activeScene &&
+                canvas.name == "Canvas" &&
+                canvas.renderMode == RenderMode.ScreenSpaceOverlay &&
+                canvas.gameObject.activeInHierarchy)
+            {
+                uiCanvas = canvas;
+                break;
+            }
+        }
 
         // 如果没有找到合适的 Canvas，创建一个新的
         if (uiCanvas == null)
@@ -267,11 +334,11 @@ public class ProgressManager : MonoBehaviour
                 scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
                 scaler.referenceResolution = new Vector2(1920, 1080);
             }
-            canvasObj.AddComponent<UnityEngine.UI.GraphicRaycaster>();
+            canvasObj.AddComponent<GraphicRaycaster>();
 
             DontDestroyOnLoad(canvasObj);
         }
-}
+    }
 
     /// <summary>
     /// 创建保存图标（只创建一次，然后隐藏）
@@ -283,9 +350,6 @@ public class ProgressManager : MonoBehaviour
         {
             CreateUICanvas();
         }
-#if UNITY_EDITOR
-Debug.LogFormat("创建保存图标，prefab={0}", saveIconPrefab);
-#endif
 
         // 如果已经有保存图标，不需要重新创建
         if (saveIconInstance != null)
@@ -327,117 +391,11 @@ Debug.LogFormat("创建保存图标，prefab={0}", saveIconPrefab);
     }
 
     /// <summary>
-    /// 保存使用过的终点
-    /// </summary>
-    public void SaveEndpointUsed(string endpointID, string targetScene, string targetStartPoint)
-    {
-        // 标记正在保存
-        isSaving = true;
-
-        // 保存最后一个场景和起始点
-        PlayerPrefs.SetString(LAST_SCENE_KEY, targetScene);
-        PlayerPrefs.SetString(LAST_STARTPOINT_KEY, targetStartPoint);
-
-        // 记录这个终点已被使用
-        PlayerPrefs.SetInt(ENDPOINT_PREFIX + endpointID, 1);
-
-        // 保存更改
-        PlayerPrefs.Save();
-
-        // 保存完成
-        isSaving = false;
-
-#if UNITY_EDITOR
-        Debug.LogFormat($"已保存终点使用记录: {endpointID} -> {targetScene}:{targetStartPoint}");
-#endif
-    }
-
-    /// <summary>
-    /// 保存激活的存档点
-    /// </summary>
-    public void SaveCheckpointActivated(string checkpointID, string sceneName)
-    {
-        // 标记正在保存
-        isSaving = true;
-
-        // 保存最后激活的存档点
-        PlayerPrefs.SetString(LAST_CHECKPOINT_KEY, checkpointID);
-
-        // 保存场景名称
-        PlayerPrefs.SetString(LAST_SCENE_KEY, sceneName);
-
-        // 记录这个存档点已被激活
-        PlayerPrefs.SetInt(CHECKPOINT_PREFIX + checkpointID, 1);
-
-        // 查找对应的检查点组件以获取重生点坐标
-        Checkpoint checkpoint = FindCheckpointById(checkpointID);
-        if (checkpoint != null && checkpoint.RespawnPoint != null)
-        {
-            // 保存重生点坐标，而不是玩家当前位置
-            Vector3 respawnPosition = checkpoint.RespawnPoint.position;
-            PlayerPrefs.SetFloat("Player_PosX", respawnPosition.x);
-            PlayerPrefs.SetFloat("Player_PosY", respawnPosition.y);
-            PlayerPrefs.SetFloat("Player_PosZ", respawnPosition.z);
-
-#if UNITY_EDITOR
-            Debug.LogFormat($"已保存重生点位置: ({respawnPosition.x}, {respawnPosition.y}, {respawnPosition.z})");
-#endif
-        }
-
-        // 保存玩家状态信息（如果有PlayerHealthManager）
-        SavePlayerHealthState();
-
-        // 保存更改
-        PlayerPrefs.Save();
-
-        // 保存完成
-        isSaving = false;
-
-#if UNITY_EDITOR
-        Debug.LogFormat($"已保存存档点激活记录: {checkpointID} 在场景 {sceneName}");
-#endif
-    }
-
-    /// <summary>
-    /// 根据ID查找检查点组件
-    /// </summary>
-    private Checkpoint FindCheckpointById(string checkpointID)
-    {
-        Checkpoint[] checkpoints = FindObjectsOfType<Checkpoint>();
-        foreach (Checkpoint checkpoint in checkpoints)
-        {
-            if (checkpoint.CheckpointID == checkpointID)
-            {
-                return checkpoint;
-            }
-        }
-        return null;
-    }
-
-    /// <summary>
-    /// 保存玩家健康状态
-    /// </summary>
-    private void SavePlayerHealthState()
-    {
-        // 查找玩家健康管理器
-        PlayerHealthManager healthManager = FindObjectOfType<PlayerHealthManager>();
-        if (healthManager != null)
-        {
-            // 保存玩家生命值
-            PlayerPrefs.SetFloat("Player_Health", healthManager.currentHealth);
-            PlayerPrefs.SetFloat("Player_MaxHealth", healthManager.maxHealth);
-
-#if UNITY_EDITOR
-            Debug.LogFormat($"已保存玩家状态: 生命值 {healthManager.currentHealth}/{healthManager.maxHealth}");
-#endif
-        }
-    }
-
-    /// <summary>
     /// 保存完整的玩家数据
     /// </summary>
     public void SavePlayerData()
     {
+
         // 获取玩家和健康管理器引用
         PlayerController player = FindObjectOfType<PlayerController>();
         PlayerHealthManager healthManager = FindObjectOfType<PlayerHealthManager>();
@@ -448,16 +406,28 @@ Debug.LogFormat("创建保存图标，prefab={0}", saveIconPrefab);
         // 更新游戏时间
         currentPlayerData.playTime += Time.deltaTime;
 
+        // 保存所有可保存对象的状态
+        SaveAllSaveables();
+
         // 序列化为JSON
         string jsonData = JsonUtility.ToJson(currentPlayerData, true);
 
-        // 保存到PlayerPrefs
-        PlayerPrefs.SetString("PlayerData_JSON", jsonData);
-        PlayerPrefs.Save();
+        // 如果启用了加密，对数据进行加密
+        if (encryptSaveData)
+        {
+            string encryptedData = ObfuscateData(jsonData);
+            PlayerPrefs.SetString("PlayerData_JSON", encryptedData);
+        }
+        else
+        {
+            PlayerPrefs.SetString("PlayerData_JSON", jsonData);
+        }
 
+        PlayerPrefs.Save();
 #if UNITY_EDITOR
-        Debug.LogFormat("已保存完整玩家数据");
-#endif
+        if (debugMode)
+            Debug.LogFormat("已保存完整玩家数据" + (encryptSaveData ? " (已混淆)" : ""));
+            #endif
     }
 
     /// <summary>
@@ -467,14 +437,55 @@ Debug.LogFormat("创建保存图标，prefab={0}", saveIconPrefab);
     {
         if (PlayerPrefs.HasKey("PlayerData_JSON"))
         {
-            string jsonData = PlayerPrefs.GetString("PlayerData_JSON");
-            currentPlayerData = JsonUtility.FromJson<PlayerData>(jsonData);
+            string data = PlayerPrefs.GetString("PlayerData_JSON");
+
+            // 尝试解密数据
+            if (encryptSaveData)
+            {
+                try
+                {
+                    data = DeobfuscateData(data);
+#if UNITY_EDITOR
+                    if (debugMode)
+                        Debug.Log("存档数据解密成功");
+                        #endif
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogError($"解析存档数据失败: {ex.Message}");
+                    // 如果解析失败，返回新的数据实例
+                    currentPlayerData = new PlayerData();
+                    return currentPlayerData;
+                }
+            }
+
+            try
+            {
+                currentPlayerData = JsonUtility.FromJson<PlayerData>(data);
+#if UNITY_EDITOR
+                if (debugMode)
+                {
+                    Debug.LogFormat($"玩家数据加载成功 - 当前场景: {currentPlayerData.currentScene}");
+                    Debug.LogFormat($"玩家数据 - 生命值: {currentPlayerData.currentHealth}/{currentPlayerData.maxHealth}, 游戏时间: {currentPlayerData.playTime}秒");
+                    Debug.LogFormat("已加载 {0} 个收集的金币", currentPlayerData.collectedCoins.Count);
+                }
+                #endif
+
+                return currentPlayerData;
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"解析存档数据失败: {ex.Message}");
+                // 如果解析失败，返回新的数据实例
+                currentPlayerData = new PlayerData();
+            }
+
             return currentPlayerData;
         }
-
 #if UNITY_EDITOR
-        Debug.LogFormat("未找到玩家数据，返回新的数据实例");
-#endif
+        if (debugMode)
+            Debug.Log("未找到玩家数据，返回新的数据实例");
+            #endif
 
         // 如果没有保存的数据，返回新实例
         currentPlayerData = new PlayerData();
@@ -482,47 +493,9 @@ Debug.LogFormat("创建保存图标，prefab={0}", saveIconPrefab);
     }
 
     /// <summary>
-    /// 应用已加载的玩家数据到当前玩家
-    /// </summary>
-    public void ApplyPlayerData()
-    {
-        PlayerController player = FindObjectOfType<PlayerController>();
-        PlayerHealthManager healthManager = FindObjectOfType<PlayerHealthManager>();
-
-        // 确保已加载数据
-        if (currentPlayerData == null)
-        {
-            LoadPlayerData();
-        }
-
-        // 应用健康值
-        if (healthManager != null)
-        {
-            healthManager.maxHealth = currentPlayerData.maxHealth;
-            healthManager.currentHealth = currentPlayerData.currentHealth;
-        }
-
-        // 应用位置（如果在同一场景）
-        if (player != null && currentPlayerData.currentScene == SceneManager.GetActiveScene().name)
-        {
-            player.transform.position = new Vector3(
-                currentPlayerData.positionX,
-                currentPlayerData.positionY,
-                currentPlayerData.positionZ
-            );
-        }
-
-        // 可以添加更多数据应用逻辑
-
-#if UNITY_EDITOR
-        Debug.LogFormat("已应用玩家数据");
-#endif
-    }
-
-    /// <summary>
     /// 显示保存图标
     /// </summary>
-    private void ShowSaveIcon(Vector3 worldPosition = default)
+    private void ShowSaveIcon()
     {
         // 确保保存图标存在
         if (saveIconInstance == null)
@@ -632,100 +605,6 @@ Debug.LogFormat("创建保存图标，prefab={0}", saveIconPrefab);
     }
 
     /// <summary>
-    /// 获取最后一个场景
-    /// </summary>
-    public string GetLastScene()
-    {
-        return PlayerPrefs.GetString(LAST_SCENE_KEY, "");
-    }
-
-    /// <summary>
-    /// 获取最后一个起始点
-    /// </summary>
-    public string GetLastStartPoint()
-    {
-        return PlayerPrefs.GetString(LAST_STARTPOINT_KEY, "");
-    }
-
-    /// <summary>
-    /// 获取最后激活的存档点
-    /// </summary>
-    public string GetLastCheckpoint()
-    {
-        return PlayerPrefs.GetString(LAST_CHECKPOINT_KEY, "");
-    }
-
-    /// <summary>
-    /// 检查终点是否已使用
-    /// </summary>
-    public bool IsEndpointUsed(string endpointID)
-    {
-        return PlayerPrefs.GetInt(ENDPOINT_PREFIX + endpointID, 0) == 1;
-    }
-
-    /// <summary>
-    /// 检查存档点是否已激活
-    /// </summary>
-    public bool IsCheckpointActivated(string checkpointID)
-    {
-        return PlayerPrefs.GetInt(CHECKPOINT_PREFIX + checkpointID, 0) == 1;
-    }
-
-    /// <summary>
-    /// 记录物品获取
-    /// </summary>
-    public void SaveItemCollected(string itemID)
-    {
-        PlayerPrefs.SetInt(ITEM_PREFIX + itemID, 1);
-        PlayerPrefs.Save();
-    }
-
-    /// <summary>
-    /// 获取金币存储键名
-    /// </summary>
-    public string GetCoinKey(string coinID)
-    {
-        return COIN_PREFIX + coinID;
-    }
-
-    /// <summary>
-    /// 保存金币收集状态
-    /// </summary>
-    public void SaveCoinCollected(string coinID)
-    {
-        // 确保已加载数据
-        if (currentPlayerData == null)
-        {
-            LoadPlayerData();
-        }
-
-        // 添加到金币收集列表
-        currentPlayerData.AddCoin(coinID);
-        
-        // 保存更新后的数据
-        SavePlayerData();
-
-        #if UNITY_EDITOR
-        if(debugCoinMode)
-            Debug.LogFormat("已保存金币收集状态: {0}", coinID);
-        #endif
-    }
-
-    /// <summary>
-    /// 检查金币是否已被收集
-    /// </summary>
-    public bool IsCoinCollected(string coinID)
-    {
-        // 确保已加载数据
-        if (currentPlayerData == null)
-        {
-            LoadPlayerData();
-        }
-        
-        return currentPlayerData.collectedCoins.Contains(coinID);
-    }
-
-    /// <summary>
     /// 手动保存游戏
     /// </summary>
     public void SaveGame()
@@ -735,107 +614,235 @@ Debug.LogFormat("创建保存图标，prefab={0}", saveIconPrefab);
         if (player != null && !player.isPlayerGrounded())
         {
 #if UNITY_EDITOR
-            Debug.LogWarning("无法保存游戏：玩家不在地面上");
-#endif
+            if (debugMode)
+                Debug.LogWarning("无法保存游戏：玩家不在地面上");
             return;
+#endif
         }
-
-        // 保存当前场景
-        string currentScene = SceneManager.GetActiveScene().name;
-        PlayerPrefs.SetString(LAST_SCENE_KEY, currentScene);
 
         // 保存完整的玩家数据
         SavePlayerData();
 
         // 显示保存图标
-        if (showSaveIcon && player != null)
+        if (showSaveIcon)
         {
             ShowSaveIcon();
         }
-
 #if UNITY_EDITOR
-        Debug.LogFormat("已手动保存游戏");
-#endif
+        if (debugMode)
+            Debug.Log("已手动保存游戏");
+            #endif
     }
 
     /// <summary>
-    /// 收集物品并保存到玩家数据
+    /// 保存单个对象的状态
     /// </summary>
-    public void CollectItem(string itemID, string itemType)
+    public void SaveObject(ISaveable saveable)
     {
-        // 确保已加载数据
-        if (currentPlayerData == null)
+        if (saveable == null) return;
+        
+        string uniqueID = saveable.GetUniqueID();
+        if (string.IsNullOrEmpty(uniqueID)) return;
+        
+        SaveData data = saveable.Save();
+        if (data != null)
         {
-            LoadPlayerData();
+            currentPlayerData.SaveObject(uniqueID, saveable.GetType().Name, data);
+
+            // 保存到PlayerPrefs
+            string jsonData = JsonUtility.ToJson(currentPlayerData, true);
+
+            // 如果启用了加密，对数据进行加密
+            if (encryptSaveData)
+            {
+                string encryptedData = ObfuscateData(jsonData);
+                PlayerPrefs.SetString("PlayerData_JSON", encryptedData);
+            }
+            else
+            {
+                PlayerPrefs.SetString("PlayerData_JSON", jsonData);
+            }
+
+            PlayerPrefs.Save();
+            #if UNITY_EDITOR
+            if (debugMode)
+                Debug.Log($"已保存对象 {uniqueID} 的状态");
+            #endif
         }
+    }
 
-        // 添加到收集列表
-        if (!currentPlayerData.collectedItems.Contains(itemID))
+    #region 数据加密和解密
+    /// <summary>
+    /// 混淆数据 - 简单的数据混淆方法
+    /// </summary>
+    private string ObfuscateData(string data)
+    {
+        if (string.IsNullOrEmpty(data))
+            return data;
+
+        try
         {
-            currentPlayerData.collectedItems.Add(itemID);
+            // 1. 转换为字节数组
+            byte[] bytes = Encoding.UTF8.GetBytes(data);
+            
+            // 2. 应用XOR操作和字节偏移
+            for (int i = 0; i < bytes.Length; i++)
+            {
+                // 使用位置和加密强度进行XOR操作
+                byte xorValue = (byte)((i % 256) ^ encryptionStrength);
+                bytes[i] = (byte)(bytes[i] ^ xorValue);
+                
+                // 应用简单的字节偏移
+                bytes[i] = (byte)((bytes[i] + encryptionStrength) % 256);
+            }
+            
+            // 3. 反转数据块
+            if (encryptionStrength > 3)
+            {
+                int blockSize = Math.Max(1, bytes.Length / 10);
+                for (int i = 0; i < bytes.Length; i += blockSize * 2)
+                {
+                    int end = Math.Min(i + blockSize, bytes.Length);
+                    if (end > i)
+                    {
+                        Array.Reverse(bytes, i, end - i);
+                    }
+                }
+            }
+            
+            // 4. 添加简单的校验和
+            byte checksum = 0;
+            for (int i = 0; i < bytes.Length; i++)
+            {
+                checksum = (byte)((checksum + bytes[i]) % 256);
+            }
+            
+            byte[] result = new byte[bytes.Length + 1];
+            Array.Copy(bytes, result, bytes.Length);
+            result[bytes.Length] = checksum;
+            
+            // 5. 转换为Base64字符串
+            return Convert.ToBase64String(result);
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError($"混淆数据时出错: {ex.Message}");
+            // 如果混淆失败，返回原始数据
+            return data;
+        }
+    }
 
-            // 同时保存到PlayerPrefs以保持兼容性
-            PlayerPrefs.SetInt(ITEM_PREFIX + itemID, 1);
+    /// <summary>
+    /// 解混淆数据 - 简单的数据解混淆方法
+    /// </summary>
+    private string DeobfuscateData(string obfuscatedData)
+    {
+        if (string.IsNullOrEmpty(obfuscatedData))
+            return obfuscatedData;
 
-            // 保存更新后的数据
-            SavePlayerData();
+        try
+        {
+            // 1. 从Base64转换回字节数组
+            byte[] bytes = Convert.FromBase64String(obfuscatedData);
+            
+            // 检查长度
+            if (bytes.Length <= 1)
+            {
+                throw new Exception("数据长度无效");
+            }
+            
+            // 2. 验证校验和
+            byte storedChecksum = bytes[bytes.Length - 1];
+            byte calculatedChecksum = 0;
+            for (int i = 0; i < bytes.Length - 1; i++)
+            {
+                calculatedChecksum = (byte)((calculatedChecksum + bytes[i]) % 256);
+            }
+            
+            if (storedChecksum != calculatedChecksum)
+            {
+                throw new Exception("数据校验失败，可能已被篡改");
+            }
+            
+            // 创建不包含校验和的新数组
+            byte[] dataBytes = new byte[bytes.Length - 1];
+            Array.Copy(bytes, dataBytes, bytes.Length - 1);
+            
+            // 3. 反转之前反转的数据块
+            if (encryptionStrength > 3)
+            {
+                int blockSize = Math.Max(1, dataBytes.Length / 10);
+                for (int i = 0; i < dataBytes.Length; i += blockSize * 2)
+                {
+                    int end = Math.Min(i + blockSize, dataBytes.Length);
+                    if (end > i)
+                    {
+                        Array.Reverse(dataBytes, i, end - i);
+                    }
+                }
+            }
+            
+            // 4. 还原XOR操作和字节偏移
+            for (int i = 0; i < dataBytes.Length; i++)
+            {
+                // 还原字节偏移
+                dataBytes[i] = (byte)((dataBytes[i] + 256 - encryptionStrength) % 256);
+                
+                // 还原XOR操作
+                byte xorValue = (byte)((i % 256) ^ encryptionStrength);
+                dataBytes[i] = (byte)(dataBytes[i] ^ xorValue);
+            }
+            
+            // 5. 转换回字符串
+            return Encoding.UTF8.GetString(dataBytes);
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError($"解混淆数据时出错: {ex.Message}");
+            throw; // 重新抛出异常，让调用者知道解混淆失败
+        }
+    }
+    #endregion 数据加密和解密
 
+    /// <summary>
+    /// 预加载特定场景的保存数据，用于在加载界面中提前处理
+    /// </summary>
+    public void PreloadSaveData(string sceneName)
+    {
 #if UNITY_EDITOR
-            Debug.LogFormat($"已收集物品: {itemID} (类型: {itemType})");
+        if (debugMode)
+            Debug.Log($"预加载场景 {sceneName} 的保存数据");
 #endif
-        }
-    }
 
-    /// <summary>
-    /// 检查物品是否已获取
-    /// </summary>
-    public bool IsItemCollected(string itemID)
-    {
-        // 确保已加载数据
-        if (currentPlayerData == null)
-        {
-            LoadPlayerData();
-        }
-        return currentPlayerData.collectedItems.Contains(itemID);
-    }
+        // 确保玩家数据已加载
+        LoadPlayerData();
 
-    /// <summary>
-    /// 解锁能力并保存到玩家数据
-    /// </summary>
-    public void UnlockAbility(string abilityID)
-    {
-        // 确保已加载数据
-        if (currentPlayerData == null)
-        {
-            LoadPlayerData();
-        }
+        // 设置当前场景名称
+        currentPlayerData.currentScene = sceneName;
 
-        // 添加到已解锁能力列表
-        if (!currentPlayerData.unlockedAbilities.Contains(abilityID))
-        {
-            currentPlayerData.unlockedAbilities.Add(abilityID);
-
-            // 保存更新后的数据
-            SavePlayerData();
-
+        // 预处理对象数据
+        // 这里我们只是加载数据，不进行实际应用
+        // 实际应用将在场景加载后由LevelManager完成
 #if UNITY_EDITOR
-            Debug.LogFormat($"已解锁能力: {abilityID}");
-#endif
-        }
+        if (debugMode)
+            Debug.Log($"场景 {sceneName} 的保存数据预加载完成");
+            #endif
     }
 
     /// <summary>
-    /// 检查能力是否已解锁
+    /// 从玩家数据中移除特定对象的状态
     /// </summary>
-    public bool IsAbilityUnlocked(string abilityID)
+    /// <param name="objectID">对象唯一ID</param>
+    public void RemoveObjectState(string objectID)
     {
-        // 确保已加载数据
-        if (currentPlayerData == null)
-        {
-            LoadPlayerData();
-        }
+        if (string.IsNullOrEmpty(objectID) || currentPlayerData == null) return;
 
-        return currentPlayerData.unlockedAbilities.Contains(abilityID);
+        // 从玩家数据中移除此对象的状态
+        currentPlayerData.RemoveObjectData(objectID);
+#if UNITY_EDITOR
+        if (debugMode)
+            Debug.Log($"已从玩家数据中移除对象 {objectID} 的状态");
+            #endif
     }
 
     /// <summary>
@@ -849,10 +856,10 @@ Debug.LogFormat("创建保存图标，prefab={0}", saveIconPrefab);
 
         // 重置当前玩家数据
         currentPlayerData = new PlayerData();
-
 #if UNITY_EDITOR
-        Debug.LogFormat("已重置所有游戏进度");
-#endif
+        if (debugMode)
+            Debug.Log("已重置所有游戏进度");
+            #endif
     }
 
     /// <summary>
@@ -860,20 +867,14 @@ Debug.LogFormat("创建保存图标，prefab={0}", saveIconPrefab);
     /// </summary>
     public bool HasSavedGame()
     {
-        return !string.IsNullOrEmpty(GetLastScene()) || !string.IsNullOrEmpty(GetLastCheckpoint());
+        return PlayerPrefs.HasKey("PlayerData_JSON");
     }
 
-    /// <summary>
-    /// 是否正在保存
-    /// </summary>
-    public bool IsSaving => isSaving;
-
-    #if UNITY_EDITOR
+#if UNITY_EDITOR
     [ContextMenu("测试显示保存图标")]
-    #endif
+#endif
     private void TestShowSaveIcon()
     {
         ShowSaveIcon();
     }
-    
 }
