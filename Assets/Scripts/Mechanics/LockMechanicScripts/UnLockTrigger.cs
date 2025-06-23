@@ -2,17 +2,17 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
-public class UnlockerTrigger : Trigger
+public class UnlockerTrigger : Trigger, ISaveable
 {
     [Header("调试设置")]
     [SerializeField] private bool debugMode = false; // 是否启用调试模式
-    
+
     [Header("解锁器设置")]
     [SerializeField] private LockMechanism targetLock;
     [SerializeField] private bool registerOnStart = true;
     [SerializeField] private bool deactivateOnReset = true; // 重置时是否取消激活
     [SerializeField] private bool disableWhenLockUnlocked = true; // 锁解开后是否禁用交互
-    
+
     [Header("视觉反馈")]
     [SerializeField] private SpriteRenderer unlockerSpriteRenderer;
     [SerializeField] private Sprite activeSprite;
@@ -20,18 +20,21 @@ public class UnlockerTrigger : Trigger
     [SerializeField] private Animator unlockerAnimator;
     [SerializeField] private string activateAnimTrigger = "Activate";
     [SerializeField] private string deactivateAnimTrigger = "Deactivate";
-    
+
     [Header("交互提示")]
     [SerializeField] private GameObject interactionPrompt; // 交互提示对象
     [SerializeField] private float promptOffset = 1.0f; // 提示在Y轴上的偏移
-    
+
     [Header("音效")]
     [SerializeField] private AudioSource audioSource;
     [SerializeField] private AudioClip activateSound;
     [SerializeField] private AudioClip deactivateSound;
-    
+
+    [Header("保存设置")]
+    [SerializeField] private string uniqueID = ""; // 解锁器的唯一ID，用于保存/加载
+
     private bool isActivated = false;
-    
+
     // 预定义调试字符串，避免运行时字符串连接导致的GC
     private const string DEBUG_HANDLE_INTERACT = "UnlockerTrigger.HandlePlayerInteract - 交互类型: {0}, isActive: {1}, playerInTriggerArea: {2}, 匹配交互类型: {3}, GameObject: {4}";
     private const string DEBUG_LOCK_UNLOCKED = "UnlockerTrigger.HandlePlayerInteract - 锁已解开，忽略交互";
@@ -42,38 +45,51 @@ public class UnlockerTrigger : Trigger
     private const string DEBUG_NOTIFY_LOCK = "UnlockerTrigger.ActivateUnlocker - 通知锁机制解锁器已激活";
     private const string DEBUG_TRIGGER_ENTER = "UnlockerTrigger.OnTriggerEnter2D - 玩家进入解锁器 {0} 的交互区域, playerInTriggerArea: {1}";
     private const string DEBUG_TRIGGER_EXIT = "UnlockerTrigger.OnTriggerExit2D - 玩家离开解锁器 {0} 的交互区域, playerInTriggerArea: {1}";
-    
+
+    private const string DEBUG_SAVE_DATA = "UnlockerTrigger.Save - 保存解锁器 {0} 的状态, 激活状态: {1}";
+    private const string DEBUG_LOAD_DATA = "UnlockerTrigger.Load - 加载解锁器 {0} 的状态, 激活状态: {1}";
+
     protected override void Start()
     {
         base.Start();
-        
+
         // 注册到目标锁
         if (registerOnStart && targetLock != null)
         {
             targetLock.RegisterUnlocker(this);
         }
-        
+
         // 初始化视觉状态
         UpdateVisuals();
-        
+
         // 初始化交互提示
         if (interactionPrompt != null)
         {
             interactionPrompt.SetActive(false);
         }
-        
+
+        // 自动生成唯一ID（如果未设置）
+        if (string.IsNullOrEmpty(uniqueID))
+        {
+            uniqueID = $"unlocker_{gameObject.scene.name}_{transform.position.x}_{transform.position.y}_{GetInstanceID()}";
+            if (debugMode)
+            {
+                Debug.LogFormat("自动生成解锁器唯一ID: {0}", uniqueID);
+            }
+        }
+
         // 订阅玩家进入/离开交互区域事件
         onPlayerEnterInteractionZone.AddListener(ShowInteractionPrompt);
         onPlayerExitInteractionZone.AddListener(HideInteractionPrompt);
     }
-    
+
     protected override void OnEnable()
     {
         base.OnEnable();
         // 订阅玩家交互事件
         GameEvents.OnPlayerInteract += HandlePlayerInteract;
     }
-    
+
     protected override void OnDisable()
     {
         base.OnDisable();
@@ -102,7 +118,7 @@ public class UnlockerTrigger : Trigger
         if (targetLock != null && disableWhenLockUnlocked)
         {
             lockIsUnlocked = targetLock.GetLockState() == LockMechanism.LockState.Unlocked;
-            
+
             if (debugMode && lockIsUnlocked)
             {
                 Debug.Log(DEBUG_LOCK_UNLOCKED);
@@ -111,8 +127,8 @@ public class UnlockerTrigger : Trigger
 
         // 解锁器只响应Environmental类型的交互，并检查优先级
         // 增加条件：锁未解开或不禁用已解锁的解锁器
-        if (isActive && playerInTriggerArea && 
-            interactionType == GameEvents.InteractionType.Environmental && 
+        if (isActive && playerInTriggerArea &&
+            interactionType == GameEvents.InteractionType.Environmental &&
             !lockIsUnlocked)
         {
             if (debugMode)
@@ -121,27 +137,34 @@ public class UnlockerTrigger : Trigger
             }
 
             ToggleActivation();
+
+            // 状态改变后保存
+            if (ProgressManager.Instance != null)
+            {
+                ProgressManager.Instance.SaveObject(this);
+            }
+
             return true;
         }
         return false;
     }
-    
+
     /// <summary>
     /// 显示交互提示
     /// </summary>
     private void ShowInteractionPrompt()
     {
         // 检查锁是否已经解开，如果已解开且设置为禁用，则不显示提示
-        if (disableWhenLockUnlocked && targetLock != null && 
+        if (disableWhenLockUnlocked && targetLock != null &&
             targetLock.GetLockState() == LockMechanism.LockState.Unlocked)
         {
             return;
         }
-        
+
         if (interactionPrompt != null)
         {
             interactionPrompt.SetActive(true);
-            
+
             // 设置提示位置
             if (promptOffset != 0)
             {
@@ -149,7 +172,7 @@ public class UnlockerTrigger : Trigger
             }
         }
     }
-    
+
     /// <summary>
     /// 隐藏交互提示
     /// </summary>
@@ -160,7 +183,7 @@ public class UnlockerTrigger : Trigger
             interactionPrompt.SetActive(false);
         }
     }
-    
+
     /// <summary>
     /// 设置目标锁
     /// </summary>
@@ -172,14 +195,14 @@ public class UnlockerTrigger : Trigger
             targetLock.RegisterUnlocker(this);
         }
     }
-    
+
     /// <summary>
     /// 重写触发器激活方法
     /// </summary>
     public override void ActivateTrigger()
     {
         // 检查锁是否已经解开
-        if (disableWhenLockUnlocked && targetLock != null && 
+        if (disableWhenLockUnlocked && targetLock != null &&
             targetLock.GetLockState() == LockMechanism.LockState.Unlocked)
         {
             if (debugMode)
@@ -188,20 +211,26 @@ public class UnlockerTrigger : Trigger
             }
             return;
         }
-        
+
         base.ActivateTrigger();
-        
+
         // 切换激活状态
         ToggleActivation();
+        
+        // 状态改变后保存
+        if (ProgressManager.Instance != null)
+        {
+            ProgressManager.Instance.SaveObject(this);
+        }
     }
-    
+
     /// <summary>
     /// 切换解锁器的激活状态
     /// </summary>
     public void ToggleActivation()
     {
         // 检查锁是否已经解开
-        if (disableWhenLockUnlocked && targetLock != null && 
+        if (disableWhenLockUnlocked && targetLock != null &&
             targetLock.GetLockState() == LockMechanism.LockState.Unlocked)
         {
             if (debugMode)
@@ -210,7 +239,7 @@ public class UnlockerTrigger : Trigger
             }
             return;
         }
-        
+
         if (isActivated)
         {
             DeactivateUnlocker();
@@ -220,16 +249,16 @@ public class UnlockerTrigger : Trigger
             ActivateUnlocker();
         }
     }
-    
+
     /// <summary>
     /// 激活解锁器
     /// </summary>
     public void ActivateUnlocker()
     {
         if (isActivated) return;
-        
+
         // 检查锁是否已经解开
-        if (disableWhenLockUnlocked && targetLock != null && 
+        if (disableWhenLockUnlocked && targetLock != null &&
             targetLock.GetLockState() == LockMechanism.LockState.Unlocked)
         {
             if (debugMode)
@@ -238,9 +267,9 @@ public class UnlockerTrigger : Trigger
             }
             return;
         }
-        
+
         isActivated = true;
-        
+
         // 通知锁机制
         if (targetLock != null)
         {
@@ -248,71 +277,71 @@ public class UnlockerTrigger : Trigger
             {
                 Debug.Log(DEBUG_NOTIFY_LOCK);
             }
-            
+
             targetLock.OnUnlockerActivated(this);
         }
-        
+
         // 更新视觉效果
         UpdateVisuals();
-        
+
         // 播放激活动画
         if (unlockerAnimator != null)
         {
             unlockerAnimator.SetTrigger(activateAnimTrigger);
         }
-        
+
         // 播放激活音效
         if (audioSource != null && activateSound != null)
         {
             audioSource.PlayOneShot(activateSound);
         }
     }
-    
+
     /// <summary>
     /// 取消激活解锁器
     /// </summary>
     public void DeactivateUnlocker()
     {
         if (!isActivated) return;
-        
+
         isActivated = false;
-        
+
         // 通知锁机制
         if (targetLock != null)
         {
             targetLock.OnUnlockerDeactivated(this);
         }
-        
+
         // 更新视觉效果
         UpdateVisuals();
-        
+
         // 播放取消激活动画
         if (unlockerAnimator != null)
         {
             unlockerAnimator.SetTrigger(deactivateAnimTrigger);
         }
-        
+
         // 播放取消激活音效
         if (audioSource != null && deactivateSound != null)
         {
             audioSource.PlayOneShot(deactivateSound);
         }
     }
-    
+
     /// <summary>
     /// 重置解锁器状态
     /// </summary>
     public override void ResetTrigger()
     {
         base.ResetTrigger();
-        
+
         // 如果配置为重置时取消激活
         if (deactivateOnReset && isActivated)
         {
             DeactivateUnlocker();
         }
     }
-    
+
     /// <summary>
     /// 更新解锁器的视觉效果
     /// </summary>
@@ -323,7 +352,7 @@ public class UnlockerTrigger : Trigger
             unlockerSpriteRenderer.sprite = isActivated ? activeSprite : inactiveSprite;
         }
     }
-    
+
     /// <summary>
     /// 获取解锁器是否已激活
     /// </summary>
@@ -331,14 +360,14 @@ public class UnlockerTrigger : Trigger
     {
         return isActivated;
     }
-    
+
     /// <summary>
     /// 检查玩家是否在触发区域内并更新触发区域状态
     /// </summary>
     protected override void OnTriggerEnter2D(Collider2D other)
     {
         base.OnTriggerEnter2D(other);
-        
+
         if (debugMode && other.CompareTag(playerTag))
         {
             Debug.LogFormat(DEBUG_TRIGGER_ENTER, gameObject.name, playerInTriggerArea);
@@ -348,10 +377,63 @@ public class UnlockerTrigger : Trigger
     protected override void OnTriggerExit2D(Collider2D other)
     {
         base.OnTriggerExit2D(other);
-        
+
         if (debugMode && other.CompareTag(playerTag))
         {
             Debug.LogFormat(DEBUG_TRIGGER_EXIT, gameObject.name, playerInTriggerArea);
         }
     }
+    #region Save API
+    /// <summary>
+    /// 获取对象的唯一ID
+    /// </summary>
+    public string GetUniqueID()
+    {
+        return uniqueID;
+    }
+
+    /// <summary>
+    /// 保存对象状态
+    /// </summary>
+    public SaveData Save()
+    {
+        SaveData data = new SaveData();
+        data.objectType = GetType().Name;
+        data.boolValue = isActivated; // 保存激活状态
+
+        if (debugMode)
+        {
+            Debug.LogFormat(DEBUG_SAVE_DATA, uniqueID, isActivated);
+        }
+
+        return data;
+    }
+
+    /// <summary>
+    /// 加载对象状态
+    /// </summary>
+    public void Load(SaveData data)
+    {
+        if (data == null) return;
+
+        // 根据加载的数据设置激活状态
+        bool wasActivated = isActivated;
+        bool shouldBeActivated = data.boolValue;
+
+        if (debugMode)
+        {
+            Debug.LogFormat(DEBUG_LOAD_DATA, uniqueID, shouldBeActivated);
+        }
+
+        // 如果状态需要改变，则调用相应方法
+        if (shouldBeActivated && !wasActivated)
+        {
+            ActivateUnlocker();
+        }
+        else if (!shouldBeActivated && wasActivated)
+        {
+            DeactivateUnlocker();
+        }
+    }
+    #endregion
 }

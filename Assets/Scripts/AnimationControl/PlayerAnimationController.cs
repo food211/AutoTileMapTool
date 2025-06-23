@@ -466,7 +466,6 @@ public class PlayerAnimationController : MonoBehaviour
                 // 开始着陆动画
                 isLandAnimationPlaying = true;
                 // 通知PlayerController着陆动画已开始
-                playerController?.OnLandAnimationStart();
                 StartCoroutine(WaitForLandAnimation());
                 break;
                 
@@ -488,25 +487,48 @@ public class PlayerAnimationController : MonoBehaviour
     {
         // 等待跳跃准备动画播放完成
         yield return new WaitForSeconds(jumpPrepareAnimDuration);
-        
-        // 跳跃准备完成
-        isJumpAnimationPlaying = false;
-        
-        // 通知PlayerController跳跃动画已完成
-        if (playerController != null)
+
+        try
         {
-            playerController.OnJumpAnimationComplete();
+            // 跳跃准备完成
+            isJumpAnimationPlaying = false;
+
+            // 通知PlayerController跳跃动画已完成
+            if (playerController != null)
+            {
+                playerController.OnJumpAnimationComplete();
+
+                #if UNITY_EDITOR
+                if (debugMode)
+                {
+                    Debug.LogFormat("跳跃准备动作播放完成，已通知PlayerController");
+                }
+                #endif
+            }
+            else
+            {
+                Debug.LogError("PlayerController为空，无法通知跳跃动画完成");
+            }
+
+            // 自动切换到空中状态
+            ChangeState(AnimState.InAir);
         }
-        
-        // 自动切换到空中状态
-        ChangeState(AnimState.InAir);
-        
-        #if UNITY_EDITOR
-        if (debugMode)
+        catch (System.Exception e)
         {
-            Debug.LogFormat("跳跃准备动作播放完成，通知PlayerController");
+            Debug.LogError($"跳跃动画协程发生错误: {e.Message}");
+
+            // 确保状态被重置
+            isJumpAnimationPlaying = false;
+
+            // 尝试通知PlayerController
+            if (playerController != null)
+            {
+                playerController.OnJumpAnimationComplete();
+            }
+
+            // 强制切换到空中状态
+            ChangeState(AnimState.InAir);
         }
-        #endif
     }
 
     private IEnumerator WaitForLandAnimation()
@@ -516,12 +538,6 @@ public class PlayerAnimationController : MonoBehaviour
         
         // 着陆动画完成
         isLandAnimationPlaying = false;
-        
-        // 通知PlayerController着陆动画已完成
-        if (playerController != null)
-        {
-            playerController.OnLandAnimationComplete();
-        }
         
         // 根据当前速度和瞄准状态切换到待机或跑步
         float horizontalSpeed = Mathf.Abs(playerRb.velocity.x);
@@ -600,17 +616,29 @@ public class PlayerAnimationController : MonoBehaviour
     /// </summary>
     public void TriggerJumpAnimation()
     {
-        if (!isDead && !isJumpAnimationPlaying && !isLandAnimationPlaying)
+        // 增加额外的安全检查，确保不会在已经播放动画时再次触发
+        if (isDead || isJumpAnimationPlaying || isLandAnimationPlaying)
         {
-            ChangeState(AnimState.JumpPrepare);
-            
             #if UNITY_EDITOR
             if (debugMode)
             {
-                Debug.LogFormat("触发跳跃准备动画");
+                Debug.LogWarning($"无法触发跳跃动画: isDead={isDead}, isJumpAnimationPlaying={isJumpAnimationPlaying}, isLandAnimationPlaying={isLandAnimationPlaying}");
             }
             #endif
+            return;
         }
+        
+        // 停止可能存在的之前的跳跃协程
+        StopAllCoroutines();
+        
+        ChangeState(AnimState.JumpPrepare);
+        
+        #if UNITY_EDITOR
+        if (debugMode)
+        {
+            Debug.LogFormat("触发跳跃准备动画");
+        }
+        #endif
     }
 
     /// <summary>

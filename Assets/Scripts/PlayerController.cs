@@ -1009,6 +1009,9 @@ private void HandleRopeShooting(bool isRopeBusy)
         // 跳跃准备期间可以选择是否禁用水平移动
         CanInput = false;
 
+        // 添加安全机制：即使动画回调失败，也会在短时间后恢复控制
+        StartCoroutine(JumpAnimationSafetyCheck());
+
         // 添加调试日志，帮助追踪问题
 #if UNITY_EDITOR
         if (debugmode)
@@ -1028,19 +1031,28 @@ private void HandleRopeShooting(bool isRopeBusy)
 #endif
     }
 
-    // 由playerAnimationcontroller调用 - 着陆动画开始
-    public void OnLandAnimationStart()
+    // 添加安全检查协程，确保玩家不会永久失去控制
+    private IEnumerator JumpAnimationSafetyCheck()
     {
-        // isPlayingLandAnimation = true;
+        // 等待足够长的时间，超过正常跳跃动画应该完成的时间
+        yield return new WaitForSeconds(0.1f);
+        
+        // 如果跳跃动画状态仍然为播放中，说明可能出现了问题
+        if (isPlayingJumpAnimation || pendingJump)
+        {
+            // 强制恢复控制权和状态
+            isPlayingJumpAnimation = false;
+            pendingJump = false;
+            CanInput = true;
+            
+#if UNITY_EDITOR
+            if (debugmode)
+            {
+                Debug.LogWarning("跳跃动画回调未正常触发，通过安全检查强制恢复控制");
+            }
+#endif
+        }
     }
-
-    // 由playerAnimationcontroller调用 - 着陆动画完成
-    public void OnLandAnimationComplete()
-    {
-        // isPlayingLandAnimation = false;
-    }
-
-    // 由playerAnimationcontroller调用 - 跳跃动画完成
 
     public void OnJumpAnimationComplete()
     {
@@ -1051,10 +1063,17 @@ private void HandleRopeShooting(bool isRopeBusy)
         }
 #endif
 
+        // 确保只有在pendingJump为true时才执行跳跃
         if (pendingJump)
         {
             PerformJump();
             pendingJump = false;
+        }
+        else
+        {
+            // 即使没有待处理的跳跃，也确保控制权被恢复
+            isPlayingJumpAnimation = false;
+            CanInput = true;
         }
     }
 
