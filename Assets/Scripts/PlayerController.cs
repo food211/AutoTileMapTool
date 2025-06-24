@@ -207,6 +207,8 @@ public class PlayerController : MonoBehaviour
         }
     }
 
+    private float cachedHorizontalInput;
+
     private void Update()
     {
         // 性能优化：只在位置变化时更新缓存的位置
@@ -1117,47 +1119,50 @@ private void HandleRopeShooting(bool isRopeBusy)
     }
 
     private void HandleRopeMode()
-{
-    if (!CanInput || !ropeSystemInitialized)
-        return;
+    {
+        if (!CanInput || !ropeSystemInitialized)
+            return;
 
-    // 获取输入
-    float horizontalInput = Input.GetAxis("Horizontal");
-    bool isPressingUp = Input.GetKey(KeyCode.UpArrow);
-    bool isPressingDown = Input.GetKey(KeyCode.DownArrow);
-    bool isPressingSpace = Input.GetKeyDown(KeyCode.Space);
+        // 获取输入
+        float horizontalInput = Input.GetAxis("Horizontal");
+        bool isPressingUp = Input.GetKey(KeyCode.UpArrow);
+        bool isPressingDown = Input.GetKey(KeyCode.DownArrow);
+        bool isPressingSpace = Input.GetKeyDown(KeyCode.Space);
 
-    // 处理绳索摆动
-    HandleRopeSwinging(horizontalInput);
+        // 处理绳索长度调整
+        HandleRopeLengthAdjustment(isPressingUp, isPressingDown);
 
-    // 处理绳索长度调整
-    HandleRopeLengthAdjustment(isPressingUp, isPressingDown);
+        // 处理绳索释放
+        HandleRopeRelease(isPressingSpace);
+        
+        // 处理绳索摆动
+        HandleRopeSwinging(horizontalInput);
 
-    // 处理绳索释放
-    HandleRopeRelease(isPressingSpace);
+        // 处理道具使用
+        HandleItemUseInRopeMode();
 
-    // 处理道具使用
-    HandleItemUseInRopeMode();
-
-    // 限制最大速度
-    LimitMaxVelocity();
-}
+        // 限制最大速度
+        LimitMaxVelocity();
+    }
 
 // 处理绳索摆动
 private void HandleRopeSwinging(float horizontalInput)
 {
+        float lastSwingTime = 0f;
+        float swingInterval = 1f / 60f;
     // 只有当有明显的水平输入时才摆动
-    if (Mathf.Abs(horizontalInput) > 0.1f)
-    {
-        // 根据输入方向应用摆动力
-        float direction = -Mathf.Sign(horizontalInput); // 反向是因为力的应用方式
-        ropeSystem.Swing(direction * swingForce);
+        if (Mathf.Abs(horizontalInput) > 0.1f && Time.time >= lastSwingTime + swingInterval)
+        {
+            // 根据输入方向应用摆动力
+            float direction = -Mathf.Sign(horizontalInput); // 反向是因为力的应用方式
+            ropeSystem.Swing(direction * swingForce);
+            lastSwingTime = Time.time;
 
 #if UNITY_EDITOR
-        if (debugmode && Time.frameCount % 30 == 0)
-            Debug.LogFormat("绳索摆动: 方向={0}, 力={1}", direction, direction * swingForce);
+            if (debugmode && Time.frameCount % 30 == 0)
+                Debug.LogFormat("绳索摆动: 方向={0}, 力={1}", direction, direction * swingForce);
 #endif
-    }
+        }
 }
 
 // 处理绳索长度调整

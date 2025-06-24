@@ -10,8 +10,6 @@ TagManager:
   - Elect
   - Hookable
   - NotHookable
-  - HardSurface
-  - SoftSurface
   layers:
   - Default
   - TransparentFX
@@ -60,4 +58,7 @@ TagManager:
     locked: 0
   - name: CameraSortingLayer
     uniqueID: 4160369807
+    locked: 0
+  - name: GameUI
+    uniqueID: 3819455431
     locked: 0
