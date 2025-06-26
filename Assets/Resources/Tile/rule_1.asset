@@ -12,107 +12,342 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e94c511a04b63f94a897ac9e19aa1f90, type: 3}
   m_Name: rule_1
   m_EditorClassIdentifier: 
-  emptyMarkerTile: {fileID: 11400000, guid: 96a505a706ac13b43adb2e0a6cd0770e, type: 2}
-  inputRulesPrefab: {fileID: 9060736298155810219, guid: 769cf13a7b6921d4badb2bad5627972e, type: 3}
-  outputRulesPrefab: {fileID: 9060736298155810219, guid: 4b89c6c8ce08a0247a177939453450cf, type: 3}
+  emptyMarkerTile: {fileID: 11400000, guid: 195c53c143d2f33489d394149b2411e8, type: 2}
+  inputRulesPrefab: {fileID: 7013068736764386129, guid: 208c7245152f0744da8162f7c8d4863e, type: 3}
+  outputRulesPrefab: {fileID: 4904904353115121687, guid: 4b89c6c8ce08a0247a177939453450cf, type: 3}
   rules:
-  - ruleName: Rule 19
+  - ruleName: Rule 66
     bounds:
-      m_Position: {x: -2, y: -8, z: 0}
+      m_Position: {x: 33, y: 45, z: 0}
       m_Size: {x: 1, y: 1, z: 1}
-    priority: 20
-  - ruleName: Rule 17
+    priority: 67
+  - ruleName: Rule 58
     bounds:
-      m_Position: {x: 9, y: -10, z: 0}
-      m_Size: {x: 3, y: 3, z: 1}
-    priority: 19
-  - ruleName: Rule 16
+      m_Position: {x: 17, y: 45, z: 0}
+      m_Size: {x: 1, y: 1, z: 1}
+    priority: 66
+  - ruleName: Rule 59
     bounds:
-      m_Position: {x: 5, y: -10, z: 0}
-      m_Size: {x: 3, y: 3, z: 1}
-    priority: 18
-  - ruleName: Rule 15
+      m_Position: {x: 19, y: 45, z: 0}
+      m_Size: {x: 1, y: 1, z: 1}
+    priority: 65
+  - ruleName: Rule 60
     bounds:
-      m_Position: {x: 1, y: -10, z: 0}
+      m_Position: {x: 21, y: 45, z: 0}
+      m_Size: {x: 1, y: 1, z: 1}
+    priority: 64
+  - ruleName: Rule 65
+    bounds:
+      m_Position: {x: 31, y: 45, z: 0}
+      m_Size: {x: 1, y: 1, z: 1}
+    priority: 63
+  - ruleName: Rule 62
+    bounds:
+      m_Position: {x: 25, y: 45, z: 0}
+      m_Size: {x: 1, y: 1, z: 1}
+    priority: 62
+  - ruleName: Rule 63
+    bounds:
+      m_Position: {x: 27, y: 45, z: 0}
+      m_Size: {x: 1, y: 1, z: 1}
+    priority: 61
+  - ruleName: Rule 64
+    bounds:
+      m_Position: {x: 29, y: 45, z: 0}
+      m_Size: {x: 1, y: 1, z: 1}
+    priority: 60
+  - ruleName: Rule 61
+    bounds:
+      m_Position: {x: 23, y: 45, z: 0}
+      m_Size: {x: 1, y: 1, z: 1}
+    priority: 59
+  - ruleName: Rule 57
+    bounds:
+      m_Position: {x: 13, y: 44, z: 0}
       m_Size: {x: 3, y: 3, z: 1}
-    priority: 17
+    priority: 58
+  - ruleName: Rule 56
+    bounds:
+      m_Position: {x: 9, y: 44, z: 0}
+      m_Size: {x: 3, y: 3, z: 1}
+    priority: 57
+  - ruleName: Rule 55
+    bounds:
+      m_Position: {x: 5, y: 44, z: 0}
+      m_Size: {x: 3, y: 3, z: 1}
+    priority: 56
+  - ruleName: Rule 54
+    bounds:
+      m_Position: {x: 1, y: 44, z: 0}
+      m_Size: {x: 3, y: 3, z: 1}
+    priority: 55
+  - ruleName: Rule 46
+    bounds:
+      m_Position: {x: 1, y: 40, z: 0}
+      m_Size: {x: 3, y: 3, z: 1}
+    priority: 54
+  - ruleName: Rule 48
+    bounds:
+      m_Position: {x: 9, y: 40, z: 0}
+      m_Size: {x: 3, y: 3, z: 1}
+    priority: 53
+  - ruleName: Rule 47
+    bounds:
+      m_Position: {x: 5, y: 40, z: 0}
+      m_Size: {x: 3, y: 3, z: 1}
+    priority: 52
+  - ruleName: Rule 49
+    bounds:
+      m_Position: {x: 13, y: 40, z: 0}
+      m_Size: {x: 3, y: 3, z: 1}
+    priority: 51
+  - ruleName: Rule 51
+    bounds:
+      m_Position: {x: 21, y: 40, z: 0}
+      m_Size: {x: 3, y: 3, z: 1}
+    priority: 50
+  - ruleName: Rule 52
+    bounds:
+      m_Position: {x: 25, y: 40, z: 0}
+      m_Size: {x: 3, y: 3, z: 1}
+    priority: 49
+  - ruleName: Rule 53
+    bounds:
+      m_Position: {x: 29, y: 40, z: 0}
+      m_Size: {x: 3, y: 3, z: 1}
+    priority: 48
+  - ruleName: Rule 50
+    bounds:
+      m_Position: {x: 17, y: 40, z: 0}
+      m_Size: {x: 3, y: 3, z: 1}
+    priority: 47
+  - ruleName: Rule 38
+    bounds:
+      m_Position: {x: 1, y: 36, z: 0}
+      m_Size: {x: 3, y: 3, z: 1}
+    priority: 46
+  - ruleName: Rule 39
+    bounds:
+      m_Position: {x: 5, y: 36, z: 0}
+      m_Size: {x: 3, y: 3, z: 1}
+    priority: 45
+  - ruleName: Rule 40
+    bounds:
+      m_Position: {x: 9, y: 36, z: 0}
+      m_Size: {x: 3, y: 3, z: 1}
+    priority: 44
+  - ruleName: Rule 41
+    bounds:
+      m_Position: {x: 13, y: 36, z: 0}
+      m_Size: {x: 3, y: 3, z: 1}
+    priority: 43
+  - ruleName: Rule 43
+    bounds:
+      m_Position: {x: 21, y: 36, z: 0}
+      m_Size: {x: 3, y: 3, z: 1}
+    priority: 42
+  - ruleName: Rule 44
+    bounds:
+      m_Position: {x: 25, y: 36, z: 0}
+      m_Size: {x: 3, y: 3, z: 1}
+    priority: 41
+  - ruleName: Rule 45
+    bounds:
+      m_Position: {x: 29, y: 36, z: 0}
+      m_Size: {x: 3, y: 3, z: 1}
+    priority: 40
+  - ruleName: Rule 42
+    bounds:
+      m_Position: {x: 17, y: 36, z: 0}
+      m_Size: {x: 3, y: 3, z: 1}
+    priority: 39
+  - ruleName: Rule 37
+    bounds:
+      m_Position: {x: 37, y: 32, z: 0}
+      m_Size: {x: 3, y: 3, z: 1}
+    priority: 38
+  - ruleName: Rule 36
+    bounds:
+      m_Position: {x: 33, y: 32, z: 0}
+      m_Size: {x: 3, y: 3, z: 1}
+    priority: 37
+  - ruleName: Rule 35
+    bounds:
+      m_Position: {x: 29, y: 32, z: 0}
+      m_Size: {x: 3, y: 3, z: 1}
+    priority: 36
+  - ruleName: Rule 34
+    bounds:
+      m_Position: {x: 25, y: 32, z: 0}
+      m_Size: {x: 3, y: 3, z: 1}
+    priority: 35
+  - ruleName: Rule 33
+    bounds:
+      m_Position: {x: 21, y: 32, z: 0}
+      m_Size: {x: 3, y: 3, z: 1}
+    priority: 34
+  - ruleName: Rule 31
+    bounds:
+      m_Position: {x: 13, y: 32, z: 0}
+      m_Size: {x: 3, y: 3, z: 1}
+    priority: 33
+  - ruleName: Rule 30
+    bounds:
+      m_Position: {x: 9, y: 32, z: 0}
+      m_Size: {x: 3, y: 3, z: 1}
+    priority: 32
+  - ruleName: Rule 29
+    bounds:
+      m_Position: {x: 5, y: 32, z: 0}
+      m_Size: {x: 3, y: 3, z: 1}
+    priority: 31
+  - ruleName: Rule 28
+    bounds:
+      m_Position: {x: 1, y: 32, z: 0}
+      m_Size: {x: 3, y: 3, z: 1}
+    priority: 30
+  - ruleName: Rule 32
+    bounds:
+      m_Position: {x: 17, y: 32, z: 0}
+      m_Size: {x: 3, y: 3, z: 1}
+    priority: 29
   - ruleName: Rule 18
     bounds:
-      m_Position: {x: 13, y: -10, z: 0}
+      m_Position: {x: 1, y: 28, z: 0}
       m_Size: {x: 3, y: 3, z: 1}
-    priority: 16
-  - ruleName: Rule 14
+    priority: 28
+  - ruleName: Rule 19
     bounds:
-      m_Position: {x: 10, y: -14, z: 0}
+      m_Position: {x: 5, y: 28, z: 0}
       m_Size: {x: 3, y: 3, z: 1}
-    priority: 15
-  - ruleName: Rule 13
+    priority: 27
+  - ruleName: Rule 20
     bounds:
-      m_Position: {x: 6, y: -14, z: 0}
+      m_Position: {x: 9, y: 28, z: 0}
       m_Size: {x: 3, y: 3, z: 1}
-    priority: 14
-  - ruleName: Rule 12
+    priority: 26
+  - ruleName: Rule 21
     bounds:
-      m_Position: {x: 2, y: -14, z: 0}
+      m_Position: {x: 13, y: 28, z: 0}
       m_Size: {x: 3, y: 3, z: 1}
-    priority: 13
-  - ruleName: Rule 11
+    priority: 25
+  - ruleName: Rule 23
     bounds:
-      m_Position: {x: -2, y: -14, z: 0}
+      m_Position: {x: 21, y: 28, z: 0}
       m_Size: {x: 3, y: 3, z: 1}
-    priority: 12
+    priority: 24
+  - ruleName: Rule 24
+    bounds:
+      m_Position: {x: 25, y: 28, z: 0}
+      m_Size: {x: 3, y: 3, z: 1}
+    priority: 23
+  - ruleName: Rule 25
+    bounds:
+      m_Position: {x: 29, y: 28, z: 0}
+      m_Size: {x: 3, y: 3, z: 1}
+    priority: 22
+  - ruleName: Rule 26
+    bounds:
+      m_Position: {x: 33, y: 28, z: 0}
+      m_Size: {x: 3, y: 3, z: 1}
+    priority: 21
+  - ruleName: Rule 27
+    bounds:
+      m_Position: {x: 37, y: 28, z: 0}
+      m_Size: {x: 3, y: 3, z: 1}
+    priority: 20
+  - ruleName: Rule 22
+    bounds:
+      m_Position: {x: 17, y: 28, z: 0}
+      m_Size: {x: 3, y: 3, z: 1}
+    priority: 19
   - ruleName: Rule 10
     bounds:
-      m_Position: {x: 10, y: -18, z: 0}
+      m_Position: {x: 1, y: 24, z: 0}
+      m_Size: {x: 3, y: 3, z: 1}
+    priority: 18
+  - ruleName: Rule 11
+    bounds:
+      m_Position: {x: 5, y: 24, z: 0}
+      m_Size: {x: 3, y: 3, z: 1}
+    priority: 17
+  - ruleName: Rule 12
+    bounds:
+      m_Position: {x: 9, y: 24, z: 0}
+      m_Size: {x: 3, y: 3, z: 1}
+    priority: 16
+  - ruleName: Rule 15
+    bounds:
+      m_Position: {x: 24, y: 24, z: 0}
+      m_Size: {x: 3, y: 3, z: 1}
+    priority: 15
+  - ruleName: Rule 14
+    bounds:
+      m_Position: {x: 20, y: 24, z: 0}
+      m_Size: {x: 3, y: 3, z: 1}
+    priority: 14
+  - ruleName: Rule 16
+    bounds:
+      m_Position: {x: 33, y: 24, z: 0}
+      m_Size: {x: 3, y: 3, z: 1}
+    priority: 13
+  - ruleName: Rule 17
+    bounds:
+      m_Position: {x: 37, y: 24, z: 0}
+      m_Size: {x: 3, y: 3, z: 1}
+    priority: 12
+  - ruleName: Rule 13
+    bounds:
+      m_Position: {x: 13, y: 24, z: 0}
       m_Size: {x: 3, y: 3, z: 1}
     priority: 11
   - ruleName: Rule 9
     bounds:
-      m_Position: {x: 6, y: -18, z: 0}
+      m_Position: {x: 27, y: 21, z: 0}
       m_Size: {x: 3, y: 3, z: 1}
     priority: 10
   - ruleName: Rule 8
     bounds:
-      m_Position: {x: 2, y: -18, z: 0}
+      m_Position: {x: 17, y: 21, z: 0}
       m_Size: {x: 3, y: 3, z: 1}
     priority: 9
   - ruleName: Rule 7
     bounds:
-      m_Position: {x: -2, y: -19, z: 0}
+      m_Position: {x: 13, y: 20, z: 0}
       m_Size: {x: 3, y: 3, z: 1}
     priority: 8
   - ruleName: Rule 6
     bounds:
-      m_Position: {x: 6, y: -23, z: 0}
+      m_Position: {x: 9, y: 20, z: 0}
       m_Size: {x: 3, y: 3, z: 1}
     priority: 7
   - ruleName: Rule 5
     bounds:
-      m_Position: {x: 2, y: -23, z: 0}
+      m_Position: {x: 5, y: 20, z: 0}
       m_Size: {x: 3, y: 3, z: 1}
     priority: 6
   - ruleName: Rule 4
     bounds:
-      m_Position: {x: -2, y: -23, z: 0}
+      m_Position: {x: 1, y: 20, z: 0}
       m_Size: {x: 3, y: 3, z: 1}
     priority: 5
   - ruleName: Rule 3
     bounds:
-      m_Position: {x: 12, y: -27, z: 0}
-      m_Size: {x: 2, y: 2, z: 1}
+      m_Position: {x: 27, y: 17, z: 0}
+      m_Size: {x: 3, y: 3, z: 1}
     priority: 4
   - ruleName: Rule 2
     bounds:
-      m_Position: {x: 8, y: -27, z: 0}
-      m_Size: {x: 2, y: 2, z: 1}
+      m_Position: {x: 17, y: 17, z: 0}
+      m_Size: {x: 3, y: 3, z: 1}
     priority: 3
   - ruleName: Rule 1
     bounds:
-      m_Position: {x: 3, y: -27, z: 0}
-      m_Size: {x: 2, y: 2, z: 1}
+      m_Position: {x: 24, y: 14, z: 0}
+      m_Size: {x: 3, y: 3, z: 1}
     priority: 2
   - ruleName: Rule 0
     bounds:
-      m_Position: {x: -2, y: -27, z: 0}
-      m_Size: {x: 2, y: 2, z: 1}
+      m_Position: {x: 20, y: 14, z: 0}
+      m_Size: {x: 3, y: 3, z: 1}
     priority: 1

@@ -33,7 +33,7 @@ public class AutoTerrainEditor : EditorWindow
     private const string IterationStepSystemGuidKeyPrefix = "AutoTerrainEditor_StepSystemGuid_";
     private const string IterationStepEnabledKeyPrefix = "AutoTerrainEditor_StepEnabled_";
 
-    [MenuItem("Tools/Auto Terrain Editor")]
+    [MenuItem("Tools/Tilemap/Auto Terrain Editor")]
     public static void ShowWindow()
     {
         GetWindow<AutoTerrainEditor>("Auto Terrain Editor");
