@@ -13,6 +13,7 @@ MonoBehaviour:
   m_Name: rule_1
   m_EditorClassIdentifier: 
   emptyMarkerTile: {fileID: 11400000, guid: 195c53c143d2f33489d394149b2411e8, type: 2}
+  emptyTileAlpha: 0.25
   inputRulesPrefab: {fileID: 7013068736764386129, guid: 208c7245152f0744da8162f7c8d4863e, type: 3}
   outputRulesPrefab: {fileID: 4904904353115121687, guid: 4b89c6c8ce08a0247a177939453450cf, type: 3}
   rules:

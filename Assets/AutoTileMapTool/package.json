@@ -1,0 +1,25 @@
+{
+  "name": "com.brairou.autotilemaptool",
+  "version": "1.0.0",
+  "displayName": "Auto Terrain Tilemap Tool",
+  "description": "A Unity editor tool for advanced tilemap management and editing",
+  "unity": "2019.4 and above",
+  "documentationUrl": "https://github.com/food211/AutoTileMapTool/Documentation/README.md",
+  "changelogUrl": "https://github.com/food211/AutoTileMapTool/CHANGELOG.md",
+  "licensesUrl": "https://github.com/food211/AutoTileMapTool/LICENSE.md",
+  "keywords": [
+    "tilemap",
+    "editor",
+    "tool",
+    "2d",
+    "autotile"
+  ],
+  "author": {
+    "name": "Brairou",
+    "email": "food211@qq.com",
+    "url": "https://github.com/food211"
+  },
+  "dependencies": {
+    "com.unity.2d.tilemap": "1.0.0"
+  }
+}
