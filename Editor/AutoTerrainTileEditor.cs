@@ -609,7 +609,7 @@ namespace TilemapTools
                 enabled = true
             };
             iterationSteps.Add(newStep);
-            
+
             EditorUtility.DisplayDialog("Rules Loaded", $"Terrain rules '{rules.name}' have been added to the list.", "OK");
             Repaint(); // 刷新窗口以显示新条目
         }
@@ -684,5 +684,5 @@ namespace TilemapTools
             return true;
         }
     }
-#endif
 }
+#endif
