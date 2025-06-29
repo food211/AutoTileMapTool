@@ -1,4 +1,4 @@
-# Tilemap Tools Pro
+# Auto Terrain Tile Map Tool
 
 一个高级的Unity Tilemap编辑和自动生成工具，帮助游戏开发者快速创建、编辑和管理瓦片地图。
 
