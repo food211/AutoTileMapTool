@@ -36,14 +36,8 @@ namespace TilemapTools
         // 初始化本地化系统
         private static void InitializeLocalization()
         {
-            // 获取Unity编辑器的当前语言
-            currentLanguage = EditorPrefs.GetString("Locale", "en");
-
-            // 如果语言不是我们支持的，默认使用英语
-            if (currentLanguage != "en" && currentLanguage != "zh-CN" && currentLanguage != "ja")
-            {
-                currentLanguage = "en";
-            }
+            // 使用语言管理器获取当前语言
+            currentLanguage = TilemapLanguageManager.GetCurrentLanguageCode();
 
             // 初始化本地化文本字典
             localizedTexts = new Dictionary<string, Dictionary<string, string>>();
