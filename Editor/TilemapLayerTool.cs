@@ -26,7 +26,7 @@ namespace TilemapTools
 
         private TileBase selectedTile;
         private TileBase replacementTile;
-        private bool showTileReplaceOptions = false;
+        private bool showTileReplaceOptions = true;
         private Vector2 tileInfoScrollPosition;
         private Material highlightMaterial;
         private Dictionary<TileBase, Sprite> tileToSpriteMap = new Dictionary<TileBase, Sprite>();
@@ -138,6 +138,17 @@ namespace TilemapTools
 
             // 加载上次使用的Tilemap设置
             LoadTilemapPreferences();
+
+            // 确保在启用窗口时不会自动进入选择模式
+            isSelecting = false;
+            SceneView.duringSceneGui -= OnSceneGUI;
+        }
+
+        private void OnDisable()
+        {
+            // 确保在禁用窗口时清除场景GUI回调
+            isSelecting = false;
+            SceneView.duringSceneGui -= OnSceneGUI;
         }
 
         private void OnGUI()
@@ -199,10 +210,27 @@ namespace TilemapTools
             GUI.backgroundColor = Color.white;
             EditorGUILayout.EndHorizontal();
 
-            if (GUILayout.Button("Start Selection"))
+            if (!isSelecting)
             {
-                isSelecting = true;
-                SceneView.duringSceneGui += OnSceneGUI;
+                if (GUILayout.Button("Start Selection Mode"))
+                {
+                    isSelecting = true;
+                    SceneView.duringSceneGui -= OnSceneGUI; // 移除以防重复添加
+                    SceneView.duringSceneGui += OnSceneGUI;
+                    SceneView.RepaintAll(); // 立即重绘场景视图
+                }
+            }
+            else
+            {
+                // 使用红色按钮表示可以退出选择模式
+                GUI.backgroundColor = Color.red;
+                if (GUILayout.Button("Exit Selection Mode"))
+                {
+                    isSelecting = false;
+                    SceneView.duringSceneGui -= OnSceneGUI;
+                    SceneView.RepaintAll(); // 立即重绘场景视图
+                }
+                GUI.backgroundColor = Color.white;
             }
 
             if (GUILayout.Button("Clear Selection"))
@@ -545,6 +573,12 @@ namespace TilemapTools
 
         private void OnSceneGUI(SceneView sceneView)
         {
+            // 如果不在选择模式，则不处理场景GUI事件
+            if (!isSelecting)
+            {
+                SceneView.duringSceneGui -= OnSceneGUI;
+                return;
+            }
             // 处理鼠标事件和绘制选择框
             HandleUtility.AddDefaultControl(GUIUtility.GetControlID(FocusType.Passive));
 

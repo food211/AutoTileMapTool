@@ -18,9 +18,11 @@ namespace TilemapTools
             public string name = "迭代步骤";
             public AutoTerrainTileRuleConfiger terrainSystem;
             public bool enabled = true;
+            public int inputSourceIndex = -1; // -1表示使用原始sourceTilemap，0~n表示使用第n个步骤的结果
         }
 
         [SerializeField] private List<IterationStep> iterationSteps = new List<IterationStep>();
+        private const string IterationStepInputSourceKeyPrefix = "AutoTerrainTileEditor_StepInputSource_";
         private Vector2 scrollPosition;
         private bool clearOutputBeforeApply = true;
         private bool showAddStepUI = false;
@@ -86,6 +88,7 @@ namespace TilemapTools
             {
                 EditorPrefs.SetString(IterationStepNameKeyPrefix + i, iterationSteps[i].name);
                 EditorPrefs.SetBool(IterationStepEnabledKeyPrefix + i, iterationSteps[i].enabled);
+                EditorPrefs.SetInt(IterationStepInputSourceKeyPrefix + i, iterationSteps[i].inputSourceIndex);
 
                 if (iterationSteps[i].terrainSystem != null)
                 {
@@ -153,6 +156,11 @@ namespace TilemapTools
                 if (EditorPrefs.HasKey(IterationStepEnabledKeyPrefix + i))
                 {
                     step.enabled = EditorPrefs.GetBool(IterationStepEnabledKeyPrefix + i);
+                }
+
+                if (EditorPrefs.HasKey(IterationStepInputSourceKeyPrefix + i))
+                {
+                    step.inputSourceIndex = EditorPrefs.GetInt(IterationStepInputSourceKeyPrefix + i);
                 }
 
                 if (EditorPrefs.HasKey(IterationStepSystemGuidKeyPrefix + i))
@@ -227,7 +235,21 @@ namespace TilemapTools
                 EditorGUI.indentLevel++;
                 iterationSteps[i].terrainSystem = (AutoTerrainTileRuleConfiger)EditorGUILayout.ObjectField(
                     "Terrain System", iterationSteps[i].terrainSystem, typeof(AutoTerrainTileRuleConfiger), false);
+
+                // 添加输入源选择下拉菜单
+                string[] inputOptions = new string[i + 1];
+                inputOptions[0] = "原始源Tilemap";
+                for (int j = 0; j < i; j++)
+                {
+                    inputOptions[j + 1] = $"步骤 {j + 1}: {iterationSteps[j].name}";
+                }
+
+                int selectedIndex = iterationSteps[i].inputSourceIndex + 1; // 转换为UI索引
+                selectedIndex = EditorGUILayout.Popup("输入源", selectedIndex, inputOptions);
+                iterationSteps[i].inputSourceIndex = selectedIndex - 1; // 转换回存储索引
+
                 EditorGUI.indentLevel--;
+
 
                 EditorGUILayout.EndVertical();
             }
@@ -298,9 +320,10 @@ namespace TilemapTools
             EditorGUILayout.HelpBox(
                 "多次迭代使用说明:\n" +
                 "1. 添加多个迭代步骤，每个步骤使用不同的规则集\n" +
-                "2. 按顺序应用这些步骤，每次迭代的结果将作为下一次迭代的输入\n" +
-                "3. 可以启用/禁用单个步骤，调整步骤顺序\n" +
-                "4. 适用于先生成基本形状，然后添加细节，最后处理边缘等复杂流程",
+                "2. 为每个步骤选择输入源（原始Tilemap或之前步骤的结果）\n" +
+                "3. 所有步骤的结果将按顺序合并，后面的步骤会覆盖前面的结果\n" +
+                "4. 可以启用/禁用单个步骤，调整步骤顺序\n" +
+                "5. 适用于复杂地形生成，如基础地形、细节添加、边缘处理等",
                 MessageType.Info);
 
             // 如果有任何UI变化，保存数据
@@ -321,15 +344,19 @@ namespace TilemapTools
                 outputTilemap.ClearAllTiles();
             }
 
-            // 创建一个临时Tilemap用于存储中间结果
-            GameObject tempGO = new GameObject("TempTilemap");
-            Tilemap tempTilemap = tempGO.AddComponent<Tilemap>();
-            TilemapRenderer tempRenderer = tempGO.AddComponent<TilemapRenderer>();
+            // 创建临时Tilemap数组，存储每个步骤的结果
+            GameObject[] tempGOs = new GameObject[iterationSteps.Count];
+            Tilemap[] tempTilemaps = new Tilemap[iterationSteps.Count];
 
             try
             {
-                // 复制源Tilemap到临时Tilemap
-                CopyTilemap(sourceTilemap, tempTilemap);
+                // 初始化所有临时Tilemap
+                for (int i = 0; i < iterationSteps.Count; i++)
+                {
+                    tempGOs[i] = new GameObject($"TempTilemap_{i}");
+                    tempTilemaps[i] = tempGOs[i].AddComponent<Tilemap>();
+                    tempGOs[i].AddComponent<TilemapRenderer>();
+                }
 
                 // 对每个启用的迭代步骤应用规则
                 for (int i = 0; i < iterationSteps.Count; i++)
@@ -339,18 +366,48 @@ namespace TilemapTools
 
                     Debug.Log($"应用迭代步骤 {i + 1}: {iterationSteps[i].name}");
 
-                    // 应用当前步骤的规则
-                    ApplyIterationStep(tempTilemap, outputTilemap, iterationSteps[i].terrainSystem);
-
-                    // 如果不是最后一步，将输出复制回临时Tilemap作为下一步的输入
-                    if (i < iterationSteps.Count - 1)
+                    // 确定输入源
+                    Tilemap inputTilemap;
+                    if (iterationSteps[i].inputSourceIndex < 0)
                     {
-                        tempTilemap.ClearAllTiles();
-                        CopyTilemap(outputTilemap, tempTilemap);
-
-                        // 如果不是最后一步，清除输出以准备下一步
-                        outputTilemap.ClearAllTiles();
+                        // 使用原始源Tilemap
+                        inputTilemap = sourceTilemap;
+                        Debug.Log($"步骤 {i + 1} 使用原始源Tilemap作为输入");
                     }
+                    else
+                    {
+                        // 使用之前步骤的结果
+                        int sourceIndex = iterationSteps[i].inputSourceIndex;
+                        if (sourceIndex >= i)
+                        {
+                            Debug.LogWarning($"步骤 {i + 1} 尝试使用无效的输入源索引 {sourceIndex}，将使用原始源Tilemap代替");
+                            inputTilemap = sourceTilemap;
+                        }
+                        else if (!iterationSteps[sourceIndex].enabled)
+                        {
+                            Debug.LogWarning($"步骤 {i + 1} 尝试使用已禁用的步骤 {sourceIndex + 1} 作为输入源，将使用原始源Tilemap代替");
+                            inputTilemap = sourceTilemap;
+                        }
+                        else
+                        {
+                            inputTilemap = tempTilemaps[sourceIndex];
+                            Debug.Log($"步骤 {i + 1} 使用步骤 {sourceIndex + 1} 的结果作为输入");
+                        }
+                    }
+
+                    // 应用当前步骤的规则
+                    ApplyIterationStep(inputTilemap, tempTilemaps[i], iterationSteps[i].terrainSystem);
+                }
+
+                // 按顺序合并所有结果到输出Tilemap
+                for (int i = 0; i < iterationSteps.Count; i++)
+                {
+                    if (!iterationSteps[i].enabled || iterationSteps[i].terrainSystem == null)
+                        continue;
+
+                    // 将当前步骤的结果合并到输出Tilemap
+                    MergeTilemapToOutput(tempTilemaps[i], outputTilemap);
+                    Debug.Log($"合并步骤 {i + 1} 的结果到最终输出");
                 }
 
                 // 所有迭代完成后，处理所有的 emptyMarkerTile
@@ -361,7 +418,37 @@ namespace TilemapTools
             finally
             {
                 // 清理临时对象
-                DestroyImmediate(tempGO);
+                for (int i = 0; i < tempGOs.Length; i++)
+                {
+                    if (tempGOs[i] != null)
+                    {
+                        DestroyImmediate(tempGOs[i]);
+                    }
+                }
+            }
+        }
+
+        private void MergeTilemapToOutput(Tilemap source, Tilemap destination)
+        {
+            if (source == null || destination == null)
+                return;
+
+            source.CompressBounds();
+            BoundsInt bounds = source.cellBounds;
+
+            for (int y = bounds.min.y; y < bounds.max.y; y++)
+            {
+                for (int x = bounds.min.x; x < bounds.max.x; x++)
+                {
+                    Vector3Int pos = new Vector3Int(x, y, 0);
+                    TileBase tile = source.GetTile(pos);
+
+                    // 只有当源Tilemap中有瓦片时才覆盖目标Tilemap
+                    if (tile != null)
+                    {
+                        destination.SetTile(pos, tile);
+                    }
+                }
             }
         }
 
@@ -657,8 +744,16 @@ namespace TilemapTools
 
                         if (ruleTile == terrainSystem.emptyMarkerTile)
                         {
-                            // 修改这里：规则要求该位置必须是emptyMarkerTile
+                            // 规则要求该位置必须是emptyMarkerTile
                             if (tileTile != terrainSystem.emptyMarkerTile)
+                            {
+                                return false;
+                            }
+                        }
+                        else if (ruleTile == terrainSystem.anyNonEmptyTile)
+                        {
+                            // 新增：规则要求该位置必须是任意非空白瓦片
+                            if (tileTile == null || tileTile == terrainSystem.emptyMarkerTile)
                             {
                                 return false;
                             }

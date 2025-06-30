@@ -5,11 +5,12 @@ using UnityEngine.Tilemaps;
 
 namespace TilemapTools
 {
-    [CreateAssetMenu(menuName = "Tiles/CreateAutoTerrainTileRuleConfig")]
+    [CreateAssetMenu(fileName = "NewTerrainRuleConfiger", menuName = "Tiles/CreateAutoTerrainTileRuleConfig")]
     public class AutoTerrainTileRuleConfiger : ScriptableObject
     {
         // 表示空白格的瓦片（可选）
         public TileBase emptyMarkerTile;
+        public TileBase anyNonEmptyTile;
         
         // 空白瓦片的透明度 (0-1范围)
         [Range(0f, 1f)]
