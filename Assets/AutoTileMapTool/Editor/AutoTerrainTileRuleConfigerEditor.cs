@@ -51,6 +51,20 @@ namespace TilemapTools
                 }
             }
 
+            // 任意非空白瓦片
+            EditorGUI.BeginChangeCheck();
+            TileBase anyNonEmptyTile = (TileBase)EditorGUILayout.ObjectField(
+                new GUIContent("Any Non-Empty Tile", "用于匹配任何非空白的瓦片"),
+                terrainSystem.anyNonEmptyTile, typeof(TileBase), false);
+            if (EditorGUI.EndChangeCheck())
+            {
+                Undo.RecordObject(terrainSystem, "Change Any Non-Empty Tile");
+                terrainSystem.anyNonEmptyTile = anyNonEmptyTile;
+                EditorUtility.SetDirty(terrainSystem);
+            }
+            
+            EditorGUILayout.HelpBox("使用「Any Non-Empty Tile」可以匹配任何非空的瓦片，用于创建通用规则。", MessageType.Info);
+
             // 规则Tilemap Prefabs
             EditorGUILayout.Space();
             EditorGUILayout.LabelField("Rule Tilemap Prefabs", EditorStyles.boldLabel);

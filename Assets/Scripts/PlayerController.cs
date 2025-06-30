@@ -30,7 +30,6 @@ public class PlayerController : MonoBehaviour
     private float initialJumpVelocity; // 计算得出的初始跳跃速度
     private bool isJumping = false; // 是否正在跳跃
     private bool isAiming = false; // 是否正在瞄准
-    private float currentSlopeAngle = 0f;
     private bool CanInput = true;
     private float originalgravityscale;
 
@@ -74,6 +73,14 @@ public class PlayerController : MonoBehaviour
     [SerializeField] private Vector2 groundCheckSize = new Vector2(0.9f, 0.1f); // 地面检测区域的大小
     [SerializeField] private Vector2 groundCheckOffset = new Vector2(0f, -0.05f); // 地面检测区域的偏移量
     [SerializeField] private bool showGroundCheck = true; // 是否在编辑器中显示地面检测区域
+
+    [Header("斜坡设置")]
+    [SerializeField] private float steepSlopeAngle = 35f; // 陡峭斜坡的角度阈值
+    [SerializeField] private float slideSpeed = 3f; // 在陡峭斜坡上滑动的速度
+    [SerializeField] private float slopeCheckDistance = 0.5f; // 斜坡检测距离
+    private bool isOnSteepSlope = false; // 是否在陡峭斜坡上
+    private Vector2 slopeNormalPerp; // 斜坡方向（垂直于法线）
+    private float currentSlopeAngle = 0f; // 当前斜坡角度
 
     [Header("头部检测设置")]
     [SerializeField] private Vector2 headCheckSize = new Vector2(0.9f, 0.1f); // 头部检测区域的大小
@@ -529,7 +536,6 @@ public class PlayerController : MonoBehaviour
         }
         else
         {
-            // 性能优化：减少射线数量
             // 普通模式下的地面检测逻辑 - 优化斜坡检测
             Vector2 position = transform.position;
             
@@ -539,7 +545,6 @@ public class PlayerController : MonoBehaviour
             
             // 使用射线检测来处理斜坡
             bool raycastHit = false;
-            bool isSteepSlope = false; // 是否是陡峭斜坡
             float rayDistance = groundCheckSize.y + 0.1f; // 射线长度稍微长于检测框高度
             
             // 性能优化：减少射线数量
@@ -555,10 +560,10 @@ public class PlayerController : MonoBehaviour
                     // 计算斜坡角度
                     float slopeAngle = Vector2.Angle(hit.normal, Vector2.up);
                     
-                    // 如果斜坡角度大于45度，标记为陡峭斜坡
-                    if (slopeAngle > 45f)
+                    // 如果斜坡角度大于steepSlopeAngle，标记为陡峭斜坡
+                    if (slopeAngle > steepSlopeAngle)
                     {
-                        isSteepSlope = true;
+                        isOnSteepSlope = true;
                         
                         #if UNITY_EDITOR
                         if (showGroundCheck)
@@ -617,32 +622,36 @@ public class PlayerController : MonoBehaviour
             #endif
             
             // 检查当前是否站在斜坡上，并获取斜坡角度
-            RaycastHit2D centerHit = Physics2D.Raycast(position, Vector2.down, rayDistance, groundLayers);
+            RaycastHit2D centerHit = Physics2D.Raycast(position, Vector2.down, slopeCheckDistance, groundLayers);
             if (centerHit.collider != null)
             {
+                // 计算斜坡角度
                 float slopeAngle = Vector2.Angle(centerHit.normal, Vector2.up);
-                
+
                 // 存储当前斜坡角度供其他方法使用
                 currentSlopeAngle = slopeAngle;
-                
+
+                // 计算斜坡方向（垂直于法线）
+                slopeNormalPerp = Vector2.Perpendicular(centerHit.normal).normalized;
+                // 确保斜坡方向朝下
+                if (slopeNormalPerp.y > 0)
+                    slopeNormalPerp = -slopeNormalPerp;
+                // 更新是否在陡峭斜坡上的状态
+                isOnSteepSlope = slopeAngle >= steepSlopeAngle;
                 // 如果斜坡角度大于45度，认为是陡峭斜坡
-                if (slopeAngle > 45f)
-                {
-                    isSteepSlope = true;
-                }
+#if UNITY_EDITOR
+                if (debugmode && isOnSteepSlope)
+                    Debug.LogFormat("在陡峭斜坡上，角度: {0}°, 滑动方向: {1}", slopeAngle, slopeNormalPerp);
+#endif
             }
             else
             {
                 currentSlopeAngle = 0f;
+                isOnSteepSlope = false;
             }
             
-            // 如果是陡峭斜坡，则不认为玩家站在地面上
-            if (isSteepSlope)
-            {
-                return false;
-            }
-            
-            // 如果射线检测或盒检测有任一检测到碰撞，则认为有地面支撑
+            // 如果是陡峭斜坡，玩家仍然被认为是在地面上（为了应用滑动效果）
+            // 但在HandleGroundMovement中会特殊处理
             return raycastHit || colliders.Length > 0;
         }
     }
@@ -739,21 +748,19 @@ public class PlayerController : MonoBehaviour
     // 检查是否在上坡移动
     private bool CheckIfMovingUpSlope(float horizontalInput)
     {
-        if (currentSlopeAngle <= 0f)
+        if (currentSlopeAngle <= 0f || Mathf.Abs(horizontalInput) < 0.1f)
             return false;
 
         // 获取当前站立的斜坡法线
-        RaycastHit2D hit = Physics2D.Raycast(transform.position, Vector2.down, 0.5f, groundLayers);
+        RaycastHit2D hit = Physics2D.Raycast(transform.position, Vector2.down, slopeCheckDistance, groundLayers);
         if (hit.collider != null)
         {
-            Vector2 slopeNormal = hit.normal;
-
             // 计算斜坡方向（垂直于法线）
-            Vector2 slopeDirection = new Vector2(slopeNormal.y, -slopeNormal.x);
+            Vector2 slopeDirection = new Vector2(hit.normal.y, -hit.normal.x);
 
             // 判断玩家移动方向是否与斜坡上坡方向一致
-            return (slopeDirection.x > 0 && horizontalInput > 0) ||
-                   (slopeDirection.x < 0 && horizontalInput < 0);
+            float dotProduct = Vector2.Dot(new Vector2(horizontalInput, 0), slopeDirection);
+            return dotProduct > 0;
         }
         return false;
     }
@@ -788,14 +795,27 @@ private void ApplyBunnyHopMovement(float horizontalInput)
     }
 }
 
-// 应用普通地面移动逻辑
+// 应用普通地面移动逻辑,处理陡峭斜坡上的滑动
 private void ApplyNormalGroundMovement(float horizontalInput, bool isMovingUpSlope)
 {
-    // 如果斜坡角度大于45度且正在尝试上坡，阻止水平移动
-    if (currentSlopeAngle > 45f && isMovingUpSlope)
+    // 如果在陡峭斜坡上
+    if (isOnSteepSlope)
     {
-        rb.velocity = new Vector2(0, rb.velocity.y);
+        // 在陡峭斜坡上滑动，玩家无法控制移动
+        rb.velocity = slopeNormalPerp * slideSpeed;
+        
+        #if UNITY_EDITOR
+        if (debugmode && Time.frameCount % 30 == 0)
+            Debug.LogFormat("在陡峭斜坡上滑动，速度: {0}", rb.velocity);
+        #endif
     }
+    // 如果在普通斜坡上且尝试上坡
+    else if (currentSlopeAngle > 0 && isMovingUpSlope)
+    {
+        // 正常移动，玩家可以控制
+        rb.velocity = new Vector2(horizontalInput * moveSpeed, rb.velocity.y);
+    }
+    // 普通地面移动
     else
     {
         rb.velocity = new Vector2(horizontalInput * moveSpeed, rb.velocity.y);
