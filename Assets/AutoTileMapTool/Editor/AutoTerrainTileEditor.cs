@@ -9,8 +9,13 @@ namespace TilemapTools
 {
     public class AutoTerrainTileEditor : EditorWindow
     {
-        private Tilemap sourceTilemap;    // 源Tilemap
-        private Tilemap outputTilemap;    // 输出Tilemap
+        public Tilemap sourceTilemap;    // 源Tilemap
+        public Tilemap outputTilemap;    // 输出Tilemap
+        // 本地化相关变量
+        private Dictionary<string, Dictionary<string, string>> localizedTexts;
+        private TilemapLanguageManager.Language selectedLanguage;
+        private bool showLanguageSettings = false;
+
 
         [System.Serializable]
         private class IterationStep
@@ -39,11 +44,106 @@ namespace TilemapTools
 
         public static AutoTerrainTileEditor ShowWindow()
         {
-            return GetWindow<AutoTerrainTileEditor>("Auto Tile Editor");
+            var window = GetWindow<AutoTerrainTileEditor>();
+            window.titleContent = new GUIContent(window.GetLocalizedText("windowTitle"));
+            return window;
+        }
+
+        // 初始化本地化文本
+        private void InitializeLocalization()
+        {
+            localizedTexts = new Dictionary<string, Dictionary<string, string>>();
+            selectedLanguage = TilemapLanguageManager.GetCurrentLanguageSetting();
+
+            // 英语文本
+            var enTexts = new Dictionary<string, string>
+            {
+                {"windowTitle", "Auto Terrain Tile Editor"},
+                {"sourceTilemap", "Source Tilemap"},
+                {"outputTilemap", "Output Tilemap"},
+                {"iterationSteps", "Iteration Steps"},
+                {"addStep", "Add Step"},
+                {"applyAll", "Apply All Iterations"},
+                {"clearBeforeApply", "Clear Output Before Apply"},
+                {"selectTerrainSystem", "Select Terrain System"},
+                {"stepName", "Step Name"},
+                {"stepEnabled", "Enabled"},
+                {"inputSource", "Input Source"},
+                {"originalSource", "Original Source"},
+                {"previousStep", "Previous Step {0}"},
+                {"delete", "Delete"},
+                {"moveUp", "↑"},
+                {"moveDown", "↓"},
+                {"apply", "Apply"},
+                {"languageSettings", "Language"},
+                {"language", "Language:"},
+                {"applyLanguage", "Apply"},
+                {"restartRequired", "Changes will take full effect after restarting the editor"}
+            };
+            localizedTexts["en"] = enTexts;
+
+            // 中文文本
+            var zhTexts = new Dictionary<string, string>
+            {
+                {"windowTitle", "自动地形瓦片编辑器"},
+                {"sourceTilemap", "源瓦片地图"},
+                {"outputTilemap", "输出瓦片地图"},
+                {"iterationSteps", "迭代步骤"},
+                {"addStep", "添加步骤"},
+                {"applyAll", "应用所有迭代"},
+                {"clearBeforeApply", "应用前清除输出"},
+                {"selectTerrainSystem", "选择地形系统"},
+                {"stepName", "步骤名称"},
+                {"stepEnabled", "启用"},
+                {"inputSource", "输入源"},
+                {"originalSource", "原始源"},
+                {"previousStep", "前一步骤 {0}"},
+                {"delete", "删除"},
+                {"moveUp", "↑"},
+                {"moveDown", "↓"},
+                {"apply", "应用"},
+                {"languageSettings", "语言设置"},
+                {"language", "语言:"},
+                {"applyLanguage", "应用"},
+                {"restartRequired", "更改将在重新启动编辑器后完全生效"}
+            };
+            localizedTexts["zh-CN"] = zhTexts;
+        }
+
+        private string GetLocalizedText(string key, params object[] args)
+        {
+            string languageCode = TilemapLanguageManager.GetCurrentLanguageCode();
+
+            // 检查当前语言是否有该文本
+            if (localizedTexts.ContainsKey(languageCode) && localizedTexts[languageCode].ContainsKey(key))
+            {
+                string text = localizedTexts[languageCode][key];
+                if (args != null && args.Length > 0)
+                {
+                    return string.Format(text, args);
+                }
+                return text;
+            }
+
+            // 如果没有找到，使用英语
+            if (localizedTexts.ContainsKey("en") && localizedTexts["en"].ContainsKey(key))
+            {
+                string text = localizedTexts["en"][key];
+                if (args != null && args.Length > 0)
+                {
+                    return string.Format(text, args);
+                }
+                return text;
+            }
+
+            // 如果英语也没有，返回键名
+            return key;
         }
 
         private void OnEnable()
         {
+            // 初始化本地化
+            InitializeLocalization();
             // 加载保存的数据
             LoadEditorData();
         }
@@ -179,18 +279,55 @@ namespace TilemapTools
 
         private void OnGUI()
         {
-            EditorGUILayout.LabelField("Auto Terrain Replacement Tool", EditorStyles.boldLabel);
+            // 标题和语言设置按钮
+            EditorGUILayout.BeginHorizontal();
+            GUILayout.Label(GetLocalizedText("windowTitle"), EditorStyles.boldLabel);
+            EditorGUILayout.EndHorizontal();
+
+            // 语言设置面板
+            if (showLanguageSettings)
+            {
+                EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+
+                EditorGUILayout.BeginHorizontal();
+                EditorGUILayout.LabelField(GetLocalizedText("language"), GUILayout.Width(80));
+                TilemapLanguageManager.Language newLanguage = (TilemapLanguageManager.Language)EditorGUILayout.EnumPopup(
+                    selectedLanguage
+                );
+
+                if (newLanguage != selectedLanguage)
+                {
+                    selectedLanguage = newLanguage;
+                }
+                EditorGUILayout.EndHorizontal();
+
+                EditorGUILayout.Space();
+
+                if (GUILayout.Button(GetLocalizedText("applyLanguage")))
+                {
+                    TilemapLanguageManager.SetCurrentLanguageSetting(selectedLanguage);
+                    // 应用后自动隐藏语言设置菜单
+                    showLanguageSettings = false;
+                    // 刷新界面
+                    Repaint();
+                }
+
+                EditorGUILayout.HelpBox(GetLocalizedText("restartRequired"), MessageType.Info);
+                EditorGUILayout.EndVertical();
+
+                EditorGUILayout.Space();
+            }
 
             EditorGUI.BeginChangeCheck();
-            sourceTilemap = (Tilemap)EditorGUILayout.ObjectField("Source Tilemap", sourceTilemap, typeof(Tilemap), true);
-            outputTilemap = (Tilemap)EditorGUILayout.ObjectField("Output Tilemap", outputTilemap, typeof(Tilemap), true);
+            sourceTilemap = (Tilemap)EditorGUILayout.ObjectField(GetLocalizedText("sourceTilemap"), sourceTilemap, typeof(Tilemap), true);
+            outputTilemap = (Tilemap)EditorGUILayout.ObjectField(GetLocalizedText("outputTilemap"), outputTilemap, typeof(Tilemap), true);
 
             EditorGUILayout.Space();
 
-            clearOutputBeforeApply = EditorGUILayout.Toggle("Clear Output Before Apply", clearOutputBeforeApply);
+            clearOutputBeforeApply = EditorGUILayout.Toggle(GetLocalizedText("clearBeforeApply"), clearOutputBeforeApply);
 
             EditorGUILayout.Space();
-            EditorGUILayout.LabelField("迭代步骤", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField(GetLocalizedText("iterationSteps"), EditorStyles.boldLabel);
 
             // 显示迭代步骤列表
             scrollPosition = EditorGUILayout.BeginScrollView(scrollPosition);
@@ -203,7 +340,7 @@ namespace TilemapTools
                 iterationSteps[i].enabled = EditorGUILayout.Toggle(iterationSteps[i].enabled, GUILayout.Width(20));
                 iterationSteps[i].name = EditorGUILayout.TextField(iterationSteps[i].name);
 
-                if (GUILayout.Button("↑", GUILayout.Width(25)) && i > 0)
+                if (GUILayout.Button(GetLocalizedText("moveUp"), GUILayout.Width(25)) && i > 0)
                 {
                     // 上移步骤
                     var temp = iterationSteps[i];
@@ -211,7 +348,7 @@ namespace TilemapTools
                     iterationSteps[i - 1] = temp;
                 }
 
-                if (GUILayout.Button("↓", GUILayout.Width(25)) && i < iterationSteps.Count - 1)
+                if (GUILayout.Button(GetLocalizedText("moveDown"), GUILayout.Width(25)) && i < iterationSteps.Count - 1)
                 {
                     // 下移步骤
                     var temp = iterationSteps[i];
@@ -219,7 +356,7 @@ namespace TilemapTools
                     iterationSteps[i + 1] = temp;
                 }
 
-                if (GUILayout.Button("X", GUILayout.Width(25)))
+                if (GUILayout.Button(GetLocalizedText("delete"), GUILayout.Width(25)))
                 {
                     // 删除步骤
                     iterationSteps.RemoveAt(i);
@@ -234,22 +371,21 @@ namespace TilemapTools
                 // 显示步骤详情
                 EditorGUI.indentLevel++;
                 iterationSteps[i].terrainSystem = (AutoTerrainTileRuleConfiger)EditorGUILayout.ObjectField(
-                    "Terrain System", iterationSteps[i].terrainSystem, typeof(AutoTerrainTileRuleConfiger), false);
+                    GetLocalizedText("selectTerrainSystem"), iterationSteps[i].terrainSystem, typeof(AutoTerrainTileRuleConfiger), false);
 
                 // 添加输入源选择下拉菜单
                 string[] inputOptions = new string[i + 1];
-                inputOptions[0] = "原始源Tilemap";
+                inputOptions[0] = GetLocalizedText("originalSource");
                 for (int j = 0; j < i; j++)
                 {
-                    inputOptions[j + 1] = $"步骤 {j + 1}: {iterationSteps[j].name}";
+                    inputOptions[j + 1] = GetLocalizedText("previousStep", j + 1) + ": " + iterationSteps[j].name;
                 }
 
                 int selectedIndex = iterationSteps[i].inputSourceIndex + 1; // 转换为UI索引
-                selectedIndex = EditorGUILayout.Popup("输入源", selectedIndex, inputOptions);
+                selectedIndex = EditorGUILayout.Popup(GetLocalizedText("inputSource"), selectedIndex, inputOptions);
                 iterationSteps[i].inputSourceIndex = selectedIndex - 1; // 转换回存储索引
 
                 EditorGUI.indentLevel--;
-
 
                 EditorGUILayout.EndVertical();
             }
@@ -262,19 +398,19 @@ namespace TilemapTools
             if (showAddStepUI)
             {
                 EditorGUILayout.BeginVertical(GUI.skin.box);
-                EditorGUILayout.LabelField("添加新步骤", EditorStyles.boldLabel);
+                EditorGUILayout.LabelField(GetLocalizedText("addStep"), EditorStyles.boldLabel);
 
                 newStepTerrainSystem = (AutoTerrainTileRuleConfiger)EditorGUILayout.ObjectField(
-                    "Terrain System", newStepTerrainSystem, typeof(AutoTerrainTileRuleConfiger), false);
+                    GetLocalizedText("selectTerrainSystem"), newStepTerrainSystem, typeof(AutoTerrainTileRuleConfiger), false);
 
                 EditorGUILayout.BeginHorizontal();
 
-                if (GUILayout.Button("添加"))
+                if (GUILayout.Button(GetLocalizedText("apply")))
                 {
                     if (newStepTerrainSystem != null)
                     {
                         IterationStep newStep = new IterationStep();
-                        newStep.name = $"步骤 {iterationSteps.Count + 1}";
+                        newStep.name = $"{GetLocalizedText("stepName")} {iterationSteps.Count + 1}";
                         newStep.terrainSystem = newStepTerrainSystem;
                         iterationSteps.Add(newStep);
 
@@ -284,11 +420,11 @@ namespace TilemapTools
                     }
                     else
                     {
-                        EditorUtility.DisplayDialog("错误", "请选择一个Terrain System", "确定");
+                        EditorUtility.DisplayDialog(GetLocalizedText("error"), GetLocalizedText("selectTerrainSystemRequired"), "OK");
                     }
                 }
 
-                if (GUILayout.Button("取消"))
+                if (GUILayout.Button(GetLocalizedText("cancel")))
                 {
                     showAddStepUI = false;
                     newStepTerrainSystem = null;
@@ -299,7 +435,7 @@ namespace TilemapTools
             }
             else
             {
-                if (GUILayout.Button("添加迭代步骤"))
+                if (GUILayout.Button(GetLocalizedText("addStep")))
                 {
                     showAddStepUI = true;
                 }
@@ -310,21 +446,11 @@ namespace TilemapTools
             // 应用按钮
             using (new EditorGUI.DisabledScope(sourceTilemap == null || outputTilemap == null || iterationSteps.Count == 0))
             {
-                if (GUILayout.Button("应用所有迭代步骤"))
+                if (GUILayout.Button(GetLocalizedText("applyAll")))
                 {
                     ApplyAllIterations();
                 }
             }
-
-            EditorGUILayout.Space();
-            EditorGUILayout.HelpBox(
-                "多次迭代使用说明:\n" +
-                "1. 添加多个迭代步骤，每个步骤使用不同的规则集\n" +
-                "2. 为每个步骤选择输入源（原始Tilemap或之前步骤的结果）\n" +
-                "3. 所有步骤的结果将按顺序合并，后面的步骤会覆盖前面的结果\n" +
-                "4. 可以启用/禁用单个步骤，调整步骤顺序\n" +
-                "5. 适用于复杂地形生成，如基础地形、细节添加、边缘处理等",
-                MessageType.Info);
 
             // 如果有任何UI变化，保存数据
             if (EditorGUI.EndChangeCheck())
@@ -333,7 +459,7 @@ namespace TilemapTools
             }
         }
 
-        private void ApplyAllIterations()
+        public void ApplyAllIterations()
         {
             if (sourceTilemap == null || outputTilemap == null || iterationSteps.Count == 0)
                 return;
@@ -487,25 +613,6 @@ namespace TilemapTools
             foreach (var pos in positionsToRemove)
             {
                 outputTilemap.SetTile(pos, null);
-            }
-        }
-
-        private void CopyTilemap(Tilemap source, Tilemap destination)
-        {
-            source.CompressBounds();
-            BoundsInt bounds = source.cellBounds;
-
-            for (int y = bounds.min.y; y < bounds.max.y; y++)
-            {
-                for (int x = bounds.min.x; x < bounds.max.x; x++)
-                {
-                    Vector3Int pos = new Vector3Int(x, y, 0);
-                    TileBase tile = source.GetTile(pos);
-                    if (tile != null)
-                    {
-                        destination.SetTile(pos, tile);
-                    }
-                }
             }
         }
 
@@ -684,7 +791,7 @@ namespace TilemapTools
             bool alreadyExists = iterationSteps.Any(step => step.terrainSystem == rules);
             if (alreadyExists)
             {
-                EditorUtility.DisplayDialog("Info", $"Rules '{rules.name}' are already in the list.", "OK");
+                EditorUtility.DisplayDialog("Info", $"Rules '{rules.name}' are already in the list. Will excute it", "OK");
                 return;
             }
 
