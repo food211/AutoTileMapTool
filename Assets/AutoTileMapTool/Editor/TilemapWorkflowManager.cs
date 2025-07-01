@@ -63,7 +63,7 @@ namespace TilemapTools
 
         public static void ShowWindow()
         {
-            instance = GetWindow<TilemapWorkflowManager>("Tilemap Workflow");
+            instance = GetWindow<TilemapWorkflowManager>(GetLocalizedText("windowTitle"));
         }
 
         // 添加静态方法供其他工具调用
@@ -80,7 +80,7 @@ namespace TilemapTools
         {
             if (instance == null)
             {
-                instance = GetWindow<TilemapWorkflowManager>("Tilemap Workflow");
+                instance = GetWindow<TilemapWorkflowManager>(GetLocalizedText("windowTitle"));
             }
             instance.currentStep = step;
             instance.Repaint();
@@ -88,13 +88,23 @@ namespace TilemapTools
 
         private void OnEnable()
         {
+            // 设置单例引用
             instance = this;
-            IsAutomatedWorkflow = false;
-            selectedLanguage = TilemapLanguageManager.GetCurrentLanguageSetting();
-            InitializeLocalization();
-
-            // 从EditorPrefs加载上次的设置
+            
+            // 加载设置
             LoadSettings();
+            
+            // 初始化本地化
+            if (localizedTexts == null)
+            {
+                InitializeLocalization();
+            }
+            
+            // 设置本地化的窗口标题
+            titleContent = new GUIContent(GetLocalizedText("windowTitle"));
+            
+            // 初始化语言设置
+            selectedLanguage = TilemapLanguageManager.GetCurrentLanguageSetting();
         }
 
         // 添加OnDisable方法，在窗口关闭时保存设置
@@ -241,6 +251,24 @@ namespace TilemapTools
             return current;
         }
 
+        private static void InitializeLocalizationStatic()
+        {
+            // 确保实例存在
+            if (instance == null)
+            {
+                instance = GetWindow<TilemapWorkflowManager>("Tilemap Workflow");
+            }
+
+            // 初始化本地化文本
+            if (instance.localizedTexts == null)
+            {
+                instance.InitializeLocalization();
+                
+                // 本地化系统初始化后，更新窗口标题
+                instance.titleContent = new GUIContent(GetLocalizedText("windowTitle"));
+            }
+        }
+
         // 初始化本地化文本
         private void InitializeLocalization()
         {
@@ -339,6 +367,17 @@ namespace TilemapTools
                 {"selectOutputTilesPath", "Select Output Tiles Output Path"},
                 {"selectOutputPalettesPath", "Select Output Palette Output Path"},
                 {"selectRulesPath", "Select Rules Asset Output Path"},
+                {"createRuleAsset", "Create Auto Terrain Tile"},
+                {"newRuleAssetName", "NewAutoTerrainTileRuleConfiger"},
+                {"chooseRuleLocation", "Choose location"},
+                {"selectPaletteFile", "Select Palette File"},
+                {"selectRuleFile", "Select Rule File"},
+                {"outputTextureWarning", "Output texture palette was not generated."},
+                {"cannotLoadPalette", "Cannot load palette prefab:"},
+                {"cannotLoadRuleAsset", "Cannot load rule asset, skipping rule application step."},
+                {"ok", "OK"},
+                {"windowTitle", "Tilemap Workflow"},
+                {"selectPaletteLocation", "Select Palette Location"},
             };
             localizedTexts["en"] = enTexts;
 
@@ -389,7 +428,7 @@ namespace TilemapTools
                 {"automatedWorkflowDescription", "此工具可以自动化从源纹理到最终瓦片地图的整个创建过程。"},
                 {"textureSelection", "纹理选择"},
                 {"sourceTexture", "源纹理（已切片）"},
-                {"outputTexture", "目标纹理（已切片）"},
+                {"outputTexture", "目标纹理（可选）"},
                 {"outputSettings", "输出设置"},
                 {"outputFolder", "输出文件夹:"},
                 {"browse", "浏览..."},
@@ -435,37 +474,54 @@ namespace TilemapTools
                 {"selectOutputTilesPath", "选择输出纹理Tile输出路径"},
                 {"selectOutputPalettesPath", "选择输出调色板输出路径"},
                 {"selectRulesPath", "选择规则资产输出路径"},
+                {"createRuleAsset", "创建自动地形瓦片"},
+                {"newRuleAssetName", "新建自动地形瓦片规则配置"},
+                {"chooseRuleLocation", "选择保存位置"},
+                {"selectPaletteFile", "选择调色板文件"},
+                {"selectRuleFile", "选择规则文件"},
+                {"outputTextureWarning", "输出纹理调色板未生成。"},
+                {"cannotLoadPalette", "无法加载调色板预制体："},
+                {"cannotLoadRuleAsset", "无法加载规则资产，跳过应用规则步骤。"},
+                {"ok", "确定"},
+                {"windowTitle", "瓦片地图工作流"},
+                {"selectPaletteLocation", "选择调色板位置"},
             };
             localizedTexts["zh-CN"] = zhTexts;
         }
 
         // 获取本地化文本
-        private string GetLocalizedText(string key, params object[] args)
+        private static string GetLocalizedText(string key, params object[] args)
         {
+            // 初始化本地化文本字典（如果尚未初始化）
+            if (instance == null || instance.localizedTexts == null)
+            {
+                InitializeLocalizationStatic();
+            }
+
             string languageCode = TilemapLanguageManager.GetCurrentLanguageCode();
-            
+
             // 检查当前语言是否有该文本
-            if (localizedTexts.ContainsKey(languageCode) && localizedTexts[languageCode].ContainsKey(key))
+            if (instance.localizedTexts.ContainsKey(languageCode) && instance.localizedTexts[languageCode].ContainsKey(key))
             {
-                string text = localizedTexts[languageCode][key];
+                string text = instance.localizedTexts[languageCode][key];
                 if (args != null && args.Length > 0)
                 {
                     return string.Format(text, args);
                 }
                 return text;
             }
-            
+
             // 如果没有找到，使用英语
-            if (localizedTexts.ContainsKey("en") && localizedTexts["en"].ContainsKey(key))
+            if (instance.localizedTexts.ContainsKey("en") && instance.localizedTexts["en"].ContainsKey(key))
             {
-                string text = localizedTexts["en"][key];
+                string text = instance.localizedTexts["en"][key];
                 if (args != null && args.Length > 0)
                 {
                     return string.Format(text, args);
                 }
                 return text;
             }
-            
+
             // 如果英语也没有，返回键名
             return key;
         }
@@ -481,26 +537,26 @@ namespace TilemapTools
                 showLanguageSettings = !showLanguageSettings;
             }
             EditorGUILayout.EndHorizontal();
-            
+
             // 语言设置面板
             if (showLanguageSettings)
             {
                 EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-                
+
                 EditorGUILayout.BeginHorizontal();
                 EditorGUILayout.LabelField(GetLocalizedText("language"), GUILayout.Width(80));
                 TilemapLanguageManager.Language newLanguage = (TilemapLanguageManager.Language)EditorGUILayout.EnumPopup(
                     selectedLanguage
                 );
-                
+
                 if (newLanguage != selectedLanguage)
                 {
                     selectedLanguage = newLanguage;
                 }
                 EditorGUILayout.EndHorizontal();
-                
+
                 EditorGUILayout.Space();
-                
+
                 if (GUILayout.Button(GetLocalizedText("apply")))
                 {
                     TilemapLanguageManager.SetCurrentLanguageSetting(selectedLanguage);
@@ -509,44 +565,44 @@ namespace TilemapTools
                     // 刷新界面
                     Repaint();
                 }
-                
+
                 EditorGUILayout.HelpBox(GetLocalizedText("restartRequired"), MessageType.Info);
                 EditorGUILayout.EndVertical();
-                
+
                 EditorGUILayout.Space();
             }
-            
+
             // 工作流步骤标签页
             string[] tabLabels = new string[]
             {
                 GetLocalizedText("automatedWorkflow"),
-                GetLocalizedText("step1"), 
-                GetLocalizedText("step2"), 
-                GetLocalizedText("step3"), 
+                GetLocalizedText("step1"),
+                GetLocalizedText("step2"),
+                GetLocalizedText("step3"),
                 GetLocalizedText("step4")
             };
-            
+
             currentStep = (WorkflowStep)GUILayout.Toolbar((int)currentStep, tabLabels);
 
             EditorGUILayout.Space();
 
             // 根据当前步骤显示对应的界面
-            switch(currentStep)
+            switch (currentStep)
             {
                 case WorkflowStep.AutomatedWorkflow:
                     DrawAutomatedWorkflowStep();
                     break;
-                case WorkflowStep.GeneratePalette: 
-                    DrawPaletteGenerationStep(); 
+                case WorkflowStep.GeneratePalette:
+                    DrawPaletteGenerationStep();
                     break;
-                case WorkflowStep.CreateRules: 
-                    DrawRuleCreationStep(); 
+                case WorkflowStep.CreateRules:
+                    DrawRuleCreationStep();
                     break;
-                case WorkflowStep.ApplyTerrain: 
-                    DrawTerrainApplicationStep(); 
+                case WorkflowStep.ApplyTerrain:
+                    DrawTerrainApplicationStep();
                     break;
-                case WorkflowStep.LayerEditing: 
-                    DrawLayerEditingStep(); 
+                case WorkflowStep.LayerEditing:
+                    DrawLayerEditingStep();
                     break;
             }
         }
@@ -760,7 +816,7 @@ namespace TilemapTools
                 EditorUtility.DisplayDialog(
                     GetLocalizedText("error"),
                     GetLocalizedText("invalidSourceTexture"),
-                    "OK");
+                    GetLocalizedText("ok"));
                 return;
             }
 
@@ -827,7 +883,7 @@ namespace TilemapTools
 
                         if (string.IsNullOrEmpty(outputPalettePath) || !File.Exists(outputPalettePath))
                         {
-                            Debug.LogWarning("输出纹理调色板未生成。");
+                            Debug.LogWarning(GetLocalizedText("outputTextureWarning"));
                         }
                     }
                 }
@@ -921,7 +977,7 @@ namespace TilemapTools
                     }
                     else
                     {
-                        Debug.LogWarning("无法加载调色板预制体：" + inputPalettePath);
+                        Debug.LogWarning(GetLocalizedText("cannotLoadPalette") + " " + inputPalettePath);
                     }
                 }
 
@@ -957,7 +1013,7 @@ namespace TilemapTools
                     }
                     else
                     {
-                        Debug.LogWarning("无法加载规则资产，跳过应用规则步骤。");
+                        Debug.LogWarning(GetLocalizedText("cannotLoadRuleAsset"));
                     }
                 }
 
@@ -965,7 +1021,7 @@ namespace TilemapTools
                 EditorUtility.DisplayDialog(
                     GetLocalizedText("success"),
                     GetLocalizedText("workflowCompleted"),
-                    "OK");
+                    GetLocalizedText("ok"));
             }
             catch (System.Exception e)
             {
@@ -1203,7 +1259,12 @@ namespace TilemapTools
 
         private void CreateAutoTerrainTileRuleConfigerAsset()
         {
-            string path = EditorUtility.SaveFilePanelInProject("Create Auto Terrain Tile", "NewAutoTerrainTileRuleConfiger", "asset", "Choose location");
+            string path = EditorUtility.SaveFilePanelInProject(
+                GetLocalizedText("createRuleAsset"),
+                GetLocalizedText("newRuleAssetName"),
+                "asset",
+                GetLocalizedText("chooseRuleLocation"));
+
             if (!string.IsNullOrEmpty(path))
             {
                 AutoTerrainTileRuleConfiger newTile = CreateInstance<AutoTerrainTileRuleConfiger>();
