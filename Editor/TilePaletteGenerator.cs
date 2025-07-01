@@ -74,6 +74,33 @@ namespace TilemapTools
                 {"paletteGenerated", "Tile palette '{0}' has been created successfully!\n\nWould you like to proceed to the next step (Create Rules)?"},
                 {"yesNextStep", "Yes, Next Step"},
                 {"stayHere", "Stay Here"},
+                {"startGeneratingPalette", "Starting to generate palette: {0}"},
+                {"sourceTextureInfo", "Source texture: {0}"},
+                {"tilesOutputPathInfo", "Tiles output path: {0}"},
+                {"paletteOutputPathInfo", "Palette output path: {0}"},
+                {"sourceTextureEmpty", "Source texture is null, cannot generate palette"},
+                {"foundSpritesInTexture", "Found {0} sprites in the texture"},
+                {"textureNotSliced", "Texture is not sliced or contains no sprites, cannot generate palette"},
+                {"invalidPaletteFileName", "Invalid palette file name!"},
+                {"noValidSprites", "No valid sprites after processing"},
+                {"paletteUpdated", "Tile palette updated in-place: {0}"},
+                {"paletteSaved", "Tile palette saved to: {0}"},
+                {"paletteContainsTiles", "Palette {0} contains {1} tiles"},
+                {"paletteNoTiles", "Generated palette contains no tiles: {0}"},
+                {"paletteNoTilemap", "No Tilemap component found in generated palette: {0}"},
+                {"cannotLoadPalette", "Cannot load generated palette: {0}"},
+                {"paletteGenerationError", "Error occurred while generating palette: {0}\n{1}"},
+                {"assetsExist", "Assets Exist"},
+                {"updateExistingTiles", "Some tile assets already exist. Update existing tiles?"},
+                {"updateAll", "Update All"},
+                {"skipAll", "Skip All"},
+                {"cannotSavePalette", "Cannot save palette to root folder. Please specify a subfolder."},
+                {"automatedWorkflowNextStep", "Automated workflow: proceeding to next step without user interaction."},
+                {"unslicedPixelsWarning", "Warning: Unsliced Pixels Detected"},
+                {"unslicedPixelsMessage", "Some areas of the texture are not covered by any sprite. This may result in incomplete tile palette.\n\nDo you want to continue anyway?"},
+                {"continueGeneration", "Continue"},
+                {"cancelGeneration", "Cancel"},
+
             };
             localizedTexts["en"] = enTexts;
 
@@ -108,6 +135,32 @@ namespace TilemapTools
                 {"paletteGenerated", "瓦片调色板 '{0}' 已成功创建！\n\n您想继续下一步（创建规则）吗？"},
                 {"yesNextStep", "是的，下一步"},
                 {"stayHere", "留在这里"},
+                {"startGeneratingPalette", "开始生成调色板: {0}"},
+                {"sourceTextureInfo", "源纹理: {0}"},
+                {"tilesOutputPathInfo", "瓦片输出路径: {0}"},
+                {"paletteOutputPathInfo", "调色板输出路径: {0}"},
+                {"sourceTextureEmpty", "源纹理为空，无法生成调色板"},
+                {"foundSpritesInTexture", "在纹理中找到 {0} 个精灵"},
+                {"textureNotSliced", "纹理未切片或未包含精灵，无法生成调色板"},
+                {"invalidPaletteFileName", "无效的调色板文件名!"},
+                {"noValidSprites", "处理后没有有效的精灵"},
+                {"paletteUpdated", "调色板已原地更新: {0}"},
+                {"paletteSaved", "调色板已保存到: {0}"},
+                {"paletteContainsTiles", "调色板 {0} 中包含 {1} 个瓦片"},
+                {"paletteNoTiles", "生成的调色板不包含任何瓦片: {0}"},
+                {"paletteNoTilemap", "生成的调色板中没有找到Tilemap组件: {0}"},
+                {"cannotLoadPalette", "无法加载生成的调色板: {0}"},
+                {"paletteGenerationError", "生成调色板时发生错误: {0}\n{1}"},
+                {"assetsExist", "资产已存在"},
+                {"updateExistingTiles", "一些瓦片资产已经存在。是否更新现有瓦片？"},
+                {"updateAll", "全部更新"},
+                {"skipAll", "全部跳过"},
+                {"cannotSavePalette", "无法将调色板保存到根文件夹。请指定一个子文件夹。"},
+                {"automatedWorkflowNextStep", "自动化工作流：无需用户交互，正在进入下一步。"},
+                {"unslicedPixelsWarning", "警告：检测到未切片像素"},
+                {"unslicedPixelsMessage", "纹理的某些区域没有被任何精灵覆盖。这可能导致生成的调色板不完整。\n\n是否仍要继续？"},
+                {"continueGeneration", "继续"},
+                {"cancelGeneration", "取消"},
             };
             localizedTexts["zh-CN"] = zhTexts;
         }
@@ -152,7 +205,7 @@ namespace TilemapTools
             if (localizedTexts == null)
             {
                 InitializeLocalization();
-            }
+            }          
 
             // 获取本地化的窗口标题
             string title = GetLocalizedText("title");
@@ -360,6 +413,26 @@ namespace TilemapTools
                 return;
             }
 
+            // 检查是否有未被切片的区域
+            bool hasUnslicedPixels = CheckForUnslicedPixels(sourceTexture, sprites);
+            string texturePath = AssetDatabase.GetAssetPath(sourceTexture);
+            // 如果发现未切片区域，询问用户是否继续
+            if (hasUnslicedPixels)
+            {
+                bool shouldContinue = EditorUtility.DisplayDialog(
+                    GetLocalizedText("unslicedPixelsWarning"),
+                    string.Format(GetLocalizedText("unslicedPixelsMessageWithFileName"), sourceTexture.name, texturePath),
+                    GetLocalizedText("continueGeneration"),
+                    GetLocalizedText("cancelGeneration")
+                );
+                
+                if (!shouldContinue)
+                {
+                    Debug.LogWarning($"Sprite '{sourceTexture.name}' ({texturePath}) has unsliced pixel，workflow cancelled。");
+                    return;
+                }
+            }
+
             // 检查所有精灵是否都是正方形（长宽相等）
             bool allSquare = true;
             bool sameSizes = true;
@@ -461,7 +534,7 @@ namespace TilemapTools
                         TilemapWorkflowManager.SetCurrentStep(TilemapWorkflowManager.WorkflowStep.CreateRules);
 
                         // 显示并激活工作流管理器窗口
-                        var workflowWindow = EditorWindow.GetWindow<TilemapWorkflowManager>("Tilemap Workflow");
+                        var workflowWindow = EditorWindow.GetWindow<TilemapWorkflowManager>(GetLocalizedText("windowTitle"));
                         workflowWindow.Show();
                         workflowWindow.Focus();
                     }
@@ -471,7 +544,7 @@ namespace TilemapTools
                     // 在自动化工作流中，只设置当前步骤，不显示对话框和窗口
                     TilemapWorkflowManager.SetCurrentStep(TilemapWorkflowManager.WorkflowStep.CreateRules);
 
-                    Debug.LogFormat("Automated workflow: proceeding to next step without user interaction.");
+                    Debug.LogFormat(GetLocalizedText("automatedWorkflowNextStep"));
                 }
             }
         }
@@ -529,7 +602,7 @@ namespace TilemapTools
             // 确保paletteOutputPath不是根文件夹
             if (paletteOutputPath == "Assets" || paletteOutputPath == "/")
             {
-                Debug.LogError("Cannot save palette to root folder. Please specify a subfolder.");
+                Debug.LogError(GetLocalizedText("cannotSavePalette"));
                 DestroyImmediate(paletteGO);
                 return null;
             }
@@ -540,40 +613,69 @@ namespace TilemapTools
                 if (TilemapWorkflowManager.IsAutomatedWorkflow)
                 {
                     // 在自动化工作流中，默认更新现有调色板
-                    // 加载现有的预制体
                     GameObject existingPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
                     if (existingPrefab != null)
                     {
                         // 创建预制体的实例
                         GameObject existingInstance = PrefabUtility.InstantiatePrefab(existingPrefab) as GameObject;
-
-                        // 删除所有子对象
-                        while (existingInstance.transform.childCount > 0)
+                        
+                        // 查找现有的Tilemap组件
+                        Tilemap existingTilemap = existingInstance.GetComponentInChildren<Tilemap>();
+                        
+                        if (existingTilemap != null)
                         {
-                            DestroyImmediate(existingInstance.transform.GetChild(0).gameObject);
+                            // 清除现有的瓦片
+                            existingTilemap.ClearAllTiles();
+                            
+                            // 复制新的瓦片到现有的Tilemap
+                            foreach (var kvp in tilePositions)
+                            {
+                                Vector3Int position = new Vector3Int(kvp.Key.x, gridHeight - 1 - kvp.Key.y, 0);
+                                existingTilemap.SetTile(position, kvp.Value);
+                            }
+                            
+                            // 应用更改到预制体
+                            PrefabUtility.SaveAsPrefabAsset(existingInstance, prefabPath);
+                            DestroyImmediate(existingInstance);
+                            DestroyImmediate(paletteGO);
+                            
+                            Debug.Log(GetLocalizedText("paletteUpdated", prefabPath));
+                            return prefabPath;
                         }
-
-                        // 将新的Tilemap添加为子对象
-                        tilemapGO.transform.SetParent(existingInstance.transform, false);
-
-                        // 确保有Grid组件
-                        if (!existingInstance.GetComponent<Grid>())
+                        else
                         {
-                            existingInstance.AddComponent<Grid>();
+                            // 如果没有找到Tilemap组件，则删除所有子对象并添加新的
+                            while (existingInstance.transform.childCount > 0)
+                            {
+                                DestroyImmediate(existingInstance.transform.GetChild(0).gameObject);
+                            }
+
+                            // 将新的Tilemap添加为子对象
+                            tilemapGO.transform.SetParent(existingInstance.transform, false);
+
+                            // 确保有Grid组件
+                            if (!existingInstance.GetComponent<Grid>())
+                            {
+                                existingInstance.AddComponent<Grid>();
+                            }
+
+                            // 应用更改到预制体
+                            PrefabUtility.SaveAsPrefabAsset(existingInstance, prefabPath);
+                            DestroyImmediate(existingInstance);
+                            DestroyImmediate(paletteGO);
+
+                            Debug.Log(GetLocalizedText("paletteUpdated", prefabPath));
+                            return prefabPath;
                         }
-
-                        // 应用更改到预制体
-                        PrefabUtility.SaveAsPrefabAsset(existingInstance, prefabPath);
-                        DestroyImmediate(existingInstance);
-                        DestroyImmediate(paletteGO);
-
-                        Debug.Log($"Tile palette updated in-place: {prefabPath}");
-                        return prefabPath;
                     }
                     else
                     {
                         // 如果无法加载预制体，则覆盖它
                         AssetDatabase.DeleteAsset(prefabPath);
+                        PrefabUtility.SaveAsPrefabAsset(paletteGO, prefabPath);
+                        DestroyImmediate(paletteGO);
+                        Debug.Log(GetLocalizedText("paletteSaved", prefabPath));
+                        return prefabPath;
                     }
                 }
                 else
@@ -589,8 +691,71 @@ namespace TilemapTools
                     switch (choice)
                     {
                         case 0: // Update In-Place
-                                // ... (保持原有代码)
-                            break;
+                            // 加载现有的预制体
+                            GameObject existingPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
+                            if (existingPrefab != null)
+                            {
+                                // 创建预制体的实例
+                                GameObject existingInstance = PrefabUtility.InstantiatePrefab(existingPrefab) as GameObject;
+                                
+                                // 查找现有的Tilemap组件
+                                Tilemap existingTilemap = existingInstance.GetComponentInChildren<Tilemap>();
+                                
+                                if (existingTilemap != null)
+                                {
+                                    // 清除现有的瓦片
+                                    existingTilemap.ClearAllTiles();
+                                    
+                                    // 复制新的瓦片到现有的Tilemap
+                                    foreach (var kvp in tilePositions)
+                                    {
+                                        Vector3Int position = new Vector3Int(kvp.Key.x, gridHeight - 1 - kvp.Key.y, 0);
+                                        existingTilemap.SetTile(position, kvp.Value);
+                                    }
+                                    
+                                    // 应用更改到预制体
+                                    PrefabUtility.SaveAsPrefabAsset(existingInstance, prefabPath);
+                                    DestroyImmediate(existingInstance);
+                                    DestroyImmediate(paletteGO);
+                                    
+                                    Debug.Log(GetLocalizedText("paletteUpdated", prefabPath));
+                                    return prefabPath;
+                                }
+                                else
+                                {
+                                    // 如果没有找到Tilemap组件，则删除所有子对象并添加新的
+                                    while (existingInstance.transform.childCount > 0)
+                                    {
+                                        DestroyImmediate(existingInstance.transform.GetChild(0).gameObject);
+                                    }
+
+                                    // 将新的Tilemap添加为子对象
+                                    tilemapGO.transform.SetParent(existingInstance.transform, false);
+
+                                    // 确保有Grid组件
+                                    if (!existingInstance.GetComponent<Grid>())
+                                    {
+                                        existingInstance.AddComponent<Grid>();
+                                    }
+
+                                    // 应用更改到预制体
+                                    PrefabUtility.SaveAsPrefabAsset(existingInstance, prefabPath);
+                                    DestroyImmediate(existingInstance);
+                                    DestroyImmediate(paletteGO);
+
+                                    Debug.Log(GetLocalizedText("paletteUpdated", prefabPath));
+                                    return prefabPath;
+                                }
+                            }
+                            else
+                            {
+                                // 如果无法加载预制体，则覆盖它
+                                AssetDatabase.DeleteAsset(prefabPath);
+                                PrefabUtility.SaveAsPrefabAsset(paletteGO, prefabPath);
+                                DestroyImmediate(paletteGO);
+                                Debug.Log(GetLocalizedText("paletteSaved", prefabPath));
+                                return prefabPath;
+                            }
                         case 1: // Cancel
                             DestroyImmediate(paletteGO);
                             return null;
@@ -604,27 +769,27 @@ namespace TilemapTools
             PrefabUtility.SaveAsPrefabAsset(paletteGO, prefabPath);
             DestroyImmediate(paletteGO);
             AssetDatabase.SaveAssets();
-            Debug.Log($"Tile palette saved to: {prefabPath}");
+            Debug.Log(GetLocalizedText("paletteSaved", prefabPath));
 
             return prefabPath;
         }
 
         public static string GenerateTilePaletteStatic(
-    Texture2D sourceTexture,
-    string tilesOutputPath,
-    string paletteOutputPath,
-    string paletteFileName,
-    bool preserveGuids = false)
+            Texture2D sourceTexture,
+            string tilesOutputPath,
+            string paletteOutputPath,
+            string paletteFileName,
+            bool preserveGuids = false)
         {
             // 添加调试日志
-            Debug.Log($"开始生成调色板: {paletteFileName}");
-            Debug.Log($"源纹理: {(sourceTexture != null ? sourceTexture.name : "null")}");
-            Debug.Log($"瓦片输出路径: {tilesOutputPath}");
-            Debug.Log($"调色板输出路径: {paletteOutputPath}");
+            Debug.Log(GetLocalizedText("startGeneratingPalette", paletteFileName));
+            Debug.Log(GetLocalizedText("sourceTextureInfo", (sourceTexture != null ? sourceTexture.name : "null")));
+            Debug.Log(GetLocalizedText("tilesOutputPathInfo", tilesOutputPath));
+            Debug.Log(GetLocalizedText("paletteOutputPathInfo", paletteOutputPath));
 
             if (sourceTexture == null)
             {
-                Debug.LogError("源纹理为空，无法生成调色板");
+                Debug.LogError(GetLocalizedText("sourceTextureEmpty"));
                 return "";
             }
 
@@ -632,11 +797,11 @@ namespace TilemapTools
             string texturePath = AssetDatabase.GetAssetPath(sourceTexture);
             Sprite[] sprites = AssetDatabase.LoadAllAssetsAtPath(texturePath).OfType<Sprite>().ToArray();
 
-            Debug.Log($"在纹理中找到 {sprites.Length} 个精灵");
+            Debug.Log(GetLocalizedText("foundSpritesInTexture", sprites.Length));
 
             if (sprites.Length == 0)
             {
-                Debug.LogError("纹理未切片或未包含精灵，无法生成调色板");
+                Debug.LogError(GetLocalizedText("textureNotSliced"));
                 return "";
             }
 
@@ -655,11 +820,33 @@ namespace TilemapTools
             generator.paletteOutputPath = paletteOutputPath;
             generator.paletteFileName = paletteFileName;
 
+            // 检查是否有未被切片的区域
+            bool hasUnslicedPixels = generator.CheckForUnslicedPixels(sourceTexture, sprites);
+            
+            // 如果发现未切片区域，询问用户是否继续
+            if (hasUnslicedPixels)
+            {
+                bool shouldContinue = EditorUtility.DisplayDialog(
+                    GetLocalizedText("unslicedPixelsWarning"),
+                    string.Format(GetLocalizedText("unslicedPixelsMessageWithFileName"), sourceTexture.name, texturePath),
+                    GetLocalizedText("continueGeneration"),
+                    GetLocalizedText("cancelGeneration")
+                );
+                
+                if (!shouldContinue)
+                {
+                    Debug.LogWarning($"Sprite '{sourceTexture.name}' ({texturePath}) has unsliced pixel，workflow cancelled。");
+                    ScriptableObject.DestroyImmediate(generator);
+                    preserveGUIDs = originalPreserveGUIDs;
+                    return "";
+                }
+            }
+
             // 处理精灵
             string sanitizedFileName = generator.SanitizeFileName(paletteFileName.Trim());
             if (string.IsNullOrEmpty(sanitizedFileName))
             {
-                Debug.LogError("无效的调色板文件名!");
+                Debug.LogError(GetLocalizedText("invalidPaletteFileName"));
                 ScriptableObject.DestroyImmediate(generator);
                 preserveGUIDs = originalPreserveGUIDs;
                 return "";
@@ -672,7 +859,7 @@ namespace TilemapTools
             List<SpriteData> spriteData = generator.ProcessSprites(sprites);
             if (spriteData.Count == 0)
             {
-                Debug.LogError("处理后没有有效的精灵");
+                Debug.LogError(GetLocalizedText("noValidSprites"));
                 ScriptableObject.DestroyImmediate(generator);
                 preserveGUIDs = originalPreserveGUIDs;
                 return "";
@@ -718,7 +905,7 @@ namespace TilemapTools
                 // 验证文件是否存在
                 if (!File.Exists(palettePath))
                 {
-                    Debug.LogError($"未能在预期路径生成调色板: {palettePath}");
+                    Debug.LogError(GetLocalizedText("paletteNoTiles", palettePath));
                     palettePath = "";
                 }
                 else
@@ -734,27 +921,27 @@ namespace TilemapTools
                             TileBase[] allTiles = tilemap.GetTilesBlock(bounds);
                             int tileCount = allTiles.Count(t => t != null);
 
-                            Debug.Log($"调色板 {paletteFileName} 中包含 {tileCount} 个瓦片");
+                            Debug.Log(GetLocalizedText("paletteContainsTiles", paletteFileName, tileCount));
 
                             if (tileCount == 0)
                             {
-                                Debug.LogWarning($"生成的调色板不包含任何瓦片: {palettePath}");
+                                Debug.LogWarning(GetLocalizedText("paletteNoTiles", palettePath));
                             }
                         }
                         else
                         {
-                            Debug.LogError($"生成的调色板中没有找到Tilemap组件: {palettePath}");
+                            Debug.LogError(GetLocalizedText("paletteNoTilemap", palettePath));
                         }
                     }
                     else
                     {
-                        Debug.LogError($"无法加载生成的调色板: {palettePath}");
+                        Debug.LogError(GetLocalizedText("cannotLoadPalette", palettePath));
                     }
                 }
             }
             catch (System.Exception e)
             {
-                Debug.LogError($"生成调色板时发生错误: {e.Message}\n{e.StackTrace}");
+                Debug.LogError(GetLocalizedText("paletteGenerationError", e.Message, e.StackTrace));
                 palettePath = "";
             }
             finally
@@ -789,9 +976,11 @@ namespace TilemapTools
                 else
                 {
                     // 在交互式模式下，显示对话框
-                    bool shouldUpdate = EditorUtility.DisplayDialog("Assets Exist",
-                        "Some tile assets already exist. Update existing tiles?",
-                        "Update All", "Skip All");
+                    bool shouldUpdate = EditorUtility.DisplayDialog(
+                        GetLocalizedText("assetsExist"),
+                        GetLocalizedText("updateExistingTiles"),
+                        GetLocalizedText("updateAll"), 
+                        GetLocalizedText("skipAll"));
 
                     // 更新静态变量以保持一致性
                     preserveGUIDs = shouldUpdate;
@@ -826,6 +1015,77 @@ namespace TilemapTools
             AssetDatabase.CreateAsset(tile, path);
             createdTileAssets++;
             return tile;
+        }
+
+        private bool CheckForUnslicedPixels(Texture2D texture, Sprite[] sprites)
+        {
+            // 确保纹理可读
+            MakeTextureReadable(texture);
+
+            // 添加调试信息
+            Debug.Log($"Checking for unsliced pixels in texture: {texture.name} ({texture.width}x{texture.height})");
+            Debug.Log($"Found {sprites.Length} sprites in this texture");
+
+            // 创建一个布尔数组来标记哪些像素被精灵覆盖
+            bool[,] coveredPixels = new bool[texture.width, texture.height];
+
+            // 标记所有被精灵覆盖的像素
+            foreach (Sprite sprite in sprites)
+            {
+                Rect rect = sprite.rect;
+                int startX = (int)rect.x;
+                int startY = (int)rect.y;
+                int endX = startX + (int)rect.width;
+                int endY = startY + (int)rect.height;
+
+                Debug.Log($"Sprite rect: ({startX},{startY}) to ({endX},{endY})");
+
+                for (int x = startX; x < endX; x++)
+                {
+                    for (int y = startY; y < endY; y++)
+                    {
+                        if (x >= 0 && x < texture.width && y >= 0 && y < texture.height)
+                        {
+                            coveredPixels[x, y] = true;
+                        }
+                    }
+                }
+            }
+
+            // 检查纹理中是否有未被覆盖的非透明像素
+            List<Vector2Int> unslicedPixels = new List<Vector2Int>();
+            int maxReportedPixels = 10; // 限制报告的未切片像素数量
+
+            for (int y = 0; y < texture.height; y++)
+            {
+                for (int x = 0; x < texture.width; x++)
+                {
+                    Color pixel = texture.GetPixel(x, y);
+
+                    // 如果像素不透明且未被任何精灵覆盖
+                    if (pixel.a > transparencyThreshold && !coveredPixels[x, y])
+                    {
+                        unslicedPixels.Add(new Vector2Int(x, y));
+                        if (unslicedPixels.Count <= maxReportedPixels)
+                        {
+                            Debug.Log($"Found unsliced pixel at ({x},{y}) with alpha={pixel.a}");
+                        }
+                        else if (unslicedPixels.Count == maxReportedPixels + 1)
+                        {
+                            Debug.Log("More unsliced pixels found (not listing all)...");
+                        }
+                    }
+                }
+            }
+
+            if (unslicedPixels.Count > 0)
+            {
+                Debug.Log($"Total unsliced pixels found: {unslicedPixels.Count}");
+                return true;
+            }
+
+            Debug.Log("No unsliced pixels found in the texture");
+            return false;
         }
 
         private class SpriteData { public Sprite sprite; public bool isTransparent; public string hash; public Vector2 pivot; }
