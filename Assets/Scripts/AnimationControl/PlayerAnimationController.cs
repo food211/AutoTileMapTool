@@ -74,8 +74,8 @@ public class PlayerAnimationController : MonoBehaviour
     private bool wasRopeMode = false; // 上一帧是否处于绳索模式
 
     // 动画时长缓存（可以根据实际情况手动设置或从动画剪辑中获取）
-    private float jumpPrepareAnimDuration = 0.02f; // 跳跃准备动画时长
-    private float landAnimDuration = 0.02f; // 着陆动画时长
+    [SerializeField]public float jumpPrepareAnimDuration = 0.02f; // 跳跃准备动画时长
+    [SerializeField]public float landAnimDuration = 0.02f; // 着陆动画时长
 
     private void Awake()
     {
@@ -433,7 +433,7 @@ public class PlayerAnimationController : MonoBehaviour
     private void CheckAndCorrectAnimationState()
     {
         // 如果玩家死亡或正在播放一次性动画，不进行修正
-        if (isDead || IsPlayingOneTimeAnimation())
+        if (isDead || IsPlayingOneTimeAnimation() || isRopeMode)
         {
             stateCheckTimer = 0f;
             stuckInAirTimer = 0f;
@@ -633,16 +633,7 @@ public class PlayerAnimationController : MonoBehaviour
         // 着陆动画完成
         isLandAnimationPlaying = false;
         
-        // 根据当前速度和瞄准状态切换到待机或跑步
-        float horizontalSpeed = Mathf.Abs(playerRb.velocity.x);
-        if (horizontalSpeed > 0.1f)
-        {
-            ChangeState(AnimState.Run);
-        }
-        else
-        {
-            ChangeState(isAiming ? AnimState.AimIdle : AnimState.Idle);
-        }
+        ChangeState(AnimState.Run);
         
         #if UNITY_EDITOR
         if (debugMode)

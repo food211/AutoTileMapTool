@@ -559,6 +559,11 @@ MonoBehaviour:
   swingForce: 10
   maxSwingSpeed: 40
   bouncyBallMaterial: {fileID: 6200000, guid: 82034143d116bed46868247357b8036a, type: 2}
+  enableEdgeAssist: 1
+  edgeAssistCheckDistance: 0.8
+  edgeAssistHeight: 0.5
+  edgeAssistForce: 5
+  edgeAssistDuration: 0.2
   enableLandingSquash: 1
   squashIntensity: 0.3
   squashDuration: 0.2
@@ -643,6 +648,8 @@ MonoBehaviour:
   playerController: {fileID: 6686334195298017003}
   playerRb: {fileID: 6506614103827697823}
   debugMode: 0
+  jumpPrepareAnimDuration: 0.08
+  landAnimDuration: 0.08
 --- !u!95 &8764406433208910332
 Animator:
   serializedVersion: 5
