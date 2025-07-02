@@ -15,12 +15,15 @@ public class PlayerHealthManager : MonoBehaviour
     [Header("无敌时间")]
     [SerializeField] private float invincibilityDuration = 1.5f; // 受伤后的无敌时间
     [SerializeField] private float respawnInvincibilityDuration = 3.0f; // 重生后的无敌时间
-    private bool isInvincible = false;
     
     [Header("视觉效果")]
     [SerializeField] private SpriteRenderer playerRenderer;
     [SerializeField] private Color damageFlashColor = Color.red;
     [SerializeField] private float flashDuration = 0.1f;
+    
+    [Header("相机震动")]
+    [SerializeField] private float minShakeIntensity = 0.1f; // 最小震动强度
+    [SerializeField] private float maxShakeIntensity = 1.0f; // 最大震动强度
     
     [Header("引用")]
     [SerializeField] private PlayerController playerController;
@@ -34,18 +37,41 @@ public class PlayerHealthManager : MonoBehaviour
     private Coroutine invincibilityCoroutine;
     private Coroutine flashCoroutine;
     private Vector3 initialPosition; // 初始位置（仅作为备用）
+    private bool isInvincible = false; // 是否处于无敌状态
     private bool isRespawning = false; // 标记玩家是否正在重生
+    private int lastReportedHealth; // 用于跟踪上次报告的健康值
+    private bool isProcessingHealthChange = false; // 防止循环触发
 
-    
     private void Awake()
     {
-        // 初始化生命值为最大值
+        InitializeComponents();
+    }
+
+    private void OnEnable()
+    {
+        SubscribeToEvents();
+    }
+
+    private void OnDisable()
+    {
+        UnsubscribeFromEvents();
+    }
+    
+    #region 初始化方法
+    
+    /// <summary>
+    /// 初始化组件和变量
+    /// </summary>
+    private void InitializeComponents()
+    {
+        // 初始化生命值
         currentHealth = maxHealth;
+        lastReportedHealth = currentHealth;
         
+        // 获取组件引用
         if (statusManager == null)
             statusManager = GetComponent<StatusManager>();
-
-        // 获取组件引用
+            
         if (playerRenderer == null)
             playerRenderer = GetComponent<SpriteRenderer>();
 
@@ -59,25 +85,33 @@ public class PlayerHealthManager : MonoBehaviour
         if (playerRenderer != null)
             originalColor = playerRenderer.color;
 
-        // 保存初始位置（仅作为最后的备用）
+        // 保存初始位置
         initialPosition = transform.position;
     }
-
-    private void OnEnable()
+    
+    /// <summary>
+    /// 订阅事件
+    /// </summary>
+    private void SubscribeToEvents()
     {
-        // 订阅伤害事件
         GameEvents.OnPlayerDamaged += TakeDamage;
-        // 订阅重生事件
         GameEvents.OnPlayerRespawn += RespawnPlayer;
+        GameEvents.OnPlayerHealthChanged += HandleHealthChanged;
     }
-
-    private void OnDisable()
+    
+    /// <summary>
+    /// 取消订阅事件
+    /// </summary>
+    private void UnsubscribeFromEvents()
     {
-        // 取消订阅伤害事件
         GameEvents.OnPlayerDamaged -= TakeDamage;
-        // 取消订阅重生事件
         GameEvents.OnPlayerRespawn -= RespawnPlayer;
+        GameEvents.OnPlayerHealthChanged -= HandleHealthChanged;
     }
+    
+    #endregion
+    
+    #region 生命值管理
     
     /// <summary>
     /// 受到伤害
@@ -86,17 +120,25 @@ public class PlayerHealthManager : MonoBehaviour
     public void TakeDamage(int damage)
     {
         // 如果处于无敌状态或正在重生，不受伤害
-        if (isInvincible || playerController.IsInvincible() || isRespawning)
+        if (IsInvincible() || isRespawning)
             return;
 
         // 减少生命值
+        int previousHealth = currentHealth;
         currentHealth = Mathf.Max(0, currentHealth - damage);
-
+        
+        // 防止重复处理
+        isProcessingHealthChange = true;
+        
         // 触发受伤事件
         GameEvents.TriggerPlayerHealthChanged(currentHealth, maxHealth);
         
-        // 相机震动
-        GameEvents.TriggerCameraShake(0.2f);
+        // 应用相机震动
+        ApplyCameraShake(damage);
+        
+        // 重置处理标志
+        isProcessingHealthChange = false;
+        lastReportedHealth = currentHealth;
 
         // 如果生命值为0，触发死亡
         if (currentHealth <= 0)
@@ -108,21 +150,61 @@ public class PlayerHealthManager : MonoBehaviour
             // 播放受伤视觉效果后再进入无敌状态
             if (flashCoroutine != null)
                 StopCoroutine(flashCoroutine);
-            
-            // 使用协程顺序执行：先闪烁，再进入无敌状态
+                
             flashCoroutine = StartCoroutine(DamageFlashThenInvincibility());
         }
     }
     
-        /// <summary>
-    /// 先执行伤害闪烁，然后再进入无敌状态
+    /// <summary>
+    /// 处理血量变化事件
     /// </summary>
-    private IEnumerator DamageFlashThenInvincibility()
+    private void HandleHealthChanged(int newHealth, int maxHealth)
     {
-        // 闪烁完成后再进入无敌状态
-        SetInvincible(true);
-        // 先执行伤害闪烁
-        yield return StartCoroutine(DamageFlashEffect());
+        // 如果是自己触发的事件，则忽略
+        if (isProcessingHealthChange)
+            return;
+            
+        // 如果血量减少了
+        if (newHealth < lastReportedHealth && !isRespawning)
+        {
+            int healthLoss = lastReportedHealth - newHealth;
+            
+            // 应用相机震动
+            ApplyCameraShake(healthLoss);
+            
+            // 如果不是死亡，播放受伤效果
+            if (newHealth > 0)
+            {
+                if (flashCoroutine != null)
+                    StopCoroutine(flashCoroutine);
+                    
+                flashCoroutine = StartCoroutine(DamageFlashEffect());
+            }
+        }
+        
+        // 更新上次报告的健康值
+        lastReportedHealth = newHealth;
+        currentHealth = newHealth; // 确保内部状态一致
+    }
+    
+    /// <summary>
+    /// 应用相机震动效果
+    /// </summary>
+    private void ApplyCameraShake(int damage)
+    {
+        // 计算血量损失的百分比（相对于最大生命值）
+        float healthLossPercent = (float)damage / maxHealth;
+        
+        // 限制震动强度在设定范围内
+        float shakeIntensity = Mathf.Clamp(healthLossPercent, minShakeIntensity, maxShakeIntensity);
+        
+        // 相机震动
+        GameEvents.TriggerCameraShake(shakeIntensity);
+        
+        #if UNITY_EDITOR
+        Debug.LogFormat("血量变化: -{0}, 当前血量: {1}/{2}, 震动强度: {3:F2}",
+            damage, currentHealth, maxHealth, shakeIntensity);
+        #endif
     }
     
     /// <summary>
@@ -132,12 +214,24 @@ public class PlayerHealthManager : MonoBehaviour
     public void Heal(int amount)
     {
         // 增加生命值，但不超过最大值
+        int previousHealth = currentHealth;
         currentHealth = Mathf.Min(maxHealth, currentHealth + amount);
-
+        
+        // 如果生命值没有变化，直接返回
+        if (previousHealth == currentHealth)
+            return;
+            
+        // 防止重复处理
+        isProcessingHealthChange = true;
+        
         // 触发生命值变化事件
         GameEvents.TriggerPlayerHealthChanged(currentHealth, maxHealth);
+        
+        // 重置处理标志
+        isProcessingHealthChange = false;
+        lastReportedHealth = currentHealth;
 
-        // 如果不在重生过程中，才播放恢复特效
+        // 如果不在重生过程中，播放恢复特效
         if (!isRespawning)
         {
             StartCoroutine(HealVisualEffect());
@@ -149,53 +243,65 @@ public class PlayerHealthManager : MonoBehaviour
     /// </summary>
     public void FullHeal()
     {
-        // 将生命值设置为最大值
-        currentHealth = maxHealth;
+        Heal(maxHealth - currentHealth);
+    }
+    
+    /// <summary>
+    /// 设置当前生命值
+    /// </summary>
+    public void SetHealth(int health)
+    {
+        int previousHealth = currentHealth;
+        currentHealth = Mathf.Clamp(health, 0, maxHealth);
+        
+        // 如果生命值没有变化，直接返回
+        if (previousHealth == currentHealth)
+            return;
+            
+        // 防止重复处理
+        isProcessingHealthChange = true;
         
         // 触发生命值变化事件
         GameEvents.TriggerPlayerHealthChanged(currentHealth, maxHealth);
         
-        // 如果不在重生过程中，才播放恢复特效
-        if (!isRespawning)
+        // 重置处理标志
+        isProcessingHealthChange = false;
+        lastReportedHealth = currentHealth;
+    }
+    
+    /// <summary>
+    /// 设置最大生命值
+    /// </summary>
+    public void SetMaxHealth(int health)
+    {
+        maxHealth = Mathf.Max(1, health);
+        
+        // 如果当前生命值超过最大值，调整为最大值
+        if (currentHealth > maxHealth)
         {
-            StartCoroutine(HealVisualEffect());
+            SetHealth(maxHealth);
         }
     }
     
     /// <summary>
-    /// 玩家死亡处理
+    /// 获取当前生命值
     /// </summary>
-    private void Die()
+    public int GetCurrentHealth()
     {
-        // 触发玩家死亡事件
-        GameEvents.TriggerPlayerDied();
-            
-        // 播放死亡动画或效果
-        StartCoroutine(DeathSequence());
+        return currentHealth;
     }
     
     /// <summary>
-    /// 立即杀死玩家（供编辑器按钮使用）
+    /// 获取最大生命值
     /// </summary>
-    public void KillPlayer()
+    public int GetMaxHealth()
     {
-        // 只在运行时有效
-        if (!Application.isPlaying)
-            return;
-            
-        // 设置生命值为0
-        currentHealth = 0;
-        
-        // 触发生命值变化事件
-        GameEvents.TriggerPlayerHealthChanged(currentHealth, maxHealth);
-        
-        // 调用死亡处理
-        Die();
-        
-        #if UNITY_EDITOR
-        Debug.Log("玩家被立即杀死");
-        #endif
+        return maxHealth;
     }
+    
+    #endregion
+    
+    #region 无敌状态管理
     
     /// <summary>
     /// 设置无敌状态
@@ -217,6 +323,14 @@ public class PlayerHealthManager : MonoBehaviour
     }
     
     /// <summary>
+    /// 检查是否处于无敌状态
+    /// </summary>
+    public bool IsInvincible()
+    {
+        return isInvincible || (playerController != null && playerController.IsInvincible());
+    }
+    
+    /// <summary>
     /// 无敌时间计时器
     /// </summary>
     private IEnumerator InvincibilityTimer(float duration)
@@ -225,7 +339,7 @@ public class PlayerHealthManager : MonoBehaviour
         isInvincible = true;
         
         // 如果不在重生过程中，才播放闪烁效果
-        if (!isRespawning && !playerController.IsInRopeMode())
+        if (!isRespawning && playerController != null && !playerController.IsInRopeMode())
         {
             StartCoroutine(InvincibilityFlashEffect(duration));
         }
@@ -237,21 +351,37 @@ public class PlayerHealthManager : MonoBehaviour
         isInvincible = false;
     }
     
+    #endregion
+    
+    #region 视觉效果
+    
+    /// <summary>
+    /// 先执行伤害闪烁，然后再进入无敌状态
+    /// </summary>
+    private IEnumerator DamageFlashThenInvincibility()
+    {
+        // 先执行伤害闪烁
+        yield return StartCoroutine(DamageFlashEffect());
+        
+        // 闪烁完成后再进入无敌状态
+        SetInvincible(true);
+    }
+    
     /// <summary>
     /// 受伤闪烁效果
     /// </summary>
     private IEnumerator DamageFlashEffect()
     {
+        if (playerRenderer == null) yield break;
+        
         // 设置为红色
-        if (playerRenderer != null)
-            playerRenderer.color = damageFlashColor;
+        playerRenderer.color = damageFlashColor;
             
         // 等待闪烁时间
         yield return new WaitForSeconds(flashDuration);
         
         // 恢复原始颜色
-        if (playerRenderer != null)
-            playerRenderer.color = originalColor;
+        playerRenderer.color = originalColor;
     }
     
     /// <summary>
@@ -267,43 +397,20 @@ public class PlayerHealthManager : MonoBehaviour
         // 在无敌时间内闪烁
         while (elapsed < duration && !isRespawning)
         {
-            // 直接检查当前玩家状态是否为电击状态
-            bool isElectrifiedState = false;
-            
-            // 如果有StatusManager组件，使用它来检查状态
-            if (statusManager != null)
-            {
-                isElectrifiedState = statusManager.IsInState(GameEvents.PlayerState.Electrified) || 
-                                    statusManager.IsInState(GameEvents.PlayerState.Paralyzed);
-            }
+            // 检查是否处于电击状态
+            bool isElectrifiedState = CheckIfElectrified();
             
             // 如果玩家处于电击状态，不改变透明度
             if (isElectrifiedState)
             {
-                // 不改变透明度，让电击效果处理视觉表现
                 yield return new WaitForSeconds(flashInterval);
                 elapsed += flashInterval;
                 continue;
             }
             
             // 切换透明度
-            playerRenderer.color = new Color(
-                originalColor.r,
-                originalColor.g,
-                originalColor.b,
-                playerRenderer.color.a < 0.5f ? 1f : 0.3f
-            );
-            
-            // 如果有箭头，也让它闪烁
-            if (arrow != null)
-            {
-                arrow.color = new Color(
-                    arrow.color.r,
-                    arrow.color.g,
-                    arrow.color.b,
-                    playerRenderer.color.a
-                );
-            }
+            float alpha = playerRenderer.color.a < 0.5f ? 1f : 0.3f;
+            SetSpriteAlpha(alpha);
             
             // 等待闪烁间隔
             yield return new WaitForSeconds(flashInterval);
@@ -311,32 +418,47 @@ public class PlayerHealthManager : MonoBehaviour
         }
         
         // 如果不在重生过程中，恢复原始颜色
-        if (!isRespawning)
+        if (!isRespawning && !CheckIfElectrified())
         {
-            // 再次检查电击状态，避免覆盖电击效果
-            bool isElectrifiedState = false;
-            if (statusManager != null)
-            {
-                isElectrifiedState = statusManager.IsInState(GameEvents.PlayerState.Electrified) || 
-                                    statusManager.IsInState(GameEvents.PlayerState.Paralyzed);
-            }
-            
-            if (!isElectrifiedState)
-            {
-                playerRenderer.color = originalColor;
-                
-                // 恢复箭头颜色
-                if (arrow != null)
-                {
-                    arrow.color = new Color(
-                        arrow.color.r,
-                        arrow.color.g,
-                        arrow.color.b,
-                        1f
-                    );
-                }
-            }
+            SetSpriteAlpha(1f);
         }
+    }
+    
+    /// <summary>
+    /// 设置精灵透明度
+    /// </summary>
+    private void SetSpriteAlpha(float alpha)
+    {
+        if (playerRenderer != null)
+        {
+            playerRenderer.color = new Color(
+                originalColor.r,
+                originalColor.g,
+                originalColor.b,
+                alpha
+            );
+        }
+        
+        if (arrow != null)
+        {
+            arrow.color = new Color(
+                arrow.color.r,
+                arrow.color.g,
+                arrow.color.b,
+                alpha
+            );
+        }
+    }
+    
+    /// <summary>
+    /// 检查是否处于电击状态
+    /// </summary>
+    private bool CheckIfElectrified()
+    {
+        if (statusManager == null) return false;
+        
+        return statusManager.IsInState(GameEvents.PlayerState.Electrified) || 
+               statusManager.IsInState(GameEvents.PlayerState.Paralyzed);
     }
     
     /// <summary>
@@ -359,6 +481,52 @@ public class PlayerHealthManager : MonoBehaviour
         playerRenderer.color = originalColor;
     }
     
+    #endregion
+    
+    #region 死亡和重生
+    
+    /// <summary>
+    /// 玩家死亡处理
+    /// </summary>
+    private void Die()
+    {
+        // 触发玩家死亡事件
+        GameEvents.TriggerPlayerDied();
+            
+        // 播放死亡动画或效果
+        StartCoroutine(DeathSequence());
+    }
+
+    /// <summary>
+    /// 立即杀死玩家（供编辑器按钮使用）
+    /// </summary>
+    public void KillPlayer()
+    {
+        // 只在运行时有效
+        if (!Application.isPlaying)
+            return;
+
+        // 计算当前生命值作为伤害值
+        int currentDamage = currentHealth;
+
+        // 如果当前已经是0血量，设置一个默认伤害值以触发震动
+        if (currentDamage == 0)
+            currentDamage = maxHealth;
+
+        // 应用相机震动（使用最大强度）
+        ApplyCameraShake(currentDamage);
+
+        // 设置生命值为0
+        SetHealth(0);
+
+        // 调用死亡处理
+        Die();
+
+#if UNITY_EDITOR
+        Debug.Log("玩家被立即杀死");
+#endif
+    }
+
     /// <summary>
     /// 死亡序列
     /// </summary>
@@ -384,11 +552,7 @@ public class PlayerHealthManager : MonoBehaviour
         {
             elapsed += Time.deltaTime;
             float alpha = Mathf.Lerp(1f, 0f, elapsed / fadeTime);
-            playerRenderer.color = new Color(playerRenderer.color.r, playerRenderer.color.g, playerRenderer.color.b, alpha);
-            
-            if (arrow != null)
-                arrow.color = new Color(arrow.color.r, arrow.color.g, arrow.color.b, alpha);
-                
+            SetSpriteAlpha(alpha);
             yield return null;
         }
         
@@ -417,98 +581,29 @@ public class PlayerHealthManager : MonoBehaviour
         isRespawning = true;
         
         // 确保玩家不可见
-        if (playerRenderer != null)
-            playerRenderer.color = new Color(originalColor.r, originalColor.g, originalColor.b, 0f);
-            
-        if (arrow != null)
-            arrow.color = new Color(arrow.color.r, arrow.color.g, arrow.color.b, 0f);
+        SetSpriteAlpha(0f);
             
         // 等待短暂延迟
         yield return new WaitForSeconds(respawnDelay);
         
-        // 确定重生位置
-        Vector3 respawnPosition;
-        
-        // 通过CheckpointManager获取适合的重生位置
-        if (checkpointManager != null)
-        {
-            respawnPosition = checkpointManager.GetRespawnPosition();
-            
-            // 如果有激活的存档点，并且设置为重生时恢复生命值
-            Checkpoint activeCheckpoint = checkpointManager.GetActiveCheckpoint();
-            if (activeCheckpoint != null && activeCheckpoint.HealOnActivate)
-            {
-                // 恢复生命值但不显示特效
-                currentHealth = maxHealth;
-                GameEvents.TriggerPlayerHealthChanged(currentHealth, maxHealth);
-            }
-        }
-        // 如果没有CheckpointManager，使用初始位置
-        else
-        {
-            respawnPosition = initialPosition;
-            Debug.LogWarning("没有找到CheckpointManager，使用初始位置作为重生点");
-        }
-        
-        // 重置玩家位置
-        transform.position = respawnPosition;
-        
-        // 重置物理状态
-        if (GetComponent<Rigidbody2D>() != null)
-        {
-            Rigidbody2D rb = GetComponent<Rigidbody2D>();
-            rb.velocity = Vector2.zero;
-            rb.angularVelocity = 0f;
-        }
-        
-        // 如果绳索系统处于活跃状态，释放绳索
-        GameEvents.TriggerRopeReleased();
-        
-        // 恢复生命值（如果没有通过存档点恢复）
-        if (currentHealth <= 0)
-        {
-            // 恢复生命值但不显示特效
-            currentHealth = maxHealth;
-            GameEvents.TriggerPlayerHealthChanged(currentHealth, maxHealth);
-        }
+        // 确定重生位置并重置玩家
+        Vector3 respawnPosition = GetRespawnPosition();
+        ResetPlayerState(respawnPosition);
         
         // 等待短暂时间
         yield return new WaitForSeconds(0.5f);
         
         // 淡入效果
-        float fadeInTime = 1.0f;
-        float elapsed = 0f;
+        yield return StartCoroutine(FadeInPlayer());
         
-        while (elapsed < fadeInTime)
-        {
-            elapsed += Time.deltaTime;
-            float alpha = Mathf.Lerp(0f, 1f, elapsed / fadeInTime);
-            
-            if (playerRenderer != null)
-                playerRenderer.color = new Color(originalColor.r, originalColor.g, originalColor.b, alpha);
-                
-            if (arrow != null)
-                arrow.color = new Color(arrow.color.r, arrow.color.g, arrow.color.b, alpha);
-                
-            yield return null;
-        }
-        
-        // 确保完全不透明
-        if (playerRenderer != null)
-            playerRenderer.color = originalColor;
-            
-        if (arrow != null)
-            arrow.color = new Color(arrow.color.r, arrow.color.g, arrow.color.b, 1f);
-        
-        // 设置短暂无敌时间
+        // 设置无敌状态
         SetInvincible(true, respawnInvincibilityDuration);
         
         // 给玩家控制器也设置无敌状态
         if (playerController != null)
         {
             playerController.SetInvincible(true, respawnInvincibilityDuration);
-            // 重新启用玩家输入
-            playerController.SetPlayerInput(true);
+            playerController.SetPlayerInput(true); // 重新启用玩家输入
         }
    
         // 触发状态重置事件
@@ -524,48 +619,78 @@ public class PlayerHealthManager : MonoBehaviour
     }
     
     /// <summary>
-    /// 获取当前生命值
+    /// 获取重生位置
     /// </summary>
-    public int GetCurrentHealth()
+    private Vector3 GetRespawnPosition()
     {
-        return currentHealth;
-    }
-
-    public void SetHealth(int health)
-    {
-        // 设置当前生命值，但不超过最大值
-        currentHealth = Mathf.Clamp(health, 0, maxHealth);
-        // 触发生命值变化事件
-        GameEvents.TriggerPlayerHealthChanged(currentHealth, maxHealth);
-    }
-
-    public void SetMaxHealth(int health)
-    {
-        // 设置最大生命值，但不小于1
-        maxHealth = Mathf.Max(1, health);
-        // 如果当前生命值超过最大值，调整为最大值
-        if (currentHealth > maxHealth)
+        // 通过CheckpointManager获取适合的重生位置
+        if (checkpointManager != null)
         {
-            currentHealth = maxHealth;
-            GameEvents.TriggerPlayerHealthChanged(currentHealth, maxHealth);
+            Vector3 position = checkpointManager.GetRespawnPosition();
+            
+            // 如果有激活的存档点，并且设置为重生时恢复生命值
+            Checkpoint activeCheckpoint = checkpointManager.GetActiveCheckpoint();
+            if (activeCheckpoint != null && activeCheckpoint.HealOnActivate)
+            {
+                // 恢复生命值但不显示特效
+                SetHealth(maxHealth);
+            }
+            
+            return position;
+        }
+        
+        // 如果没有CheckpointManager，使用初始位置
+        Debug.LogWarning("没有找到CheckpointManager，使用初始位置作为重生点");
+        return initialPosition;
+    }
+    
+    /// <summary>
+    /// 重置玩家状态
+    /// </summary>
+    private void ResetPlayerState(Vector3 position)
+    {
+        // 重置玩家位置
+        transform.position = position;
+        
+        // 重置物理状态
+        Rigidbody2D rb = GetComponent<Rigidbody2D>();
+        if (rb != null)
+        {
+            rb.velocity = Vector2.zero;
+            rb.angularVelocity = 0f;
+        }
+        
+        // 如果绳索系统处于活跃状态，释放绳索
+        GameEvents.TriggerRopeReleased();
+        
+        // 恢复生命值（如果没有通过存档点恢复）
+        if (currentHealth <= 0)
+        {
+            SetHealth(maxHealth);
         }
     }
     
     /// <summary>
-    /// 获取最大生命值
+    /// 淡入玩家
     /// </summary>
-    public int GetMaxHealth()
+    private IEnumerator FadeInPlayer()
     {
-        return maxHealth;
+        float fadeInTime = 1.0f;
+        float elapsed = 0f;
+        
+        while (elapsed < fadeInTime)
+        {
+            elapsed += Time.deltaTime;
+            float alpha = Mathf.Lerp(0f, 1f, elapsed / fadeInTime);
+            SetSpriteAlpha(alpha);
+            yield return null;
+        }
+        
+        // 确保完全不透明
+        SetSpriteAlpha(1f);
     }
     
-    /// <summary>
-    /// 检查是否处于无敌状态
-    /// </summary>
-    public bool IsInvincible()
-    {
-        return isInvincible || playerController.IsInvincible();
-    }
+    #endregion
     
     /// <summary>
     /// 设置CheckpointManager引用

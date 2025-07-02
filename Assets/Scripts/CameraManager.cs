@@ -30,6 +30,8 @@ public class CameraManager : MonoBehaviour
     [SerializeField] private float maxShakeRotation = 10f; // 最大震动旋转角度
     [SerializeField] private float traumaDecayRate = 0.25f; // trauma衰减速率
     [SerializeField] private float traumaPower = 2f; // trauma强度指数(2=平方，3=立方)
+    [SerializeField] private float noiseSpeed = 10f; // 噪声速度
+
     [Header("下落偏移调整")]
     [SerializeField] private bool enableFallingOffsetAdjustment = true; // 是否启用下落偏移调整
     [SerializeField] private float maxPositiveYOffset;
@@ -260,8 +262,8 @@ public class CameraManager : MonoBehaviour
         // 使用柏林噪声生成随机但平滑的震动
         if (enablePositionShake)
         {
-            float offsetX = maxShakePosition * shake * (Mathf.PerlinNoise(Time.time * 10, 0) * 2 - 1);
-            float offsetY = maxShakePosition * shake * (Mathf.PerlinNoise(0, Time.time * 10) * 2 - 1);
+            float offsetX = maxShakePosition * shake * GetPerlinNoise(Time.time, 0f, noiseSpeed);
+            float offsetY = maxShakePosition * shake * GetPerlinNoise(Time.time, 1f, noiseSpeed);
             shakeOffset = new Vector3(offsetX, offsetY, 0);
         }
         else
@@ -272,7 +274,7 @@ public class CameraManager : MonoBehaviour
         // 应用旋转震动
         if (enableRotationShake)
         {
-            float rotZ = maxShakeRotation * shake * (Mathf.PerlinNoise(Time.time * 10, 10) * 2 - 1);
+            float rotZ = maxShakeRotation * shake * GetPerlinNoise(Time.time, 2f, noiseSpeed);
             transform.rotation = initialRotation * Quaternion.Euler(0, 0, rotZ);
         }
         else
@@ -281,7 +283,12 @@ public class CameraManager : MonoBehaviour
         }
     }
 
-    // 兴趣点相关方法
+        private float GetPerlinNoise(float time, float seed, float speed = 1.0f)
+    {
+        // 使用时间和种子生成柏林噪声
+        // 将0-1范围的噪声值转换为-1到1的范围
+        return (Mathf.PerlinNoise(time * speed, seed) * 2.0f - 1.0f);
+    }
     
     // 跟随一系列兴趣点
     public void FollowPointsOfInterest(List<PointOfInterest> points, string sequenceId)

@@ -15,6 +15,12 @@ public class PlayerAnimationController : MonoBehaviour
     [SerializeField] private string idleIndexParam = "IdleIndex";
     private bool isTransitioningFromRun = false;
 
+    [Header("状态修正设置")]
+    [SerializeField] private float stateCheckInterval = 0.5f; // 状态检查间隔时间
+    [SerializeField] private float stuckInAirTimeout = 1.0f; // 卡在空中状态的超时时间
+    private float stateCheckTimer = 0f; // 状态检查计时器
+    private float stuckInAirTimer = 0f; // 卡在空中计时器
+
     [Header("瞄准设置")]
     [SerializeField] private float aimIdleTimeoutDuration = 5f; // 瞄准状态超时时间（秒）
     private float aimIdleTimer = 0f; // 瞄准状态计时器
@@ -99,24 +105,26 @@ public class PlayerAnimationController : MonoBehaviour
         // 如果玩家死亡，不更新动画状态
         if (isDead && currentState != AnimState.Die)
             return;
-            
+
         // 更新状态计时器
         stateTime += Time.deltaTime;
-        
+
         // 更新Y轴速度参数
         UpdateVelocityYParameter();
 
         // 更新绳索模式状态
         UpdateRopeModeState();
-        
+
         // 更新瞄准状态
         UpdateAimingState();
-        
+
         // 处理待机动画随机切换
         HandleIdleAnimationSwitching();
-        
+
         // 确定下一个动画状态
         DetermineNextState();
+        // 定期检查和修正动画状态
+        CheckAndCorrectAnimationState();
     }
 
     private void UpdateVelocityYParameter()
@@ -420,6 +428,92 @@ public class PlayerAnimationController : MonoBehaviour
         
         // 更新接地状态缓存
         wasGrounded = isGrounded;
+    }
+
+    private void CheckAndCorrectAnimationState()
+    {
+        // 如果玩家死亡或正在播放一次性动画，不进行修正
+        if (isDead || IsPlayingOneTimeAnimation())
+        {
+            stateCheckTimer = 0f;
+            stuckInAirTimer = 0f;
+            return;
+        }
+
+        // 增加计时器
+        stateCheckTimer += Time.deltaTime;
+
+        // 只在设定的间隔时间执行检查
+        if (stateCheckTimer < stateCheckInterval)
+            return;
+
+        // 重置计时器
+        stateCheckTimer = 0f;
+
+        // 检查其他可能的状态异常
+        bool isGrounded = playerController.isPlayerGrounded();
+        float horizontalSpeed = Mathf.Abs(playerRb.velocity.x);
+
+        // 检查是否卡在空中状态
+        if (currentState == AnimState.InAir)
+        {
+            float velocityY = playerRb.velocity.y;
+
+            // 如果已着地但仍在空中状态，或者Y轴速度接近0但持续在空中状态
+            if (isGrounded || (Mathf.Abs(velocityY) < 0.1f && !wasGrounded))
+            {
+                // 增加卡住计时
+                stuckInAirTimer += stateCheckInterval;
+
+                // 如果超过设定时间，强制修正状态
+                if (stuckInAirTimer >= stuckInAirTimeout)
+                {
+#if UNITY_EDITOR
+                    if (debugMode)
+                    {
+                        Debug.LogFormat("检测到动画状态异常：卡在空中状态但已着地或静止，强制修正");
+                    }
+#endif
+
+                    // 强制触发着陆动画
+                    ChangeState(AnimState.Land);
+
+                    // 重置计时器
+                    stuckInAirTimer = 0f;
+                }
+            }
+            else
+            {
+                // 如果不满足卡住条件，重置计时器
+                stuckInAirTimer = 0f;
+            }
+        }
+        else
+        {
+            // 不在空中状态，重置计时器
+            stuckInAirTimer = 0f;
+        }
+
+        // 如果在地面上但显示为空中状态（且不是刚刚落地）
+        if (isGrounded && currentState == AnimState.InAir && stateTime > 0.5f)
+        {
+#if UNITY_EDITOR
+            if (debugMode)
+            {
+                Debug.LogFormat("检测到动画状态异常：在地面但显示为空中状态，强制修正");
+            }
+#endif
+
+            // 根据水平速度决定切换到哪个状态
+            if (horizontalSpeed > 0.1f)
+            {
+                ChangeState(AnimState.Run);
+            }
+            else
+            {
+                ChangeState(isAiming ? AnimState.AimIdle : AnimState.Idle);
+            }
+        }
     }
 
     private bool IsPlayingOneTimeAnimation()

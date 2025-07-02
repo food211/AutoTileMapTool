@@ -65,9 +65,9 @@ Camera:
   m_NormalizedViewPortRect:
     serializedVersion: 2
     x: 0
-    y: 0.013888889
-    width: 1
-    height: 0.9722222
+    y: 0.24351852
+    width: 0.2932292
+    height: 0.28508392
   near clip plane: 0.3
   far clip plane: 1000
   field of view: 60
@@ -164,10 +164,11 @@ MonoBehaviour:
   enableShake: 1
   enablePositionShake: 1
   enableRotationShake: 1
-  maxShakePosition: 10
-  maxShakeRotation: 10
+  maxShakePosition: 15
+  maxShakeRotation: 15
   traumaDecayRate: 0.25
   traumaPower: 2
+  noiseSpeed: 20
   enableFallingOffsetAdjustment: 1
   maxPositiveYOffset: 0
   maxNegativeYOffset: 0

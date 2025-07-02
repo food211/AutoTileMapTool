@@ -75,12 +75,18 @@ public class PlayerController : MonoBehaviour
     [SerializeField] private bool showGroundCheck = true; // 是否在编辑器中显示地面检测区域
 
     [Header("斜坡设置")]
-    [SerializeField] private float steepSlopeAngle = 35f; // 陡峭斜坡的角度阈值
-    [SerializeField] private float slideSpeed = 3f; // 在陡峭斜坡上滑动的速度
-    [SerializeField] private float slopeCheckDistance = 0.5f; // 斜坡检测距离
+    
+    [SerializeField] private float steepSlopeAngle = 45f; // 陡峭斜坡的角度阈值
+    [SerializeField] private float slideSpeed = 5f; // 在陡峭斜坡上滑动的速度
+    [SerializeField] private float slopeCheckDistance = 2.5f; // 斜坡检测距离
+    [SerializeField] private float steepSlopeGracePeriod = 0.15f; // 陡峭斜坡宽限期，可在Inspector中调整
+    private float steepSlopeTimer = 0f; // 在陡峭斜坡上的计时器
+    private bool wasOnSteepSlope = false; // 上一帧是否在陡峭斜坡上
+
     private bool isOnSteepSlope = false; // 是否在陡峭斜坡上
     private Vector2 slopeNormalPerp; // 斜坡方向（垂直于法线）
     private float currentSlopeAngle = 0f; // 当前斜坡角度
+    private float lastJumpTime = 0f; // 上次跳跃的时间
 
     [Header("头部检测设置")]
     [SerializeField] private Vector2 headCheckSize = new Vector2(0.9f, 0.1f); // 头部检测区域的大小
@@ -214,7 +220,7 @@ public class PlayerController : MonoBehaviour
         }
     }
 
-    private float cachedHorizontalInput;
+    private float _cachedhorizontalInput;
 
     private void Update()
     {
@@ -233,6 +239,9 @@ public class PlayerController : MonoBehaviour
                 Gun.SetActive(shouldShowGun);
             }
         }
+
+        float horizontalInput = Input.GetAxis("Horizontal");
+        _cachedhorizontalInput = horizontalInput;
 
         if (isRopeMode)
         {
@@ -372,35 +381,89 @@ public class PlayerController : MonoBehaviour
     #endregion
     #region check head&ground collision
     public bool wasGrounded;
-    
+
     // 性能优化：减少地面检测频率
     private void CheckGrounded()
     {
-        // 保存上一帧的着地状态
+        // 保存上一帧的着地状态和斜坡状态
         wasGrounded = isGrounded;
-        
-        // 原有的地面检测逻辑
+        wasOnSteepSlope = isOnSteepSlope;
+
+        // 先重置陡峭斜坡状态，让后续检测重新判断
+        isOnSteepSlope = false;
+
+        // 进行地面检测，包括斜坡检测
         cachedGroundedState = CheckGroundCollision();
-        isGrounded = cachedGroundedState;
-        
+
+        // 处理陡峭斜坡计时器
+        HandleSteepSlopeTimer();
+
+        // 根据计时器决定是否应用斜坡效果
+        bool shouldApplySlopeEffect = isOnSteepSlope && steepSlopeTimer >= steepSlopeGracePeriod;
+
+        // 设置最终的接地状态
+        isGrounded = cachedGroundedState && !shouldApplySlopeEffect;
+
         // 如果着地状态发生变化，触发事件
         if (wasGrounded != isGrounded)
         {
             GameEvents.TriggerPlayerGroundedStateChanged(isGrounded);
-            
+
             // 如果刚刚落地，记录当前时间和水平速度
             if (isGrounded && rbInitialized)
             {
                 // 记录落地时间和速度，用于兔子跳判断
                 lastLandingTime = Time.time;
                 lastLandingVelocityX = rb.velocity.x;
-                
-                #if UNITY_EDITOR
+#if UNITY_EDITOR
                 if (debugmode && Mathf.Abs(lastLandingVelocityX) > 3f)
                     Debug.LogFormat("落地时水平速度: {0}", lastLandingVelocityX);
-                #endif
+#endif
             }
         }
+
+        // 玩家在陡峭斜坡上且超过宽限期，应用滑动效果
+        if (shouldApplySlopeEffect && rbInitialized)
+        {
+            // 这样可以保持滑动的流畅性，同时不影响普通地面移动
+            rb.velocity = slopeNormalPerp * slideSpeed;
+            // 增加额外的向下力，使滑动更流畅
+            rb.AddForce(Vector2.down * 2f, ForceMode2D.Force);
+        }
+    }
+
+    private void HandleSteepSlopeTimer()
+    {
+        // 如果检测到陡峭斜坡
+        if (isOnSteepSlope)
+        {
+            // 如果是首次进入斜坡，或者从跳跃状态落到斜坡上
+            if (!wasOnSteepSlope || isJumping)
+            {
+                // 重置计时器
+                steepSlopeTimer = 0f;
+            }
+            else
+            {
+                // 增加计时器
+                steepSlopeTimer += Time.deltaTime;
+            }
+        }
+        else
+        {
+            // 不在陡峭斜坡上时重置计时器
+            steepSlopeTimer = 0f;
+        }
+
+#if UNITY_EDITOR
+        if (showGroundCheck && isOnSteepSlope)
+        {
+            // 可视化计时器进度
+            float progress = Mathf.Clamp01(steepSlopeTimer / steepSlopeGracePeriod);
+            Color timerColor = Color.Lerp(Color.green, Color.red, progress);
+            Debug.DrawLine(transform.position, transform.position + Vector3.up * 0.5f, timerColor);
+        }
+#endif
     }
 
     // 添加辅助方法用于旋转点
@@ -494,168 +557,204 @@ public class PlayerController : MonoBehaviour
         }
     }
     
-    private bool CheckGroundCollision()
+private bool CheckGroundCollision()
+{
+    // 如果在绳索模式下，使用不同的检测逻辑
+    if (isRopeMode && ropeSystemInitialized && ropeSystem.HasAnchors())
     {
-        // 如果在绳索模式下，使用不同的检测逻辑
-        if (isRopeMode && ropeSystemInitialized && ropeSystem.HasAnchors())
+        return CheckRopeModeGroundCollision();
+    }
+    else
+    {
+        // 普通模式下的地面检测逻辑
+        return CheckNormalModeGroundCollision();
+    }
+}
+
+// 绳索模式下的地面检测
+private bool CheckRopeModeGroundCollision()
+{
+    // 获取绳索方向
+    Vector2 ropeDirection = (ropeSystem.GetCurrentAnchorPosition() - (Vector2)transform.position).normalized;
+    
+    // 计算检测区域的中心点 - 沿绳索反方向偏移
+    Vector2 position = transform.position;
+    Vector2 center = position - ropeDirection * 0.25f;
+    
+    // 计算检测区域的旋转角度
+    float angle = Mathf.Atan2(ropeDirection.y, ropeDirection.x) * Mathf.Rad2Deg;
+    
+    // 使用OverlapBox检测指定区域内的碰撞体，考虑旋转
+    Collider2D[] colliders = Physics2D.OverlapBoxAll(center, groundCheckSize, angle, groundLayers);
+    
+    // 在编辑器中可视化检测区域
+    #if UNITY_EDITOR
+    if (showGroundCheck)
+    {
+        // 计算旋转后的四个角点
+        Vector2 halfSize = groundCheckSize * 0.5f;
+        Vector2 bottomLeft = RotatePoint(new Vector2(-halfSize.x, -halfSize.y), angle);
+        Vector2 bottomRight = RotatePoint(new Vector2(halfSize.x, -halfSize.y), angle);
+        Vector2 topRight = RotatePoint(new Vector2(halfSize.x, halfSize.y), angle);
+        Vector2 topLeft = RotatePoint(new Vector2(-halfSize.x, halfSize.y), angle);
+        
+        Color debugColor = colliders.Length > 0 ? Color.green : Color.red;
+        Debug.DrawLine(center + bottomLeft, center + bottomRight, debugColor);
+        Debug.DrawLine(center + bottomRight, center + topRight, debugColor);
+        Debug.DrawLine(center + topRight, center + topLeft, debugColor);
+        Debug.DrawLine(center + topLeft, center + bottomLeft, debugColor);
+    }
+    #endif
+    
+    // 如果检测到任何碰撞体，则认为有地面支撑
+    return colliders.Length > 0;
+}
+
+// 普通模式下的地面检测
+private bool CheckNormalModeGroundCollision()
+{
+    Vector2 position = transform.position;
+    // 增加检测范围，使用更宽的检测框
+    Vector2 center = position + groundCheckOffset;
+    Vector2 enlargedSize = new Vector2(groundCheckSize.x, groundCheckSize.y * 1.2f); // 稍微增加高度以适应斜坡
+    
+    // 先检查当前是否站在斜坡上，并获取斜坡角度
+        // 这样可以先确定是否在陡峭斜坡上
+        CheckSlopeProperties(position);
+    
+    // 如果在陡峭斜坡上，直接返回false，不进行后续检测
+    if (isOnSteepSlope)
+    {
+        VisualizeGroundCheckBox(center, enlargedSize, false, Color.yellow); // 使用黄色表示陡峭斜坡
+        return false; // 在陡峭斜坡上不算作接地
+    }
+    
+    // 使用射线检测来处理斜坡
+    bool raycastHit = CheckGroundRaycasts();
+    
+    // 常规的盒检测
+    Collider2D[] colliders = Physics2D.OverlapBoxAll(center, enlargedSize, 0f, groundLayers);
+    
+    // 可视化地面检测框
+    VisualizeGroundCheckBox(center, enlargedSize, colliders.Length > 0);
+    
+    return raycastHit || colliders.Length > 0;
+}
+
+// 使用射线检测地面并处理斜坡
+private bool CheckGroundRaycasts()
+{
+    Vector2 position = transform.position;
+    bool raycastHit = false;
+    float rayDistance = groundCheckSize.y + 0.1f; // 射线长度稍微长于检测框高度
+    
+    // 性能优化：减少射线数量
+    int rayCount = 3; // 减少射线数量从5到3
+    for (int i = 0; i < rayCount; i++)
+    {
+        float xOffset = ((float)i / (rayCount - 1) - 0.5f) * groundCheckSize.x;
+        Vector2 rayStart = new Vector2(position.x + xOffset, position.y);
+        RaycastHit2D hit = Physics2D.Raycast(rayStart, Vector2.down, rayDistance, groundLayers);
+        
+        if (hit.collider != null)
         {
-            // 获取绳索方向
-            Vector2 ropeDirection = (ropeSystem.GetCurrentAnchorPosition() - (Vector2)transform.position).normalized;
+            // 计算斜坡角度，但不在这里设置isOnSteepSlope
+            // 这个逻辑已经移到CheckSlopeProperties中
+            float slopeAngle = Vector2.Angle(hit.normal, Vector2.up);
             
-            // 计算检测区域的中心点 - 沿绳索反方向偏移
-            Vector2 position = transform.position;
-            Vector2 center = position - ropeDirection * 0.25f;
-            
-            // 计算检测区域的旋转角度
-            float angle = Mathf.Atan2(ropeDirection.y, ropeDirection.x) * Mathf.Rad2Deg;
-            
-            // 使用OverlapBox检测指定区域内的碰撞体，考虑旋转
-            Collider2D[] colliders = Physics2D.OverlapBoxAll(center, groundCheckSize, angle, groundLayers);
-            
-            // 在编辑器中可视化检测区域
             #if UNITY_EDITOR
             if (showGroundCheck)
             {
-                // 计算旋转后的四个角点
-                Vector2 halfSize = groundCheckSize * 0.5f;
-                Vector2 bottomLeft = RotatePoint(new Vector2(-halfSize.x, -halfSize.y), angle);
-                Vector2 bottomRight = RotatePoint(new Vector2(halfSize.x, -halfSize.y), angle);
-                Vector2 topRight = RotatePoint(new Vector2(halfSize.x, halfSize.y), angle);
-                Vector2 topLeft = RotatePoint(new Vector2(-halfSize.x, halfSize.y), angle);
-                
-                Color debugColor = colliders.Length > 0 ? Color.green : Color.red;
-                Debug.DrawLine(center + bottomLeft, center + bottomRight, debugColor);
-                Debug.DrawLine(center + bottomRight, center + topRight, debugColor);
-                Debug.DrawLine(center + topRight, center + topLeft, debugColor);
-                Debug.DrawLine(center + topLeft, center + bottomLeft, debugColor);
+                // 根据斜坡角度决定颜色
+                Color rayColor = (slopeAngle > steepSlopeAngle) ? Color.yellow : Color.green;
+                Debug.DrawRay(rayStart, Vector2.down * rayDistance, rayColor);
+                // 显示法线方向
+                Debug.DrawRay(hit.point, hit.normal, Color.white);
             }
             #endif
             
-            // 如果检测到任何碰撞体，则认为有地面支撑
-            return colliders.Length > 0;
+            // 只要检测到碰撞就算作射线命中
+            raycastHit = true;
         }
         else
         {
-            // 普通模式下的地面检测逻辑 - 优化斜坡检测
-            Vector2 position = transform.position;
-            
-            // 增加检测范围，使用更宽的检测框
-            Vector2 center = position + groundCheckOffset;
-            Vector2 enlargedSize = new Vector2(groundCheckSize.x, groundCheckSize.y * 1.2f); // 稍微增加高度以适应斜坡
-            
-            // 使用射线检测来处理斜坡
-            bool raycastHit = false;
-            float rayDistance = groundCheckSize.y + 0.1f; // 射线长度稍微长于检测框高度
-            
-            // 性能优化：减少射线数量
-            int rayCount = 3; // 减少射线数量从5到3
-            for (int i = 0; i < rayCount; i++)
+            #if UNITY_EDITOR
+            if (showGroundCheck)
             {
-                float xOffset = ((float)i / (rayCount - 1) - 0.5f) * groundCheckSize.x;
-                Vector2 rayStart = new Vector2(position.x + xOffset, position.y);
-                RaycastHit2D hit = Physics2D.Raycast(rayStart, Vector2.down, rayDistance, groundLayers);
-                
-                if (hit.collider != null)
-                {
-                    // 计算斜坡角度
-                    float slopeAngle = Vector2.Angle(hit.normal, Vector2.up);
-                    
-                    // 如果斜坡角度大于steepSlopeAngle，标记为陡峭斜坡
-                    if (slopeAngle > steepSlopeAngle)
-                    {
-                        isOnSteepSlope = true;
-                        
-                        #if UNITY_EDITOR
-                        if (showGroundCheck)
-                        {
-                            // 陡峭斜坡显示为黄色
-                            Debug.DrawRay(rayStart, Vector2.down * rayDistance, Color.yellow);
-                            // 显示法线方向
-                            Debug.DrawRay(hit.point, hit.normal, Color.cyan);
-                        }
-                        #endif
-                    }
-                    else
-                    {
-                        raycastHit = true;
-                        
-                        #if UNITY_EDITOR
-                        if (showGroundCheck)
-                        {
-                            // 可攀爬斜坡显示为绿色
-                            Debug.DrawRay(rayStart, Vector2.down * rayDistance, Color.green);
-                            // 显示法线方向
-                            Debug.DrawRay(hit.point, hit.normal, Color.white);
-                        }
-                        #endif
-                    }
-                }
-                else
-                {
-                    #if UNITY_EDITOR
-                    if (showGroundCheck)
-                    {
-                        // 未检测到地面显示为红色
-                        Debug.DrawRay(rayStart, Vector2.down * rayDistance, Color.red);
-                    }
-                    #endif
-                }
+                // 未检测到地面显示为红色
+                Debug.DrawRay(rayStart, Vector2.down * rayDistance, Color.red);
             }
-            
-            // 常规的盒检测
-            Collider2D[] colliders = Physics2D.OverlapBoxAll(center, enlargedSize, 0f, groundLayers);
+            #endif
+        }
+    }
+    
+    return raycastHit;
+}
+
+// 检查并更新斜坡属性
+private void CheckSlopeProperties(Vector2 position)
+{
+    // 重置斜坡状态
+    isOnSteepSlope = false;
+    currentSlopeAngle = 0f;
+    
+    RaycastHit2D centerHit = Physics2D.Raycast(position, Vector2.down, slopeCheckDistance, groundLayers);
+    if (centerHit.collider != null)
+    {
+        // 计算斜坡角度
+        float slopeAngle = Vector2.Angle(centerHit.normal, Vector2.up);
+        
+        // 存储当前斜坡角度供其他方法使用
+        currentSlopeAngle = slopeAngle;
+        
+        // 计算斜坡方向（垂直于法线）
+        slopeNormalPerp = Vector2.Perpendicular(centerHit.normal).normalized;
+        
+        // 确保斜坡方向朝下
+        if (slopeNormalPerp.y > 0)
+            slopeNormalPerp = -slopeNormalPerp;
+        
+        // 如果斜坡角度大于等于陡峭斜坡角度，则认为是陡峭斜坡
+        if (slopeAngle >= steepSlopeAngle)
+        {
+            isOnSteepSlope = true;
             
             #if UNITY_EDITOR
             if (showGroundCheck)
             {
-                Color debugColor = colliders.Length > 0 ? Color.green : Color.red;
-                Vector3 bottomLeft = new Vector3(center.x - enlargedSize.x/2, center.y - enlargedSize.y/2);
-                Vector3 bottomRight = new Vector3(center.x + enlargedSize.x/2, center.y - enlargedSize.y/2);
-                Vector3 topRight = new Vector3(center.x + enlargedSize.x/2, center.y + enlargedSize.y/2);
-                Vector3 topLeft = new Vector3(center.x - enlargedSize.x/2, center.y + enlargedSize.y/2);
-                
-                Debug.DrawLine(bottomLeft, bottomRight, debugColor);
-                Debug.DrawLine(bottomRight, topRight, debugColor);
-                Debug.DrawLine(topRight, topLeft, debugColor);
-                Debug.DrawLine(topLeft, bottomLeft, debugColor);
+                Debug.DrawRay(position, Vector2.down * slopeCheckDistance, Color.yellow);
+                Debug.DrawRay(centerHit.point, centerHit.normal * 0.5f, Color.cyan);
+                Debug.DrawRay(centerHit.point, slopeNormalPerp * 0.5f, Color.magenta);
             }
             #endif
-            
-            // 检查当前是否站在斜坡上，并获取斜坡角度
-            RaycastHit2D centerHit = Physics2D.Raycast(position, Vector2.down, slopeCheckDistance, groundLayers);
-            if (centerHit.collider != null)
-            {
-                // 计算斜坡角度
-                float slopeAngle = Vector2.Angle(centerHit.normal, Vector2.up);
-
-                // 存储当前斜坡角度供其他方法使用
-                currentSlopeAngle = slopeAngle;
-
-                // 计算斜坡方向（垂直于法线）
-                slopeNormalPerp = Vector2.Perpendicular(centerHit.normal).normalized;
-                // 确保斜坡方向朝下
-                if (slopeNormalPerp.y > 0)
-                    slopeNormalPerp = -slopeNormalPerp;
-                // 更新是否在陡峭斜坡上的状态
-                isOnSteepSlope = slopeAngle >= steepSlopeAngle;
-                // 如果斜坡角度大于45度，认为是陡峭斜坡
-#if UNITY_EDITOR
-                if (debugmode && isOnSteepSlope)
-                    Debug.LogFormat("在陡峭斜坡上，角度: {0}°, 滑动方向: {1}", slopeAngle, slopeNormalPerp);
-#endif
-            }
-            else
-            {
-                currentSlopeAngle = 0f;
-                isOnSteepSlope = false;
-            }
-            
-            // 如果是陡峭斜坡，玩家仍然被认为是在地面上（为了应用滑动效果）
-            // 但在HandleGroundMovement中会特殊处理
-            return raycastHit || colliders.Length > 0;
         }
     }
+}
+
+// 可视化地面检测框
+private void VisualizeGroundCheckBox(Vector2 center, Vector2 size, bool hasCollision, Color? overrideColor = null)
+{
+    #if UNITY_EDITOR
+    if (showGroundCheck)
+    {
+        Color debugColor = overrideColor ?? (hasCollision ? Color.green : Color.red);
+        
+        // 绘制检测框
+        Vector2 bottomLeft = center + new Vector2(-size.x/2, -size.y/2);
+        Vector2 bottomRight = center + new Vector2(size.x/2, -size.y/2);
+        Vector2 topRight = center + new Vector2(size.x/2, size.y/2);
+        Vector2 topLeft = center + new Vector2(-size.x/2, size.y/2);
+        
+        Debug.DrawLine(bottomLeft, bottomRight, debugColor);
+        Debug.DrawLine(bottomRight, topRight, debugColor);
+        Debug.DrawLine(topRight, topLeft, debugColor);
+        Debug.DrawLine(topLeft, bottomLeft, debugColor);
+    }
+    #endif
+}
+
     #endregion
+
 
 
     #region handle Input
@@ -665,13 +764,13 @@ public class PlayerController : MonoBehaviour
             return;
 
         bool isRopeBusy = ropeSystemInitialized && ropeSystem.IsRopeShootingOrHooked();
-        float horizontalInput = Input.GetAxis("Horizontal");
+
 
         // 处理玩家朝向
-        HandleRunningFacing(horizontalInput);
+        HandleRunningFacing(_cachedhorizontalInput);
 
         // 处理移动逻辑
-        HandleMovement(horizontalInput, isRopeBusy);
+        HandleMovement(_cachedhorizontalInput, isRopeBusy);
 
         // 处理瞄准控制
         HandleAiming(isRopeBusy);
@@ -687,27 +786,27 @@ public class PlayerController : MonoBehaviour
     }
 
     // 处理地面和空中移动
-    private void HandleMovement(float horizontalInput, bool isRopeBusy)
+    private void HandleMovement(float _cachedhorizontalInput, bool isRopeBusy)
     {
         if (isGrounded && rbInitialized)
         {
-            HandleGroundMovement(horizontalInput);
+            HandleGroundMovement(_cachedhorizontalInput);
         }
         else if (rbInitialized)
         {
-            HandleAirMovement(horizontalInput);
+            HandleAirMovement(_cachedhorizontalInput);
         }
 
         // 根据移动方向更新玩家朝向 - 只在绳索未发射时
-        if (horizontalInput != 0 && !isRopeBusy)
+        if (_cachedhorizontalInput != 0 && !isRopeBusy)
         {
             // 如果向右移动，朝向右边
-            if (horizontalInput > 0)
+            if (_cachedhorizontalInput > 0)
             {
                 aimIndicator.transform.localScale = new Vector3(1, 1, 1); // 正常比例，朝右
             }
             // 如果向左移动，朝向左边
-            else if (horizontalInput < 0)
+            else if (_cachedhorizontalInput < 0)
             {
                 aimIndicator.transform.localScale = new Vector3(-1, 1, 1); // X轴反转，朝左
             }
@@ -715,13 +814,52 @@ public class PlayerController : MonoBehaviour
     }
 
     // 处理地面移动
-    private void HandleGroundMovement(float horizontalInput)
+    private void HandleGroundMovement(float _cachedhorizontalInput)
     {
         // 在地面上时完全控制移动
         airControlTimeRemaining = airControlDuration;
 
+        // 检查是否在陡峭斜坡上
+        if (isOnSteepSlope)
+        {
+            // 检查是否卡在斜坡上（速度很小）
+            bool isStuckOnSlope = IsStuckOnSlope();
+
+            if (isStuckOnSlope)
+            {
+                // 玩家卡在斜坡上，允许正常移动
+                ApplyNormalGroundMovement(_cachedhorizontalInput, false);
+
+#if UNITY_EDITOR
+                if (debugmode && Time.frameCount % 30 == 0)
+                    Debug.LogFormat("检测到玩家卡在斜坡上，允许正常移动");
+#endif
+            }
+            else
+            {
+                // 正常斜坡滑动
+                rb.velocity = slopeNormalPerp * slideSpeed;
+                // 增加额外的向下力，使滑动更流畅
+                rb.AddForce(Vector2.down * 2f, ForceMode2D.Force);
+                _cachedhorizontalInput = 0f;
+
+#if UNITY_EDITOR
+                if (debugmode && Time.frameCount % 30 == 0)
+                    Debug.LogFormat("在陡峭斜坡上滑动，速度: {0}", rb.velocity);
+#endif
+            }
+
+            // 如果刚刚落地，重置跳跃状态
+            if (isJumping)
+            {
+                isJumping = false;
+            }
+
+            return; // 提前返回，不执行下面的普通地面移动逻辑
+        }
+
         // 检查是否在斜坡上，以及移动方向是否是上坡
-        bool isMovingUpSlope = CheckIfMovingUpSlope(horizontalInput);
+        bool isMovingUpSlope = CheckIfMovingUpSlope(_cachedhorizontalInput);
 
         // 检查是否在兔子跳时间窗口内
         bool inBunnyHopWindow = (Time.time - lastLandingTime) <= bunnyHopWindow;
@@ -730,11 +868,11 @@ public class PlayerController : MonoBehaviour
         // 根据不同情况应用不同的移动逻辑
         if (inBunnyHopWindow && hasSignificantLandingSpeed)
         {
-            ApplyBunnyHopMovement(horizontalInput);
+            ApplyBunnyHopMovement(_cachedhorizontalInput);
         }
         else
         {
-            ApplyNormalGroundMovement(horizontalInput, isMovingUpSlope);
+            ApplyNormalGroundMovement(_cachedhorizontalInput, isMovingUpSlope);
         }
 
         // 如果刚刚落地，重置跳跃状态
@@ -745,10 +883,35 @@ public class PlayerController : MonoBehaviour
         }
     }
 
-    // 检查是否在上坡移动
-    private bool CheckIfMovingUpSlope(float horizontalInput)
+    private bool IsStuckOnSlope()
     {
-        if (currentSlopeAngle <= 0f || Mathf.Abs(horizontalInput) < 0.1f)
+        // 检查速度是否很小
+        float velocityMagnitude = rb.velocity.magnitude;
+        bool hasLowVelocity = velocityMagnitude < 0.5f;
+
+        // 如果玩家有输入但速度很小，更可能是卡住了
+        float inputMagnitude = Mathf.Abs(Input.GetAxisRaw("Horizontal"));
+        bool hasInputButLowSpeed = inputMagnitude > 0.1f && hasLowVelocity;
+
+        // 如果在斜坡上停留时间较长，也可能是卡住了
+        bool hasBeenOnSlopeLong = steepSlopeTimer > 0.5f;
+
+#if UNITY_EDITOR
+        if (debugmode && hasLowVelocity && Time.frameCount % 30 == 0)
+        {
+            Debug.LogFormat("斜坡状态检查: 速度={0:F2}, 输入={1:F2}, 斜坡时间={2:F2}",
+                velocityMagnitude, inputMagnitude, steepSlopeTimer);
+        }
+#endif
+
+        // 如果速度很小，且玩家有输入或在斜坡上停留较长时间，认为是卡住了
+        return hasLowVelocity && (hasInputButLowSpeed || hasBeenOnSlopeLong);
+    }
+
+    // 检查是否在上坡移动
+    private bool CheckIfMovingUpSlope(float _cachedhorizontalInput)
+    {
+        if (currentSlopeAngle <= 0f || Mathf.Abs(_cachedhorizontalInput) < 0.1f)
             return false;
 
         // 获取当前站立的斜坡法线
@@ -759,17 +922,17 @@ public class PlayerController : MonoBehaviour
             Vector2 slopeDirection = new Vector2(hit.normal.y, -hit.normal.x);
 
             // 判断玩家移动方向是否与斜坡上坡方向一致
-            float dotProduct = Vector2.Dot(new Vector2(horizontalInput, 0), slopeDirection);
+            float dotProduct = Vector2.Dot(new Vector2(_cachedhorizontalInput, 0), slopeDirection);
             return dotProduct > 0;
         }
         return false;
     }
 
 // 应用兔子跳移动逻辑
-private void ApplyBunnyHopMovement(float horizontalInput)
+private void ApplyBunnyHopMovement(float _cachedhorizontalInput)
 {
     // 如果没有输入，或输入方向与落地速度方向相反，应用摩擦力
-    if (Mathf.Abs(horizontalInput) < 0.1f || Mathf.Sign(horizontalInput) != Mathf.Sign(lastLandingVelocityX))
+    if (Mathf.Abs(_cachedhorizontalInput) < 0.1f || Mathf.Sign(_cachedhorizontalInput) != Mathf.Sign(lastLandingVelocityX))
     {
         // 应用摩擦力，减缓水平速度
         float frictionForce = landingFrictionMultiplier * Time.deltaTime;
@@ -782,10 +945,10 @@ private void ApplyBunnyHopMovement(float horizontalInput)
 #endif
     }
     // 如果有输入且方向与落地速度相同，保持部分动量
-    else if (Mathf.Sign(horizontalInput) == Mathf.Sign(lastLandingVelocityX))
+    else if (Mathf.Sign(_cachedhorizontalInput) == Mathf.Sign(lastLandingVelocityX))
     {
         // 计算目标速度 (结合输入和原有动量)
-        float targetSpeed = horizontalInput * moveSpeed;
+        float targetSpeed = _cachedhorizontalInput * moveSpeed;
         // 如果落地速度更大，使用落地速度的一部分
         if (Mathf.Abs(lastLandingVelocityX) > Mathf.Abs(targetSpeed))
         {
@@ -796,34 +959,23 @@ private void ApplyBunnyHopMovement(float horizontalInput)
 }
 
 // 应用普通地面移动逻辑,处理陡峭斜坡上的滑动
-private void ApplyNormalGroundMovement(float horizontalInput, bool isMovingUpSlope)
+private void ApplyNormalGroundMovement(float _cachedhorizontalInput, bool isMovingUpSlope)
 {
-    // 如果在陡峭斜坡上
-    if (isOnSteepSlope)
-    {
-        // 在陡峭斜坡上滑动，玩家无法控制移动
-        rb.velocity = slopeNormalPerp * slideSpeed;
-        
-        #if UNITY_EDITOR
-        if (debugmode && Time.frameCount % 30 == 0)
-            Debug.LogFormat("在陡峭斜坡上滑动，速度: {0}", rb.velocity);
-        #endif
-    }
     // 如果在普通斜坡上且尝试上坡
-    else if (currentSlopeAngle > 0 && isMovingUpSlope)
+    if (currentSlopeAngle > 0 && isMovingUpSlope)
     {
         // 正常移动，玩家可以控制
-        rb.velocity = new Vector2(horizontalInput * moveSpeed, rb.velocity.y);
+        rb.velocity = new Vector2(_cachedhorizontalInput * moveSpeed, rb.velocity.y);
     }
     // 普通地面移动
     else
     {
-        rb.velocity = new Vector2(horizontalInput * moveSpeed, rb.velocity.y);
+        rb.velocity = new Vector2(_cachedhorizontalInput * moveSpeed, rb.velocity.y);
     }
 }
 
 // 处理空中移动
-private void HandleAirMovement(float horizontalInput)
+private void HandleAirMovement(float _cachedhorizontalInput)
 {
     // 空中控制逻辑
     if (!isGrounded && airControlTimeRemaining > 0)
@@ -834,7 +986,7 @@ private void HandleAirMovement(float horizontalInput)
         // 在有限时间内可以控制，但只有反方向的输入有效
         if (airControlTimeRemaining > 0)
         {
-            ApplyAirControl(horizontalInput);
+            ApplyAirControl(_cachedhorizontalInput);
         }
 
         // 限制最大空中速度
@@ -843,24 +995,24 @@ private void HandleAirMovement(float horizontalInput)
 }
 
 // 应用空中控制力
-private void ApplyAirControl(float horizontalInput)
+private void ApplyAirControl(float _cachedhorizontalInput)
 {
     // 获取当前水平速度方向
     float currentVelocityDirection = Mathf.Sign(rb.velocity.x);
 
     // 获取输入方向
-    float inputDirection = Mathf.Sign(horizontalInput);
+    float inputDirection = Mathf.Sign(_cachedhorizontalInput);
 
     // 只有当输入方向与当前速度方向相反时才施加力
     if (currentVelocityDirection != 0 && inputDirection != 0 && inputDirection != currentVelocityDirection)
     {
         // 施加力以控制方向，但不影响原有动量
-        rb.AddForce(new Vector2(horizontalInput * airControlForce, 0), ForceMode2D.Force);
+        rb.AddForce(new Vector2(_cachedhorizontalInput * airControlForce, 0), ForceMode2D.Force);
     }
     // 如果玩家速度接近0，允许任意方向输入以开始移动
     else if (Mathf.Abs(rb.velocity.x) < 0.5f)
     {
-        rb.AddForce(new Vector2(horizontalInput * airControlForce, 0), ForceMode2D.Force);
+        rb.AddForce(new Vector2(_cachedhorizontalInput * airControlForce, 0), ForceMode2D.Force);
     }
 }
 
@@ -930,18 +1082,15 @@ private void HandleAiming(bool isRopeBusy)
         {
             // 设置跳跃缓冲计时器
             jumpBufferCounter = jumpBufferTime;
-            
+
 #if UNITY_EDITOR
             if (debugmode)
+            {
                 Debug.LogFormat("跳跃输入已缓冲: {0}秒", jumpBufferTime);
-
+                Debug.LogFormat("跳跃条件状态: isGrounded={0}, isOnSteepSlope={1}, steepSlopeTimer={2:F2}, currentSlopeAngle={3:F1}",
+                    isGrounded, isOnSteepSlope, steepSlopeTimer, currentSlopeAngle);
+            }
 #endif
-        }
-        // 检查跳跃缓冲，如果有缓冲的跳跃输入且现在可以跳跃，执行跳跃
-        if (jumpBufferCounter > 0 && isGrounded && !isJumping && !isRopeBusy && rbInitialized)
-        {
-            TriggerJump();
-            return; // 执行跳跃后直接返回
         }
 
         // 更新跳跃缓冲计时器
@@ -949,6 +1098,45 @@ private void HandleAiming(bool isRopeBusy)
         {
             jumpBufferCounter -= Time.deltaTime;
         }
+
+        // 如果没有跳跃缓冲，直接返回
+        if (jumpBufferCounter <= 0 || isJumping || isRopeBusy || !rbInitialized)
+            return;
+
+        // 分别处理普通地面跳跃和斜坡跳跃
+        if (isGrounded)
+        {
+            // 普通地面跳跃
+            TriggerJump();
+            return;
+        }
+        else if (isOnSteepSlope && steepSlopeTimer < steepSlopeGracePeriod)
+        {
+            // 斜坡跳跃 - 只允许在刚接触斜坡时跳跃
+            TriggerSlopeJump();
+            return;
+        }
+    }
+
+    private void TriggerSlopeJump()
+    {
+        // 确保不会重复触发
+        if (isPlayingJumpAnimation || pendingJump)
+            return;
+
+        // 记录跳跃时间，用于防止连续攀爬
+        lastJumpTime = Time.time;
+
+        // 斜坡跳跃不考虑兔子跳机制
+        isPendingBunnyHop = false;
+
+        // 这里不需要起跳动画，直接执行跳跃
+        PerformJump();
+#if UNITY_EDITOR
+        if (debugmode)
+        Debug.LogFormat("斜坡跳跃: 斜坡角度: {0:F1}°", currentSlopeAngle);
+#endif
+        jumpBufferCounter = 0; // 重置跳跃缓冲计时器
     }
 
     // 触发跳跃
@@ -998,11 +1186,11 @@ private void HandleRopeShooting(bool isRopeBusy)
 }
 
 
-    private void HandleRunningFacing(float horizontalInput)
+    private void HandleRunningFacing(float _cachedhorizontalInput)
     {
-        if (Mathf.Abs(horizontalInput) > 0.1f)
+        if (Mathf.Abs(_cachedhorizontalInput) > 0.1f)
         {
-            bool shouldFaceRight = horizontalInput > 0;
+            bool shouldFaceRight = _cachedhorizontalInput > 0;
             SetCharacterFacing(shouldFaceRight);
         }
     }
@@ -1099,9 +1287,65 @@ private void HandleRopeShooting(bool isRopeBusy)
         }
     }
 
+    private bool IsMovingAgainstWall()
+    {
+        // 如果没有水平输入，直接返回false
+        if (Mathf.Abs(_cachedhorizontalInput) < 0.1f)
+            return false;
+
+        // 确定检测方向
+        Vector2 direction = _cachedhorizontalInput > 0 ? Vector2.right : Vector2.left;
+
+        // 获取碰撞体尺寸
+        CircleCollider2D circleCollider = GetComponent<CircleCollider2D>();
+        float radius = circleCollider != null ? circleCollider.radius : 0.5f;
+
+        // 从玩家位置发射射线
+        RaycastHit2D hit = Physics2D.Raycast(transform.position, direction, radius + 1f, groundLayers);
+
+            // 可视化射线（仅在编辑器中）
+        #if UNITY_EDITOR
+        if (showGroundCheck)
+        {
+            Debug.DrawRay(transform.position, direction, hit.collider != null ? Color.green : Color.red);
+        }
+        #endif
+
+        return hit.collider != null;
+    }
+
     private void PerformJump()
     {
         if (!rbInitialized) return;
+
+        // 检查是否正在向墙壁移动
+        bool movingAgainstWall = IsMovingAgainstWall();
+
+        // 检查是否在陡峭斜坡上
+        bool jumpingOnSteepSlope = isOnSteepSlope;
+
+        // 准备跳跃速度
+        float jumpVelocity = initialJumpVelocity;
+
+        // 如果正在向墙壁移动，增加跳跃力
+        if (movingAgainstWall)
+        {
+            jumpVelocity *= 1.3f;
+        }
+
+        // 如果在陡峭斜坡上跳跃，减少跳跃力并施加斜坡方向的力
+        if (jumpingOnSteepSlope)
+        {
+            jumpVelocity *= 0.7f; // 减少垂直跳跃力
+
+            // // 应用斜坡方向的力，使玩家更难攀爬陡峭斜坡
+            // rb.AddForce(slopeNormalPerp * 3f, ForceMode2D.Impulse);
+
+#if UNITY_EDITOR
+            if (debugmode)
+                Debug.LogFormat("在陡峭斜坡上跳跃，减少跳跃力并应用斜坡方向力");
+#endif
+        }
 
         // 检查是否是兔子跳
         if (isPendingBunnyHop)
@@ -1110,8 +1354,8 @@ private void HandleRopeShooting(bool isRopeBusy)
             float momentumRetention = justReleasedFromRope ? 0.98f : bunnyHopMomentumRetention;
             float bunnyHopVelocityX = lastLandingVelocityX * momentumRetention;
 
-            // 使用兔子跳的水平速度
-            rb.velocity = new Vector2(bunnyHopVelocityX, initialJumpVelocity);
+            // 使用兔子跳的水平速度和调整后的跳跃高度
+            rb.velocity = new Vector2(bunnyHopVelocityX, jumpVelocity);
 
             // 重置标志
             isPendingBunnyHop = false;
@@ -1119,23 +1363,49 @@ private void HandleRopeShooting(bool isRopeBusy)
 
 #if UNITY_EDITOR
             if (debugmode)
-                Debug.LogFormat("执行兔子跳，水平速度: {0}", bunnyHopVelocityX);
+                Debug.LogFormat("执行兔子跳，水平速度: {0}, 垂直速度: {1}", bunnyHopVelocityX, jumpVelocity);
 #endif
         }
         else
         {
-            // 普通跳跃，保持水平速度不变
-            rb.velocity = new Vector2(rb.velocity.x, initialJumpVelocity);
+            // 普通跳跃，保持水平速度不变，使用调整后的跳跃高度
+            rb.velocity = new Vector2(rb.velocity.x, jumpVelocity);
 
 #if UNITY_EDITOR
             if (debugmode)
-                Debug.LogFormat("执行普通跳跃，Y轴速度设为: {0}", initialJumpVelocity);
+                Debug.LogFormat("执行普通跳跃，Y轴速度设为: {0}", jumpVelocity);
 #endif
+        }
+
+        // 如果正在向墙壁移动，在跳跃后应用额外的向上力
+        if (movingAgainstWall)
+        {
+            StartCoroutine(ApplyExtraUpwardForce());
         }
 
         isJumping = true;
         isPlayingJumpAnimation = false;
-        CanInput = true; // 重新启用输入（如果之前禁用了）
+        CanInput = true;
+    }
+
+    private IEnumerator ApplyExtraUpwardForce()
+    {
+        // 等待几帧，让初始跳跃速度生效
+        yield return new WaitForFixedUpdate();
+        yield return new WaitForFixedUpdate();
+
+        // 检查垂直速度，如果被减弱了，应用额外的向上力
+        if (rb.velocity.y < initialJumpVelocity * 0.9f)
+        {
+            // 计算需要补充的力
+            float extraForce = initialJumpVelocity * 0.5f;
+            rb.AddForce(Vector2.up * extraForce, ForceMode2D.Impulse);
+
+#if UNITY_EDITOR
+            if (debugmode)
+                Debug.LogFormat("应用额外向上力: {0}", extraForce);
+#endif
+        }
     }
 
     private void HandleRopeMode()
@@ -1143,8 +1413,6 @@ private void HandleRopeShooting(bool isRopeBusy)
         if (!CanInput || !ropeSystemInitialized)
             return;
 
-        // 获取输入
-        float horizontalInput = Input.GetAxis("Horizontal");
         bool isPressingUp = Input.GetKey(KeyCode.UpArrow);
         bool isPressingDown = Input.GetKey(KeyCode.DownArrow);
         bool isPressingSpace = Input.GetKeyDown(KeyCode.Space);
@@ -1156,7 +1424,7 @@ private void HandleRopeShooting(bool isRopeBusy)
         HandleRopeRelease(isPressingSpace);
         
         // 处理绳索摆动
-        HandleRopeSwinging(horizontalInput);
+        HandleRopeSwinging(_cachedhorizontalInput);
 
         // 处理道具使用
         HandleItemUseInRopeMode();
@@ -1166,15 +1434,15 @@ private void HandleRopeShooting(bool isRopeBusy)
     }
 
 // 处理绳索摆动
-private void HandleRopeSwinging(float horizontalInput)
+private void HandleRopeSwinging(float _cachedhorizontalInput)
 {
         float lastSwingTime = 0f;
         float swingInterval = 1f / 60f;
     // 只有当有明显的水平输入时才摆动
-        if (Mathf.Abs(horizontalInput) > 0.1f && Time.time >= lastSwingTime + swingInterval)
+        if (Mathf.Abs(_cachedhorizontalInput) > 0.1f && Time.time >= lastSwingTime + swingInterval)
         {
             // 根据输入方向应用摆动力
-            float direction = -Mathf.Sign(horizontalInput); // 反向是因为力的应用方式
+            float direction = -Mathf.Sign(_cachedhorizontalInput); // 反向是因为力的应用方式
             ropeSystem.Swing(direction * swingForce);
             lastSwingTime = Time.time;
 

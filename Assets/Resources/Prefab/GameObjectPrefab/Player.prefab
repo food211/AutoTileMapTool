@@ -526,7 +526,7 @@ Rigidbody2D:
     m_Bits: 0
   m_Interpolate: 0
   m_SleepingMode: 0
-  m_CollisionDetection: 0
+  m_CollisionDetection: 1
   m_Constraints: 4
 --- !u!114 &6686334195298017003
 MonoBehaviour:
@@ -575,6 +575,10 @@ MonoBehaviour:
   groundCheckSize: {x: 1.1, y: 0.7}
   groundCheckOffset: {x: 0, y: -0.5}
   showGroundCheck: 0
+  steepSlopeAngle: 45
+  slideSpeed: 5
+  slopeCheckDistance: 1.5
+  steepSlopeGracePeriod: 0.15
   headCheckSize: {x: 1.03, y: 0.6}
   headCheckOffset: {x: 0, y: 0.29}
   showHeadCheck: 0
@@ -584,7 +588,7 @@ MonoBehaviour:
   isElectricImmune: 0
   invincibleEffect: {fileID: 0}
   invincibleTint: {r: 1, g: 1, b: 1, a: 0.7}
-  playerAnimatorController: {fileID: 3156414638838583058}
+  playerAnimationController: {fileID: 0}
   debugmode: 0
   wasGrounded: 0
 --- !u!114 &6603980903830980839
@@ -606,6 +610,8 @@ MonoBehaviour:
   playerRenderer: {fileID: 4060904137555431898}
   damageFlashColor: {r: 1, g: 0, b: 0, a: 1}
   flashDuration: 0.1
+  minShakeIntensity: 0.1
+  maxShakeIntensity: 0.3
   playerController: {fileID: 6686334195298017003}
   statusManager: {fileID: 0}
   arrow: {fileID: 9072072273875727217}
@@ -628,9 +634,12 @@ MonoBehaviour:
   idleRandomInterval: 3
   idleRandomRange: 2
   idleIndexParam: IdleIndex
+  stateCheckInterval: 0.5
+  stuckInAirTimeout: 1
   aimIdleTimeoutDuration: 2.5
   velocityYParam: VelocityY
   isAimingParam: IsAiming
+  isRopeModeParam: IsRopeMode
   playerController: {fileID: 6686334195298017003}
   playerRb: {fileID: 6506614103827697823}
   debugMode: 0
