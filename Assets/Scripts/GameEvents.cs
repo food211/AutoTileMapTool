@@ -32,7 +32,7 @@ public static class GameEvents
     // 玩家移动相关事件
     public static event Action OnPlayerJump;
     public static event Action<bool> OnPlayerGroundedStateChanged; // true=着地，false=离地
-    
+
 
     // 相机缩放相关事件
     public static event Action OnCameraZoomIn;
@@ -226,10 +226,10 @@ public static class GameEvents
     {
         OnLevelLoaded?.Invoke(sceneName);
     }
-#region 交互相关事件
+    #region 交互相关事件
     // 交互相关事件
     public static event Action<bool, InteractionType> OnPlayerInInteractiveZoneChanged; // 玩家进入/离开交互区域，以及交互类型
-        public enum InteractionType
+    public enum InteractionType
     {
         Merchant,        // 商人交互
         Environmental,  // 环境交互（如开关、门等）
@@ -302,4 +302,28 @@ public static class GameEvents
     {
         OnRopeElectrifiedEnd?.Invoke();
     }
+    
+    #region 故事模式相关事件
+    // 故事模式相关事件
+    public static event System.Action<bool, float> OnStoryModeChanged; // true=进入故事模式，false=退出故事模式
+    public static event Action<List<PointOfInterest>, string, float> OnStartStorySequence; // 兴趣点列表、序列ID和黑边高度比例
+    public static event Action<string> OnStorySequenceCompleted; // 故事序列完成事件，包含序列ID
+
+    // 触发方法
+    public static void TriggerStoryModeChanged(bool show, float duration = 0.5f)
+    {
+        OnStoryModeChanged?.Invoke(show, duration);
+    }
+
+    public static void TriggerStartStorySequence(List<PointOfInterest> points, string sequenceId, float letterboxHeight = 0.1f)
+    {
+        OnStartStorySequence?.Invoke(points, sequenceId, letterboxHeight);
+    }
+
+    public static void TriggerStorySequenceCompleted(string sequenceId)
+    {
+        OnStorySequenceCompleted?.Invoke(sequenceId);
+    }
+    #endregion
+
 }

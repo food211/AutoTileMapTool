@@ -2403,6 +2403,12 @@ private void CompleteEdgeAssist(string reason)
         }
     }
 
+    private void HandleStoryModeChanged(bool isInStoryMode)
+    {
+        // 在故事模式下禁止玩家控制
+        SetPlayerInput(!isInStoryMode);
+    }
+
     // 添加处理玩家进入/离开交互区域的方法
 
     private GameEvents.InteractionType currentInteractionType = GameEvents.InteractionType.Item; // 默认为道具交互
@@ -2527,6 +2533,7 @@ private void CompleteEdgeAssist(string reason)
         GameEvents.OnPlayerRespawnCompleted += HandlePlayerRespawn;
         GameEvents.OnPlayerInInteractiveZoneChanged += HandleInteractiveZoneChanged;
         GameEvents.OnEndpointReached += HandleEndpointReached;
+        GameEvents.OnStoryModeChanged += HandleStoryModeChanged;
     }
 
     private void OnDisable()
@@ -2537,6 +2544,7 @@ private void CompleteEdgeAssist(string reason)
         GameEvents.OnPlayerRespawnCompleted -= HandlePlayerRespawn;
         GameEvents.OnPlayerInInteractiveZoneChanged -= HandleInteractiveZoneChanged;
         GameEvents.OnEndpointReached -= HandleEndpointReached;
+        GameEvents.OnStoryModeChanged -= HandleStoryModeChanged;
 
         // 停止所有协程
         StopAllCoroutines();

@@ -2,7 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
-public class UnlockerTrigger : Trigger, ISaveable
+public class UnlockerTrigger : Trigger
 {
     [Header("调试设置")]
     [SerializeField] private bool debugMode = false; // 是否启用调试模式
@@ -29,9 +29,6 @@ public class UnlockerTrigger : Trigger, ISaveable
     [SerializeField] private AudioSource audioSource;
     [SerializeField] private AudioClip activateSound;
     [SerializeField] private AudioClip deactivateSound;
-
-    [Header("保存设置")]
-    [SerializeField] private string uniqueID = ""; // 解锁器的唯一ID，用于保存/加载
 
     private bool isActivated = false;
 
@@ -383,11 +380,11 @@ public class UnlockerTrigger : Trigger, ISaveable
             Debug.LogFormat(DEBUG_TRIGGER_EXIT, gameObject.name, playerInTriggerArea);
         }
     }
-    #region Save API
+    #region ISaveable Implementation Override
     /// <summary>
     /// 获取对象的唯一ID
     /// </summary>
-    public string GetUniqueID()
+    public override string GetUniqueID()
     {
         return uniqueID;
     }
@@ -395,36 +392,47 @@ public class UnlockerTrigger : Trigger, ISaveable
     /// <summary>
     /// 保存对象状态
     /// </summary>
-    public SaveData Save()
+    public override SaveData Save()
     {
-        SaveData data = new SaveData();
+        // 首先获取基类的保存数据
+        SaveData data = base.Save();
+        
+        // 修改对象类型为当前类型
         data.objectType = GetType().Name;
-        data.boolValue = isActivated; // 保存激活状态
-
+        
+        // 添加解锁器特有的状态 - 使用boolValue存储isActivated
+        data.boolValue = isActivated; // 注意：这会覆盖基类的hasTriggered值
+        
         if (debugMode)
         {
-            Debug.LogFormat(DEBUG_SAVE_DATA, uniqueID, isActivated);
+            Debug.LogFormat(DEBUG_SAVE_DATA, GetUniqueID(), isActivated);
         }
-
+        
         return data;
     }
 
     /// <summary>
     /// 加载对象状态
     /// </summary>
-    public void Load(SaveData data)
+    public override void Load(SaveData data)
     {
         if (data == null) return;
-
+        
+        // 检查对象类型是否匹配
+        if (data.objectType != GetType().Name && data.objectType != "Trigger") return;
+        
+        // 加载基类状态
+        base.Load(data);
+        
         // 根据加载的数据设置激活状态
         bool wasActivated = isActivated;
         bool shouldBeActivated = data.boolValue;
-
+        
         if (debugMode)
         {
-            Debug.LogFormat(DEBUG_LOAD_DATA, uniqueID, shouldBeActivated);
+            Debug.LogFormat(DEBUG_LOAD_DATA, GetUniqueID(), shouldBeActivated);
         }
-
+        
         // 如果状态需要改变，则调用相应方法
         if (shouldBeActivated && !wasActivated)
         {

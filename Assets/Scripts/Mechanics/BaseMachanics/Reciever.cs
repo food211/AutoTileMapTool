@@ -17,7 +17,7 @@ public class Reciever : MonoBehaviour, ISaveable
     }
 
     [Header("接收器设置")]
-    [SerializeField] private ActivationType activationType = ActivationType.Toggle;
+    [SerializeField] protected ActivationType activationType = ActivationType.Toggle;
     [SerializeField] private bool startActive = false;
 
     [Header("行为组件")]
@@ -30,7 +30,7 @@ public class Reciever : MonoBehaviour, ISaveable
     private bool isActive = false;
     private List<IMechanicAction> mechanicActions = new List<IMechanicAction>();
 
-    private void Start()
+    public void Start()
     {
         // 收集所有实现了IMechanicAction接口的组件
         foreach (var component in actionComponents)
@@ -72,7 +72,7 @@ public class Reciever : MonoBehaviour, ISaveable
     /// <summary>
     /// 切换行为的激活状态
     /// </summary>
-    public void ToggleActions()
+    public virtual void ToggleActions()
     {
         isActive = !isActive;
 
@@ -89,7 +89,7 @@ public class Reciever : MonoBehaviour, ISaveable
     /// <summary>
     /// 激活所有行为
     /// </summary>
-    public void ActivateActions()
+    public virtual void ActivateActions()
     {
         isActive = true;
 
@@ -104,7 +104,7 @@ public class Reciever : MonoBehaviour, ISaveable
     /// <summary>
     /// 停止所有行为
     /// </summary>
-    public void DeactivateActions()
+    public virtual void DeactivateActions()
     {
         isActive = false;
 

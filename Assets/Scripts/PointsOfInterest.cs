@@ -22,4 +22,11 @@ public class PointOfInterest
     
     [Tooltip("是否在运行时动态跟踪目标对象")]
     public bool dynamicTracking = true;
+    
+    [Header("相机缩放设置")]
+    [Tooltip("是否使用自定义缩放")]
+    public bool hasCustomZoom = false;
+    
+    [Tooltip("自定义缩放大小")]
+    public float zoomSize = 5f;
 }

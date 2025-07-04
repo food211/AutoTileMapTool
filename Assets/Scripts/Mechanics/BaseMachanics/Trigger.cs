@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Events;
 
-public class Trigger : MonoBehaviour
+public class Trigger : MonoBehaviour, ISaveable
 {
     [System.Serializable]
     public enum TriggerType
@@ -41,6 +41,9 @@ public class Trigger : MonoBehaviour
     [Header("交互设置")]
     [SerializeField] protected GameEvents.InteractionType interactionType = GameEvents.InteractionType.Environmental; // 触发器的交互类型
     
+    [Header("保存设置")]
+    [SerializeField] protected string uniqueID; // 触发器的唯一ID，用于保存/加载
+    
     // 事件系统，允许在编辑器中连接其他行为
     public UnityEvent onTriggerActivated;
     public UnityEvent onPlayerEnterInteractionZone; // 当玩家进入交互区域时
@@ -56,6 +59,12 @@ public class Trigger : MonoBehaviour
     {
         // 初始化碰撞器
         SetupColliders();
+        
+        // 如果没有设置唯一ID，自动生成一个
+        if (string.IsNullOrEmpty(uniqueID))
+        {
+            uniqueID = $"Trigger_{gameObject.scene.name}_{transform.position.x}_{transform.position.y}_{GetInstanceID()}";
+        }
     }
     
     protected virtual void Start()
@@ -66,6 +75,22 @@ public class Trigger : MonoBehaviour
         if (isActive && triggerType == TriggerType.TimerBased)
         {
             StartTimerTrigger();
+        }
+        
+        // 加载保存的状态
+        LoadSavedState();
+    }
+
+    /// <summary>
+    /// 加载保存的状态
+    /// </summary>
+    protected virtual void LoadSavedState()
+    {
+        // 只有在对象是动态创建的，或者需要立即加载状态的情况下才手动调用
+        // 通常情况下，ProgressManager 会在场景加载时自动处理所有 ISaveable 对象
+        if (ProgressManager.Instance != null && gameObject.scene.name == "")
+        {
+            ProgressManager.Instance.LoadObject(this);
         }
     }
     
@@ -277,6 +302,20 @@ public class Trigger : MonoBehaviour
         
         // 调用事件
         onTriggerActivated?.Invoke();
+        
+        // 保存状态
+        SaveState();
+    }
+    
+    /// <summary>
+    /// 保存触发器状态
+    /// </summary>
+    protected virtual void SaveState()
+    {
+        if (ProgressManager.Instance != null)
+        {
+            ProgressManager.Instance.SaveObject(this);
+        }
     }
     
     /// <summary>
@@ -299,6 +338,9 @@ public class Trigger : MonoBehaviour
                 timerCoroutine = null;
             }
         }
+        
+        // 保存状态
+        SaveState();
     }
     
     /// <summary>
@@ -318,6 +360,9 @@ public class Trigger : MonoBehaviour
             }
             StartTimerTrigger();
         }
+        
+        // 保存状态
+        SaveState();
     }
     
     /// <summary>
@@ -441,6 +486,50 @@ public class Trigger : MonoBehaviour
     {
         return playerInTriggerArea;
     }
+    
+    #region ISaveable Implementation
+    
+    /// <summary>
+    /// 获取对象的唯一ID
+    /// </summary>
+    public virtual string GetUniqueID()
+    {
+        return uniqueID;
+    }
+    
+    /// <summary>
+    /// 保存对象状态
+    /// </summary>
+    public virtual SaveData Save()
+    {
+        SaveData data = new SaveData();
+        data.objectType = "Trigger";
+        data.boolValue = hasTriggered;
+        data.boolValue2 = isActive;
+        data.intValue = currentRepeatCount;
+        
+        return data;
+    }
+    
+    /// <summary>
+    /// 加载对象状态
+    /// </summary>
+    public virtual void Load(SaveData data)
+    {
+        if (data == null || data.objectType != "Trigger") return;
+        
+        hasTriggered = data.boolValue;
+        isActive = data.boolValue2;
+        currentRepeatCount = data.intValue;
+        
+        // 如果是定时触发类型且处于激活状态，重新启动定时器
+        if (isActive && triggerType == TriggerType.TimerBased && timerCoroutine == null)
+        {
+            StartTimerTrigger();
+        }
+    }
+    
+    #endregion
     
     #if UNITY_EDITOR
     // 在编辑器中可视化交互范围

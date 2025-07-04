@@ -671,6 +671,42 @@ public class ProgressManager : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// 加载单个对象的状态
+    /// </summary>
+    /// <param name="saveable">需要加载状态的对象</param>
+    public void LoadObject(ISaveable saveable)
+    {
+        if (saveable == null) return;
+
+        string uniqueID = saveable.GetUniqueID();
+        if (string.IsNullOrEmpty(uniqueID)) return;
+
+        // 确保玩家数据已加载
+        if (currentPlayerData == null)
+        {
+            LoadPlayerData();
+        }
+
+        // 检查是否有此对象的保存数据
+        if (currentPlayerData.HasObjectData(uniqueID))
+        {
+            SaveData data = currentPlayerData.GetObjectData(uniqueID);
+            saveable.Load(data);
+
+#if UNITY_EDITOR
+            if (debugMode)
+                Debug.Log($"已加载对象 {uniqueID} 的状态");
+#endif
+        }
+#if UNITY_EDITOR
+        else if (debugMode)
+        {
+            Debug.Log($"未找到对象 {uniqueID} 的保存数据");
+        }
+#endif
+    }
+
     #region 数据加密和解密
     /// <summary>
     /// 混淆数据 - 简单的数据混淆方法
@@ -684,18 +720,18 @@ public class ProgressManager : MonoBehaviour
         {
             // 1. 转换为字节数组
             byte[] bytes = Encoding.UTF8.GetBytes(data);
-            
+
             // 2. 应用XOR操作和字节偏移
             for (int i = 0; i < bytes.Length; i++)
             {
                 // 使用位置和加密强度进行XOR操作
                 byte xorValue = (byte)((i % 256) ^ encryptionStrength);
                 bytes[i] = (byte)(bytes[i] ^ xorValue);
-                
+
                 // 应用简单的字节偏移
                 bytes[i] = (byte)((bytes[i] + encryptionStrength) % 256);
             }
-            
+
             // 3. 反转数据块
             if (encryptionStrength > 3)
             {
@@ -709,18 +745,18 @@ public class ProgressManager : MonoBehaviour
                     }
                 }
             }
-            
+
             // 4. 添加简单的校验和
             byte checksum = 0;
             for (int i = 0; i < bytes.Length; i++)
             {
                 checksum = (byte)((checksum + bytes[i]) % 256);
             }
-            
+
             byte[] result = new byte[bytes.Length + 1];
             Array.Copy(bytes, result, bytes.Length);
             result[bytes.Length] = checksum;
-            
+
             // 5. 转换为Base64字符串
             return Convert.ToBase64String(result);
         }

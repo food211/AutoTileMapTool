@@ -34,6 +34,7 @@ public class SaveData
     
     // 通用状态字段
     public bool boolValue;
+    public bool boolValue2;
     public int intValue;
     public float floatValue;
     public string stringValue;
