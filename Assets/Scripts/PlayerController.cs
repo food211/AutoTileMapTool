@@ -2403,9 +2403,9 @@ private void CompleteEdgeAssist(string reason)
         }
     }
 
-    private void HandleStoryModeChanged(bool isInStoryMode)
+    private void HandleStoryModeChanged(bool isInStoryMode, float duration)
     {
-        // 在故事模式下禁止玩家控制
+        // 只关注故事模式状态，忽略持续时间参数
         SetPlayerInput(!isInStoryMode);
     }
 
