@@ -554,29 +554,6 @@ namespace TilemapTools
             }
         }
 
-        private void MergeTilemapToOutput(Tilemap source, Tilemap destination)
-        {
-            if (source == null || destination == null)
-                return;
-
-            source.CompressBounds();
-            BoundsInt bounds = source.cellBounds;
-
-            for (int y = bounds.min.y; y < bounds.max.y; y++)
-            {
-                for (int x = bounds.min.x; x < bounds.max.x; x++)
-                {
-                    Vector3Int pos = new Vector3Int(x, y, 0);
-                    TileBase tile = source.GetTile(pos);
-
-                    // 只有当源Tilemap中有瓦片时才覆盖目标Tilemap
-                    if (tile != null)
-                    {
-                        destination.SetTile(pos, tile);
-                    }
-                }
-            }
-        }
 
         // 新增方法，处理所有的 emptyMarkerTile
         private void ProcessEmptyMarkerTiles()
@@ -808,8 +785,8 @@ namespace TilemapTools
             Repaint(); // 刷新窗口以显示新条目
         }
 
-        private bool IsRuleMatching(TileBase[,] tiles, BoundsInt bounds, int startX, int startY,
-                                AutoTerrainTileRuleConfiger.TerrainRule rule, AutoTerrainTileRuleConfiger terrainSystem)
+        private static bool IsRuleMatching(TileBase[,] tiles, BoundsInt bounds, int startX, int startY,
+                            AutoTerrainTileRuleConfiger.TerrainRule rule, AutoTerrainTileRuleConfiger terrainSystem)
         {
             int ruleWidth = rule.bounds.size.x;
             int ruleHeight = rule.bounds.size.y;
@@ -885,6 +862,208 @@ namespace TilemapTools
             // 所有位置都匹配，规则匹配成功
             return true;
         }
+
+
+        #region static class
+        public static void ApplyTerrainRules(Tilemap sourceTilemap, Tilemap destTilemap, AutoTerrainTileRuleConfiger terrainSystem)
+        {
+            // 从 ApplyIterationStep 方法中提取的核心功能
+            // 获取source tilemap的边界
+            sourceTilemap.CompressBounds();
+            BoundsInt bounds = sourceTilemap.cellBounds;
+
+            // 创建一个副本以存储原始瓦片
+            TileBase[,] originalTiles = new TileBase[bounds.size.x, bounds.size.y];
+
+            // 读取所有原始瓦片
+            for (int y = bounds.min.y; y < bounds.max.y; y++)
+            {
+                for (int x = bounds.min.x; x < bounds.max.x; x++)
+                {
+                    Vector3Int pos = new Vector3Int(x, y, 0);
+                    originalTiles[x - bounds.min.x, y - bounds.min.y] = sourceTilemap.GetTile(pos);
+                }
+            }
+
+            // 排序规则
+            List<AutoTerrainTileRuleConfiger.TerrainRule> sortedRules = new List<AutoTerrainTileRuleConfiger.TerrainRule>(terrainSystem.rules);
+            sortedRules.Sort((a, b) => b.priority.CompareTo(a.priority));
+
+            // 创建规则匹配结果字典
+            Dictionary<AutoTerrainTileRuleConfiger.TerrainRule, Dictionary<Vector3Int, TileBase>> ruleMatchResults =
+                new Dictionary<AutoTerrainTileRuleConfiger.TerrainRule, Dictionary<Vector3Int, TileBase>>();
+
+            // 对每个规则，检查所有位置是否匹配
+            foreach (var rule in sortedRules)
+            {
+                // 获取输入和输出规则Tilemap
+                Tilemap inputTilemap = terrainSystem.GetInputRulesTilemap();
+                Tilemap outputRulesTilemap = terrainSystem.GetOutputRulesTilemap();
+
+                if (inputTilemap == null || outputRulesTilemap == null)
+                    continue;
+
+                // 创建当前规则的匹配结果字典
+                Dictionary<Vector3Int, TileBase> matchPositions = new Dictionary<Vector3Int, TileBase>();
+                ruleMatchResults[rule] = matchPositions;
+
+                // 获取规则大小
+                int ruleWidth = rule.bounds.size.x;
+                int ruleHeight = rule.bounds.size.y;
+
+                // 遍历源Tilemap中所有可能的起始位置
+                for (int y = bounds.min.y; y <= bounds.max.y - ruleHeight; y++)
+                {
+                    for (int x = bounds.min.x; x <= bounds.max.x - ruleWidth; x++)
+                    {
+                        // 检查规则是否匹配
+                        if (IsRuleMatching(originalTiles, bounds, x, y, rule, terrainSystem))
+                        {
+                            // 对于每个规则位置，获取对应的输出瓦片并设置到对应位置
+                            for (int ry = 0; ry < ruleHeight; ry++)
+                            {
+                                for (int rx = 0; rx < ruleWidth; rx++)
+                                {
+                                    // 计算规则输出Tilemap中的位置
+                                    Vector3Int ruleOutputPos = new Vector3Int(rule.bounds.min.x + rx, rule.bounds.min.y + ry, 0);
+                                    TileBase outputTile = outputRulesTilemap.GetTile(ruleOutputPos);
+
+                                    // 计算目标Tilemap中的位置
+                                    Vector3Int destPos = new Vector3Int(x + rx, y + ry, 0);
+
+                                    // 记录匹配位置和对应的输出瓦片
+                                    if (outputTile != null)
+                                    {
+                                        matchPositions[destPos] = outputTile;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 按优先级顺序应用规则的结果
+            foreach (var rule in sortedRules)
+            {
+                if (!ruleMatchResults.ContainsKey(rule))
+                    continue;
+
+                var matchPositions = ruleMatchResults[rule];
+
+                // 应用当前规则的所有匹配结果
+                foreach (var kvp in matchPositions)
+                {
+                    Vector3Int pos = kvp.Key;
+                    TileBase outputTile = kvp.Value;
+
+                    if (outputTile != null)
+                    {
+                        // 设置输出瓦片
+                        destTilemap.SetTile(pos, outputTile);
+                    }
+                }
+            }
+
+            // 处理未匹配的位置 - 保持原样
+            for (int y = bounds.min.y; y < bounds.max.y; y++)
+            {
+                for (int x = bounds.min.x; x < bounds.max.x; x++)
+                {
+                    Vector3Int pos = new Vector3Int(x, y, 0);
+                    TileBase currentTile = originalTiles[x - bounds.min.x, y - bounds.min.y];
+
+                    // 检查这个位置是否被任何规则匹配过
+                    bool matchedByAnyRule = false;
+                    foreach (var rule in sortedRules)
+                    {
+                        if (ruleMatchResults.ContainsKey(rule) && ruleMatchResults[rule].ContainsKey(pos))
+                        {
+                            matchedByAnyRule = true;
+                            break;
+                        }
+                    }
+
+                    // 如果没有被任何规则匹配，保持原样
+                    if (currentTile != null && !matchedByAnyRule)
+                    {
+                        // 如果当前瓦片是emptyMarkerTile，则不放置任何瓦片
+                        if (currentTile == terrainSystem.emptyMarkerTile)
+                        {
+                            // 不设置任何瓦片，保持为空
+                        }
+                        else
+                        {
+                            // 否则保持原样
+                            destTilemap.SetTile(pos, currentTile);
+                        }
+                    }
+                }
+            }
+
+            // 刷新输出tilemap
+            destTilemap.RefreshAllTiles();
+        }
+
+        public static void MergeTilemapToOutput(Tilemap source, Tilemap destination)
+        {
+            if (source == null || destination == null)
+                return;
+
+            source.CompressBounds();
+            BoundsInt bounds = source.cellBounds;
+
+            for (int y = bounds.min.y; y < bounds.max.y; y++)
+            {
+                for (int x = bounds.min.x; x < bounds.max.x; x++)
+                {
+                    Vector3Int pos = new Vector3Int(x, y, 0);
+                    TileBase tile = source.GetTile(pos);
+
+                    // 只有当源Tilemap中有瓦片时才覆盖目标Tilemap
+                    if (tile != null)
+                    {
+                        destination.SetTile(pos, tile);
+                    }
+                }
+            }
+        }
+
+        public static void ProcessEmptyMarkerTiles(Tilemap tilemap, AutoTerrainTileRuleConfiger terrainSystem)
+        {
+            if (tilemap == null || terrainSystem == null || terrainSystem.emptyMarkerTile == null)
+                return;
+
+            // 获取Tilemap的边界
+            tilemap.CompressBounds();
+            BoundsInt bounds = tilemap.cellBounds;
+
+            // 收集所有需要清除的位置
+            List<Vector3Int> positionsToRemove = new List<Vector3Int>();
+
+            // 检查每个位置
+            for (int y = bounds.min.y; y < bounds.max.y; y++)
+            {
+                for (int x = bounds.min.x; x < bounds.max.x; x++)
+                {
+                    Vector3Int pos = new Vector3Int(x, y, 0);
+                    TileBase tile = tilemap.GetTile(pos);
+
+                    // 检查是否是emptyMarkerTile
+                    if (tile == terrainSystem.emptyMarkerTile)
+                    {
+                        positionsToRemove.Add(pos);
+                    }
+                }
+            }
+
+            // 清除所有emptyMarkerTile位置
+            foreach (var pos in positionsToRemove)
+            {
+                tilemap.SetTile(pos, null);
+            }
+        }
+        #endregion
     }
 }
 #endif
