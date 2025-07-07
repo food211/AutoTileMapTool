@@ -1211,120 +1211,120 @@ namespace TilemapTools
         }
 
         private void DrawTerrainApplicationStep()
-{
-    EditorGUILayout.HelpBox(GetLocalizedText("step3Help"), MessageType.Info);
-    EditorGUILayout.Space();
-    
-    // 打开完整编辑器按钮
-    if (GUILayout.Button(GetLocalizedText("openTerrainEditor"), GUILayout.Height(40)))
-    {
-        AutoTerrainTileEditor.ShowWindow();
-    }
-    
-    EditorGUILayout.Space();
-    EditorGUILayout.LabelField(GetLocalizedText("savedOperations"), EditorStyles.boldLabel);
-    
-    // 获取保存的操作列表
-    List<TerrainOperation> operations = LoadTerrainOperations();
-    
-    // 显示保存的操作列表
-    EditorGUI.BeginChangeCheck();
-    for (int i = 0; i < operations.Count; i++)
-    {
-        EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-        
-        // 操作名称和启用状态
-        EditorGUILayout.BeginHorizontal();
-        operations[i].enabled = EditorGUILayout.Toggle(operations[i].enabled, GUILayout.Width(20));
-        operations[i].name = EditorGUILayout.TextField(operations[i].name);
-        
-        // 删除按钮
-        if (GUILayout.Button(GetLocalizedText("delete"), GUILayout.Width(60)))
         {
-            operations.RemoveAt(i);
-            SaveTerrainOperations(operations);
-            i--;
-            EditorGUILayout.EndHorizontal();
-            EditorGUILayout.EndVertical();
-            continue;
-        }
-        EditorGUILayout.EndHorizontal();
-        
-        // 操作详情
-        EditorGUI.indentLevel++;
-        operations[i].sourceTilemap = (Tilemap)EditorGUILayout.ObjectField(
-            GetLocalizedText("sourceTilemap"), operations[i].sourceTilemap, typeof(Tilemap), true);
-            
-        operations[i].outputTilemap = (Tilemap)EditorGUILayout.ObjectField(
-            GetLocalizedText("outputTilemap"), operations[i].outputTilemap, typeof(Tilemap), true);
-            
-        operations[i].terrainRules = (AutoTerrainTileRuleConfiger)EditorGUILayout.ObjectField(
-            GetLocalizedText("terrainRules"), operations[i].terrainRules, typeof(AutoTerrainTileRuleConfiger), false);
-            
-        operations[i].clearBeforeApply = EditorGUILayout.Toggle(
-            GetLocalizedText("clearBeforeApply"), operations[i].clearBeforeApply);
-            
-        // 应用单个操作按钮
-        using (new EditorGUI.DisabledScope(operations[i].sourceTilemap == null || 
-                                          operations[i].outputTilemap == null || 
-                                          operations[i].terrainRules == null))
-        {
-            if (GUILayout.Button(GetLocalizedText("applyOperation")))
+            EditorGUILayout.HelpBox(GetLocalizedText("step3Help"), MessageType.Info);
+            EditorGUILayout.Space();
+
+            // 打开完整编辑器按钮
+            if (GUILayout.Button(GetLocalizedText("openTerrainEditor"), GUILayout.Height(40)))
             {
-                ApplyTerrainOperation(operations[i]);
+                AutoTerrainTileEditor.ShowWindow();
             }
+
+            EditorGUILayout.Space();
+            EditorGUILayout.LabelField(GetLocalizedText("savedOperations"), EditorStyles.boldLabel);
+
+            // 获取保存的操作列表
+            List<TerrainOperation> operations = LoadTerrainOperations();
+
+            // 显示保存的操作列表
+            EditorGUI.BeginChangeCheck();
+            for (int i = 0; i < operations.Count; i++)
+            {
+                EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+
+                // 操作名称和启用状态
+                EditorGUILayout.BeginHorizontal();
+                operations[i].enabled = EditorGUILayout.Toggle(operations[i].enabled, GUILayout.Width(20));
+                operations[i].name = EditorGUILayout.TextField(operations[i].name);
+
+                // 删除按钮
+                if (GUILayout.Button(GetLocalizedText("delete"), GUILayout.Width(60)))
+                {
+                    operations.RemoveAt(i);
+                    SaveTerrainOperations(operations);
+                    i--;
+                    EditorGUILayout.EndHorizontal();
+                    EditorGUILayout.EndVertical();
+                    continue;
+                }
+                EditorGUILayout.EndHorizontal();
+
+                // 操作详情
+                EditorGUI.indentLevel++;
+                operations[i].sourceTilemap = (Tilemap)EditorGUILayout.ObjectField(
+                    GetLocalizedText("sourceTilemap"), operations[i].sourceTilemap, typeof(Tilemap), true);
+
+                operations[i].outputTilemap = (Tilemap)EditorGUILayout.ObjectField(
+                    GetLocalizedText("outputTilemap"), operations[i].outputTilemap, typeof(Tilemap), true);
+
+                operations[i].terrainRules = (AutoTerrainTileRuleConfiger)EditorGUILayout.ObjectField(
+                    GetLocalizedText("terrainRules"), operations[i].terrainRules, typeof(AutoTerrainTileRuleConfiger), false);
+
+                operations[i].clearBeforeApply = EditorGUILayout.Toggle(
+                    GetLocalizedText("clearBeforeApply"), operations[i].clearBeforeApply);
+
+                // 应用单个操作按钮
+                using (new EditorGUI.DisabledScope(operations[i].sourceTilemap == null ||
+                                                  operations[i].outputTilemap == null ||
+                                                  operations[i].terrainRules == null))
+                {
+                    if (GUILayout.Button(GetLocalizedText("applyOperation")))
+                    {
+                        ApplyTerrainOperation(operations[i]);
+                    }
+                }
+
+                EditorGUI.indentLevel--;
+                EditorGUILayout.EndVertical();
+            }
+
+            // 如果有任何更改，保存操作列表
+            if (EditorGUI.EndChangeCheck())
+            {
+                SaveTerrainOperations(operations);
+            }
+
+            // 添加新操作按钮
+            EditorGUILayout.Space();
+            if (GUILayout.Button(GetLocalizedText("addOperation")))
+            {
+                TerrainOperation newOperation = new TerrainOperation
+                {
+                    name = GetLocalizedText("newOperation") + " " + (operations.Count + 1),
+                    enabled = true,
+                    clearBeforeApply = true
+                };
+                operations.Add(newOperation);
+                SaveTerrainOperations(operations);
+            }
+
+            // 应用所有已启用操作按钮
+            EditorGUILayout.Space();
+            if (GUILayout.Button(GetLocalizedText("applyAllEnabled"), GUILayout.Height(30)))
+            {
+                ApplyAllEnabledOperations(operations);
+            }
+
+            EditorGUILayout.Space();
+            EditorGUILayout.LabelField(GetLocalizedText("instructions"), EditorStyles.boldLabel);
+            EditorGUILayout.LabelField(GetLocalizedText("step3Instr1"));
+            EditorGUILayout.LabelField(GetLocalizedText("step3Instr2"));
+            EditorGUILayout.LabelField(GetLocalizedText("step3Instr3"));
+            EditorGUILayout.LabelField(GetLocalizedText("step3Instr4"));
+
+            EditorGUILayout.Space();
+            GUILayout.BeginHorizontal();
+            if (GUILayout.Button(GetLocalizedText("previous"), GUILayout.Height(25)))
+            {
+                currentStep = WorkflowStep.CreateRules;
+            }
+            if (GUILayout.Button(GetLocalizedText("next", GetLocalizedText("step4")), GUILayout.Height(25)))
+            {
+                currentStep = WorkflowStep.LayerEditing;
+            }
+            GUILayout.EndHorizontal();
         }
-        
-        EditorGUI.indentLevel--;
-        EditorGUILayout.EndVertical();
-    }
-    
-    // 如果有任何更改，保存操作列表
-    if (EditorGUI.EndChangeCheck())
-    {
-        SaveTerrainOperations(operations);
-    }
-    
-    // 添加新操作按钮
-    EditorGUILayout.Space();
-    if (GUILayout.Button(GetLocalizedText("addOperation")))
-    {
-        TerrainOperation newOperation = new TerrainOperation
-        {
-            name = GetLocalizedText("newOperation") + " " + (operations.Count + 1),
-            enabled = true,
-            clearBeforeApply = true
-        };
-        operations.Add(newOperation);
-        SaveTerrainOperations(operations);
-    }
-    
-    // 应用所有已启用操作按钮
-    EditorGUILayout.Space();
-    if (GUILayout.Button(GetLocalizedText("applyAllEnabled"), GUILayout.Height(30)))
-    {
-        ApplyAllEnabledOperations(operations);
-    }
-    
-    EditorGUILayout.Space();
-    EditorGUILayout.LabelField(GetLocalizedText("instructions"), EditorStyles.boldLabel);
-    EditorGUILayout.LabelField(GetLocalizedText("step3Instr1"));
-    EditorGUILayout.LabelField(GetLocalizedText("step3Instr2"));
-    EditorGUILayout.LabelField(GetLocalizedText("step3Instr3"));
-    EditorGUILayout.LabelField(GetLocalizedText("step3Instr4"));
-    
-    EditorGUILayout.Space();
-    GUILayout.BeginHorizontal();
-    if (GUILayout.Button(GetLocalizedText("previous"), GUILayout.Height(25)))
-    {
-        currentStep = WorkflowStep.CreateRules;
-    }
-    if (GUILayout.Button(GetLocalizedText("next", GetLocalizedText("step4")), GUILayout.Height(25)))
-    {
-        currentStep = WorkflowStep.LayerEditing;
-    }
-    GUILayout.EndHorizontal();
-}
 
         // 地形操作类，用于保存单个地形应用操作的配置
         [System.Serializable]
@@ -1349,122 +1349,114 @@ private const string TerrainOperationRulesKeyPrefix = "TerrainOperation_Rules_";
 
         // 保存地形操作列表
         private static void SaveTerrainOperations(List<TerrainOperation> operations)
-{
-    // 保存操作数量
-    EditorPrefs.SetInt(TerrainOperationsCountKey, operations.Count);
-    
-    for (int i = 0; i < operations.Count; i++)
-    {
-        // 保存操作名称和启用状态
-        EditorPrefs.SetString(TerrainOperationNameKeyPrefix + i, operations[i].name);
-        EditorPrefs.SetBool(TerrainOperationEnabledKeyPrefix + i, operations[i].enabled);
-        EditorPrefs.SetBool(TerrainOperationClearBeforeApplyKeyPrefix + i, operations[i].clearBeforeApply);
-        
-        // 保存Tilemap引用
-        if (operations[i].sourceTilemap != null)
         {
-            string sourceId = operations[i].sourceTilemap.gameObject.GetInstanceID().ToString();
-            EditorPrefs.SetString(TerrainOperationSourceTilemapKeyPrefix + i, sourceId);
-        }
-        else
-        {
-            EditorPrefs.DeleteKey(TerrainOperationSourceTilemapKeyPrefix + i);
-        }
-        
-        if (operations[i].outputTilemap != null)
-        {
-            string outputId = operations[i].outputTilemap.gameObject.GetInstanceID().ToString();
-            EditorPrefs.SetString(TerrainOperationOutputTilemapKeyPrefix + i, outputId);
-        }
-        else
-        {
-            EditorPrefs.DeleteKey(TerrainOperationOutputTilemapKeyPrefix + i);
-        }
-        
-        // 保存规则文件引用
-        if (operations[i].terrainRules != null)
-        {
-            string guid = AssetDatabase.AssetPathToGUID(AssetDatabase.GetAssetPath(operations[i].terrainRules));
-            EditorPrefs.SetString(TerrainOperationRulesKeyPrefix + i, guid);
-        }
-        else
-        {
-            EditorPrefs.DeleteKey(TerrainOperationRulesKeyPrefix + i);
-        }
-    }
-}
+            // 保存操作数量
+            EditorPrefs.SetInt(TerrainOperationsCountKey, operations.Count);
 
-// 加载地形操作列表
-private List<TerrainOperation> LoadTerrainOperations()
-{
-    List<TerrainOperation> operations = new List<TerrainOperation>();
-    int count = EditorPrefs.GetInt(TerrainOperationsCountKey, 0);
-    
-    for (int i = 0; i < count; i++)
-    {
-        TerrainOperation operation = new TerrainOperation();
-        
-        // 加载操作名称和启用状态
-        if (EditorPrefs.HasKey(TerrainOperationNameKeyPrefix + i))
-        {
-            operation.name = EditorPrefs.GetString(TerrainOperationNameKeyPrefix + i);
-        }
-
-        if (EditorPrefs.HasKey(TerrainOperationEnabledKeyPrefix + i))
-        {
-            operation.enabled = EditorPrefs.GetBool(TerrainOperationEnabledKeyPrefix + i);
-        }
-
-        if (EditorPrefs.HasKey(TerrainOperationClearBeforeApplyKeyPrefix + i))
-        {
-            operation.clearBeforeApply = EditorPrefs.GetBool(TerrainOperationClearBeforeApplyKeyPrefix + i);
-        }
-        
-        // 加载Tilemap引用
-        if (EditorPrefs.HasKey(TerrainOperationSourceTilemapKeyPrefix + i))
-        {
-            string sourceId = EditorPrefs.GetString(TerrainOperationSourceTilemapKeyPrefix + i);
-            Tilemap[] allTilemaps = FindObjectsOfType<Tilemap>();
-            foreach (var tilemap in allTilemaps)
+            for (int i = 0; i < operations.Count; i++)
             {
-                if (tilemap.gameObject.GetInstanceID().ToString() == sourceId)
+                // 保存操作名称和启用状态
+                EditorPrefs.SetString(TerrainOperationNameKeyPrefix + i, operations[i].name);
+                EditorPrefs.SetBool(TerrainOperationEnabledKeyPrefix + i, operations[i].enabled);
+                EditorPrefs.SetBool(TerrainOperationClearBeforeApplyKeyPrefix + i, operations[i].clearBeforeApply);
+
+                // 保存Tilemap引用 - 使用GameObject路径而不是InstanceID
+                if (operations[i].sourceTilemap != null)
                 {
-                    operation.sourceTilemap = tilemap;
-                    break;
+                    string sourcePath = instance.GetGameObjectPath(operations[i].sourceTilemap.gameObject);
+                    EditorPrefs.SetString(TerrainOperationSourceTilemapKeyPrefix + i, sourcePath);
+                }
+                else
+                {
+                    EditorPrefs.DeleteKey(TerrainOperationSourceTilemapKeyPrefix + i);
+                }
+
+                if (operations[i].outputTilemap != null)
+                {
+                    string outputPath = instance.GetGameObjectPath(operations[i].outputTilemap.gameObject);
+                    EditorPrefs.SetString(TerrainOperationOutputTilemapKeyPrefix + i, outputPath);
+                }
+                else
+                {
+                    EditorPrefs.DeleteKey(TerrainOperationOutputTilemapKeyPrefix + i);
+                }
+
+                // 保存规则文件引用
+                if (operations[i].terrainRules != null)
+                {
+                    string guid = AssetDatabase.AssetPathToGUID(AssetDatabase.GetAssetPath(operations[i].terrainRules));
+                    EditorPrefs.SetString(TerrainOperationRulesKeyPrefix + i, guid);
+                }
+                else
+                {
+                    EditorPrefs.DeleteKey(TerrainOperationRulesKeyPrefix + i);
                 }
             }
         }
 
-        if (EditorPrefs.HasKey(TerrainOperationOutputTilemapKeyPrefix + i))
+        // 加载地形操作列表
+        private List<TerrainOperation> LoadTerrainOperations()
         {
-            string outputId = EditorPrefs.GetString(TerrainOperationOutputTilemapKeyPrefix + i);
-            Tilemap[] allTilemaps = FindObjectsOfType<Tilemap>();
-            foreach (var tilemap in allTilemaps)
+            List<TerrainOperation> operations = new List<TerrainOperation>();
+            int count = EditorPrefs.GetInt(TerrainOperationsCountKey, 0);
+
+            for (int i = 0; i < count; i++)
             {
-                if (tilemap.gameObject.GetInstanceID().ToString() == outputId)
+                TerrainOperation operation = new TerrainOperation();
+
+                // 加载操作名称和启用状态
+                if (EditorPrefs.HasKey(TerrainOperationNameKeyPrefix + i))
                 {
-                    operation.outputTilemap = tilemap;
-                    break;
+                    operation.name = EditorPrefs.GetString(TerrainOperationNameKeyPrefix + i);
                 }
+
+                if (EditorPrefs.HasKey(TerrainOperationEnabledKeyPrefix + i))
+                {
+                    operation.enabled = EditorPrefs.GetBool(TerrainOperationEnabledKeyPrefix + i);
+                }
+
+                if (EditorPrefs.HasKey(TerrainOperationClearBeforeApplyKeyPrefix + i))
+                {
+                    operation.clearBeforeApply = EditorPrefs.GetBool(TerrainOperationClearBeforeApplyKeyPrefix + i);
+                }
+
+                // 加载Tilemap引用 - 使用GameObject路径而不是InstanceID
+                if (EditorPrefs.HasKey(TerrainOperationSourceTilemapKeyPrefix + i))
+                {
+                    string sourcePath = EditorPrefs.GetString(TerrainOperationSourceTilemapKeyPrefix + i);
+                    GameObject sourceGO = FindGameObjectByPath(sourcePath);
+                    if (sourceGO != null)
+                    {
+                        operation.sourceTilemap = sourceGO.GetComponent<Tilemap>();
+                    }
+                }
+
+                if (EditorPrefs.HasKey(TerrainOperationOutputTilemapKeyPrefix + i))
+                {
+                    string outputPath = EditorPrefs.GetString(TerrainOperationOutputTilemapKeyPrefix + i);
+                    GameObject outputGO = FindGameObjectByPath(outputPath);
+                    if (outputGO != null)
+                    {
+                        operation.outputTilemap = outputGO.GetComponent<Tilemap>();
+                    }
+                }
+
+                // 加载规则文件引用
+                if (EditorPrefs.HasKey(TerrainOperationRulesKeyPrefix + i))
+                {
+                    string guid = EditorPrefs.GetString(TerrainOperationRulesKeyPrefix + i);
+                    string path = AssetDatabase.GUIDToAssetPath(guid);
+                    if (!string.IsNullOrEmpty(path))
+                    {
+                        operation.terrainRules = AssetDatabase.LoadAssetAtPath<AutoTerrainTileRuleConfiger>(path);
+                    }
+                }
+
+                operations.Add(operation);
             }
+
+            return operations;
         }
-        
-        // 加载规则文件引用
-        if (EditorPrefs.HasKey(TerrainOperationRulesKeyPrefix + i))
-        {
-            string guid = EditorPrefs.GetString(TerrainOperationRulesKeyPrefix + i);
-            string path = AssetDatabase.GUIDToAssetPath(guid);
-            if (!string.IsNullOrEmpty(path))
-            {
-                operation.terrainRules = AssetDatabase.LoadAssetAtPath<AutoTerrainTileRuleConfiger>(path);
-            }
-        }
-        
-        operations.Add(operation);
-    }
-    
-    return operations;
-}
 
 // 应用单个地形操作
 private void ApplyTerrainOperation(TerrainOperation operation)
