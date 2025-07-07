@@ -51,7 +51,7 @@ namespace TilemapTools
 
 
         private const string PREF_ASEPRITE_EXE_PATH = "TilePaletteGenerator_AsepriteExePath";
-        private const string PREF_USE_EXTERNAL_ASEPRITE_CLI = "TilePaletteGenerator_UseExternalAsepriteCLI";
+        private const string PREF_ASEPRITE_FILE_PATH = "TilePaletteGenerator_AsepriteFilePath";
 
         // 初始化本地化系统
         private static void InitializeLocalization()
@@ -382,6 +382,7 @@ namespace TilemapTools
             // 加载Aseprite设置
             asepriteExePath = EditorPrefs.GetString(PREF_ASEPRITE_EXE_PATH, "");
             asepriteOutputPath = EditorPrefs.GetString(PREF_ASEPRITE_OUTPUT_PATH, "Assets/Temp/AsepriteImport");
+            asepriteFilePath = EditorPrefs.GetString(PREF_ASEPRITE_FILE_PATH, "");
         }
 
         private void SaveSettings()
@@ -394,6 +395,7 @@ namespace TilemapTools
             // 保存Aseprite设置
             EditorPrefs.SetString(PREF_ASEPRITE_EXE_PATH, asepriteExePath);
             EditorPrefs.SetString(PREF_ASEPRITE_OUTPUT_PATH, asepriteOutputPath);
+            EditorPrefs.SetString(PREF_ASEPRITE_FILE_PATH, asepriteFilePath);
         }
         
         // 获取Aseprite可执行文件的扩展名
