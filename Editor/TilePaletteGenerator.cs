@@ -5,6 +5,10 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEngine.Tilemaps;
 using System.IO;
+using System.Diagnostics;
+using Debug = UnityEngine.Debug;
+using UnityEditor.U2D.Sprites;
+
 
 namespace TilemapTools
 {
@@ -13,10 +17,14 @@ namespace TilemapTools
         public Texture2D sourceTexture;
         public string tilesOutputPath = "Assets/GeneratedTiles";
         public string paletteOutputPath = "Assets/GeneratedPalettes";
+        private string asepriteOutputPath = "Assets/Temp/AsepriteImport"; // 默认Aseprite输出路径
+        private const string PREF_ASEPRITE_OUTPUT_PATH = "TilePaletteGenerator_AsepriteOutputPath"; // 保存设置的键
+
         public string paletteFileName = "MyTilePalette";
         public float transparencyThreshold = 0.1f;
         public static bool preserveGUIDs = false;
-        
+        public int sliceSize = 16; // 默认切片大小为16x16
+
 
         private enum DedupPrecision { Low, Medium, High }
         private DedupPrecision dedupPrecision = DedupPrecision.Medium;
@@ -30,9 +38,20 @@ namespace TilemapTools
 
         // 添加本地化文本字典
         private static Dictionary<string, Dictionary<string, string>> localizedTexts;
-        
+
         // 当前语言
         private static string currentLanguage;
+
+        // Aseprite相关字段
+        public string asepriteFilePath = "";
+        private bool useAseprite = false;
+        private string asepriteExePath = "";
+        
+        private bool includeHiddenLayers = false; // 默认不包含隐藏图层
+
+
+        private const string PREF_ASEPRITE_EXE_PATH = "TilePaletteGenerator_AsepriteExePath";
+        private const string PREF_USE_EXTERNAL_ASEPRITE_CLI = "TilePaletteGenerator_UseExternalAsepriteCLI";
 
         // 初始化本地化系统
         private static void InitializeLocalization()
@@ -47,8 +66,8 @@ namespace TilemapTools
             var enTexts = new Dictionary<string, string>
             {
                 {"title", "Tile Palette Generator"},
-                {"sourceTexture", "Source Texture (Sliced)"},
-                {"sliceHint", "Please use Sprite Editor to slice the texture first!"},
+                {"HowTo","Aseprite files will be automatically sliced upon import"},
+                { "sourceTexture", "Source Texture"},
                 {"transparencyThreshold", "Transparency Threshold"},
                 {"transparencyHint", "Sprites with average alpha below this threshold will be ignored"},
                 {"dedupSettings", "Deduplication Settings:"},
@@ -100,7 +119,61 @@ namespace TilemapTools
                 {"unslicedPixelsMessage", "Some areas of the texture are not covered by any sprite. This may result in incomplete tile palette.\n\nDo you want to continue anyway?"},
                 {"continueGeneration", "Continue"},
                 {"cancelGeneration", "Cancel"},
-
+                {"asepriteSupport", "Aseprite Support"},
+                {"asepritePackage", "Unity Aseprite Package:"},
+                {"asepriteInstalled", "Installed"},
+                {"asepriteNotInstalled", "Not Installed"},
+                {"installPackage", "Install Package"},
+                {"useExternalCLI", "Use External Aseprite CLI"},
+                {"asepriteExecutable", "Aseprite Executable:"},
+                {"testCLI", "Test Aseprite CLI Connection"},
+                {"asepriteFile", "Aseprite File:"},
+                {"noFileSelected", "No file selected"},
+                {"importAsepriteFile", "Import Aseprite File"},
+                {"importFailed", "Failed to import Aseprite file. Please check the console for errors."},
+                // 添加Aseprite相关的本地化文本
+                {"error", "Error"},
+                {"ok", "OK"},
+                {"noAsepriteFile", "No Aseprite file selected."},
+                {"executingAsepriteCommand", "Executing Aseprite CLI with arguments"},
+                {"asepriteExportSuccess", "Aseprite CLI export successful"},
+                {"foundLayerFiles", "Found {0} generated layer files"},
+                {"processingLayerFile", "Processing layer file"},
+                {"failedToLoadTexture", "Failed to load texture from {0}"},
+                {"importSuccess", "Import Successful"},
+                {"asepriteImportSuccessWithLayers", "Aseprite file imported successfully. Generated {0} layer files."},
+                {"noLayerFilesGenerated", "No layer files were generated."},
+                {"layerExportPossibleReasons", "This might mean:\n1. The Aseprite file has only one layer\n2. All layers are hidden and --all-layers is not enabled\n3. There was an issue with the export process"},
+                {"asepriteExportFailed", "Aseprite CLI export failed"},
+                {"failedToExportFromAseprite", "Failed to export from Aseprite. Error"},
+                {"asepriteCliNotConfigured", "Aseprite CLI is not configured. Please set the Aseprite executable path."},
+                {"attemptingFallbackExport", "Attempting fallback single export..."},
+                {"fallbackExportSuccess", "Fallback single texture export successful"},
+                {"asepriteImportSuccessSingleTexture", "Aseprite file imported successfully as a single merged texture (fallback mode)."},
+                {"failedToLoadExportedTexture", "Failed to load exported texture."},
+                {"fallbackExportFailed", "Fallback export also failed"},
+                {"bothExportMethodsFailed", "Both layer export and fallback export failed. Error"},
+                {"selectAsepriteExecutable", "Select Aseprite Executable"},
+                {"asepriteOutputPath", "Aseprite Output Path"},
+                {"selectAsepriteOutputFolder", "Select Aseprite Output Folder"},
+                {"includeHiddenLayers", "Include Hidden Layers"},
+                {"sliceSize", "Slice Size"},
+                {"singleImageProcessing", "Single Image Processing"},
+                {"asepriteImportRequired", "You've selected an Aseprite file but haven't imported it yet. Please click 'Import Aseprite File' first."},
+                {"noSpritesFound", "No sprites found in the texture! Please slice the texture first using Sprite Editor."},
+                {"workflowCancelled", "Sprite '{0}' ({1}) has unsliced pixels, workflow cancelled."},
+                {"irregularSizesWarning", "Warning: Some sprites have irregular sizes:"},
+                {"squareSizesRequired", "This tool only works with square sprites of the same size."},
+                {"irregularSizes", "Irregular Sprite Sizes"},
+                {"generationCancelledIrregular", "Tile palette generation cancelled due to irregular sprite sizes."},
+                {"paletteCreatedSuccessfully", "Tile palette created successfully: {0}"},
+                {"selectAsepriteExeFirst", "Please select the Aseprite executable path first."},
+                {"success", "Success"},
+                {"asepriteCliSuccess", "Aseprite CLI connection successful!\n\nVersion: {0}"},
+                {"asepriteCliFailure", "Failed to connect to Aseprite CLI. Please check the executable path."},
+                {"asepriteCliError", "Error executing Aseprite CLI: {0}"},
+                {"selectImageFile", "Please select an image file (PNG/JPG)"},
+                {"selectTextureFirst", "Please select a texture asset first"},
             };
             localizedTexts["en"] = enTexts;
 
@@ -108,8 +181,8 @@ namespace TilemapTools
             var zhTexts = new Dictionary<string, string>
             {
                 {"title", "瓦片调色板生成器"},
-                {"sourceTexture", "源纹理（已切片）"},
-                {"sliceHint", "请先使用精灵编辑器切片纹理！"},
+                {"HowTo","Aseprite文件在导入后会自动切片"},
+                { "sourceTexture", "源纹理"},
                 {"transparencyThreshold", "透明度阈值"},
                 {"transparencyHint", "平均透明度低于此阈值的精灵将被忽略"},
                 {"dedupSettings", "去重设置:"},
@@ -130,6 +203,8 @@ namespace TilemapTools
                 {"generateButton", "生成瓦片调色板"},
                 {"paletteExists", "调色板 '{0}' 已存在。"},
                 {"updateInPlace", "原地更新"},
+                {"textureNotSlicedMessage", "纹理 '{0}' 未切片或不包含精灵。您想自动切片吗？"},
+                {"autoSlice", "自动切片"},
                 {"cancel", "取消"},
                 {"createNewCopy", "创建新副本"},
                 {"paletteGenerated", "瓦片调色板 '{0}' 已成功创建！\n\n您想继续下一步（创建规则）吗？"},
@@ -161,6 +236,62 @@ namespace TilemapTools
                 {"unslicedPixelsMessage", "纹理的某些区域没有被任何精灵覆盖。这可能导致生成的调色板不完整。\n\n是否仍要继续？"},
                 {"continueGeneration", "继续"},
                 {"cancelGeneration", "取消"},
+                {"asepriteSupport", "Aseprite 支持"},
+                {"asepritePackage", "Unity Aseprite 包:"},
+                {"asepriteInstalled", "已安装"},
+                {"asepriteNotInstalled", "未安装"},
+                {"installPackage", "安装包"},
+                {"useExternalCLI", "使用外部 Aseprite CLI"},
+                {"asepriteExecutable", "Aseprite 可执行文件:"},
+                {"testCLI", "测试 Aseprite CLI 连接"},
+                {"asepriteFile", "Aseprite 文件:"},
+                {"noFileSelected", "未选择文件"},
+                {"importAsepriteFile", "导入 Aseprite 文件"},
+                {"importFailed", "导入 Aseprite 文件失败。请查看控制台获取错误信息。"},
+                // 添加Aseprite相关的本地化文本
+                {"error", "错误"},
+                {"ok", "确定"},
+                {"noAsepriteFile", "未选择Aseprite文件。"},
+                {"executingAsepriteCommand", "执行Aseprite CLI命令参数"},
+                {"asepriteExportSuccess", "Aseprite CLI导出成功"},
+                {"foundLayerFiles", "找到 {0} 个生成的图层文件"},
+                {"processingLayerFile", "处理图层文件"},
+                {"failedToLoadTexture", "无法从 {0} 加载纹理"},
+                {"importSuccess", "导入成功"},
+                {"asepriteImportSuccessWithLayers", "Aseprite文件导入成功。生成了 {0} 个图层文件。"},
+                {"noLayerFilesGenerated", "未生成图层文件。"},
+                {"layerExportPossibleReasons", "这可能意味着：\n1. Aseprite文件只有一个图层\n2. 所有图层都是隐藏的，并且未启用--all-layers选项\n3. 导出过程中出现问题"},
+                {"asepriteExportFailed", "Aseprite CLI导出失败"},
+                {"failedToExportFromAseprite", "从Aseprite导出失败。错误"},
+                {"asepriteCliNotConfigured", "Aseprite CLI未配置。请设置Aseprite可执行文件路径。"},
+                {"attemptingFallbackExport", "尝试备用单一导出..."},
+                {"fallbackExportSuccess", "备用单一纹理导出成功"},
+                {"asepriteImportSuccessSingleTexture", "Aseprite文件作为单一合并纹理导入成功（备用模式）。"},
+                {"failedToLoadExportedTexture", "无法加载导出的纹理。"},
+                {"fallbackExportFailed", "备用导出也失败了"},
+                {"bothExportMethodsFailed", "图层导出和备用导出均失败。错误"},
+                {"selectAsepriteExecutable", "选择Aseprite可执行文件"},
+                {"asepriteOutputPath", "Aseprite输出路径"},
+                {"selectAsepriteOutputFolder", "选择Aseprite输出文件夹"},
+                {"includeHiddenLayers", "包含隐藏图层"},
+                {"sliceSize", "切片大小"},
+                {"useExternalAsepriteCLI", "使用外部 Aseprite CLI工具"},
+                {"singleImageProcessing", "单图处理"},
+                {"asepriteImportRequired", "您已选择Aseprite文件但尚未导入。请先点击\"导入Aseprite文件\"按钮。"},
+                {"noSpritesFound", "纹理中未找到任何精灵！请先使用精灵编辑器对纹理进行切片。"},
+                {"workflowCancelled", "精灵'{0}'（{1}）有未切片像素，工作流已取消。"},
+                {"irregularSizesWarning", "警告：部分精灵尺寸不规则："},
+                {"squareSizesRequired", "此工具只能处理相同尺寸的正方形精灵。"},
+                {"irregularSizes", "不规则精灵尺寸"},
+                {"generationCancelledIrregular", "由于精灵尺寸不规则，瓦片调色板生成已取消。"},
+                {"paletteCreatedSuccessfully", "瓦片调色板创建成功：{0}"},
+                {"selectAsepriteExeFirst", "请先选择Aseprite可执行文件路径。"},
+                {"success", "成功"},
+                {"asepriteCliSuccess", "Aseprite CLI连接成功！\n\n版本：{0}"},
+                {"asepriteCliFailure", "连接Aseprite CLI失败。请检查可执行文件路径。"},
+                {"asepriteCliError", "执行Aseprite CLI时出错：{0}"},
+                {"selectImageFile", "请选择一个图片文件（PNG/JPG）"},
+                {"selectTextureFirst", "请先选择一个纹理资源"},
             };
             localizedTexts["zh-CN"] = zhTexts;
         }
@@ -172,7 +303,7 @@ namespace TilemapTools
             {
                 InitializeLocalization();
             }
-            
+
             // 检查当前语言是否有该文本
             if (localizedTexts.ContainsKey(currentLanguage) && localizedTexts[currentLanguage].ContainsKey(key))
             {
@@ -183,7 +314,7 @@ namespace TilemapTools
                 }
                 return text;
             }
-            
+
             // 如果没有找到，使用英语
             if (localizedTexts.ContainsKey("en") && localizedTexts["en"].ContainsKey(key))
             {
@@ -194,7 +325,7 @@ namespace TilemapTools
                 }
                 return text;
             }
-            
+
             // 如果英语也没有，返回键名
             return key;
         }
@@ -205,7 +336,7 @@ namespace TilemapTools
             if (localizedTexts == null)
             {
                 InitializeLocalization();
-            }          
+            }
 
             // 获取本地化的窗口标题
             string title = GetLocalizedText("title");
@@ -228,6 +359,7 @@ namespace TilemapTools
 
             return instance;
         }
+        
 
         private void OnEnable()
         {
@@ -247,6 +379,9 @@ namespace TilemapTools
             paletteFileName = EditorPrefs.GetString(PREF_PALETTE_FILENAME, "MyTilePalette");
             transparencyThreshold = EditorPrefs.GetFloat(PREF_TRANSPARENCY_THRESHOLD, 0.1f);
             dedupPrecision = (DedupPrecision)EditorPrefs.GetInt(PREF_DEDUP_PRECISION, (int)DedupPrecision.Medium);
+            // 加载Aseprite设置
+            asepriteExePath = EditorPrefs.GetString(PREF_ASEPRITE_EXE_PATH, "");
+            asepriteOutputPath = EditorPrefs.GetString(PREF_ASEPRITE_OUTPUT_PATH, "Assets/Temp/AsepriteImport");
         }
 
         private void SaveSettings()
@@ -256,6 +391,495 @@ namespace TilemapTools
             EditorPrefs.SetString(PREF_PALETTE_FILENAME, paletteFileName);
             EditorPrefs.SetFloat(PREF_TRANSPARENCY_THRESHOLD, transparencyThreshold);
             EditorPrefs.SetInt(PREF_DEDUP_PRECISION, (int)dedupPrecision);
+            // 保存Aseprite设置
+            EditorPrefs.SetString(PREF_ASEPRITE_EXE_PATH, asepriteExePath);
+            EditorPrefs.SetString(PREF_ASEPRITE_OUTPUT_PATH, asepriteOutputPath);
+        }
+        
+        // 获取Aseprite可执行文件的扩展名
+        private string GetAsepriteExecutableExtension()
+        {
+            if (Application.platform == RuntimePlatform.WindowsEditor)
+                return "exe";
+            else if (Application.platform == RuntimePlatform.OSXEditor)
+                return "app";
+            else
+                return "";
+        }
+        private void TestAsepriteCLI()
+        {
+            if (string.IsNullOrEmpty(asepriteExePath))
+            {
+                EditorUtility.DisplayDialog(GetLocalizedText("error"), GetLocalizedText("selectAsepriteExeFirst"), GetLocalizedText("ok"));
+                return;
+            }
+
+            try
+            {
+                ProcessStartInfo startInfo = new ProcessStartInfo();
+                startInfo.FileName = asepriteExePath;
+                startInfo.Arguments = "--version";
+                startInfo.UseShellExecute = false;
+                startInfo.RedirectStandardOutput = true;
+                startInfo.CreateNoWindow = true;
+
+                using (Process process = Process.Start(startInfo))
+                {
+                    string output = process.StandardOutput.ReadToEnd();
+                    process.WaitForExit();
+
+                    if (process.ExitCode == 0 && output.Contains("Aseprite"))
+                    {
+                        EditorUtility.DisplayDialog(GetLocalizedText("success"),
+                            GetLocalizedText("asepriteCliSuccess", output.Trim()), GetLocalizedText("ok"));
+                    }
+                    else
+                    {
+                        EditorUtility.DisplayDialog(GetLocalizedText("error"),
+                            GetLocalizedText("asepriteCliFailure"), GetLocalizedText("ok"));
+                    }
+                }
+            }
+            catch (System.Exception e)
+            {
+                EditorUtility.DisplayDialog(GetLocalizedText("error"),
+                    GetLocalizedText("asepriteCliError", e.Message), GetLocalizedText("ok"));
+            }
+        }
+
+        private void ImportAsepriteFile()
+        {
+            if (!useAseprite || string.IsNullOrEmpty(asepriteFilePath))
+            {
+                EditorUtility.DisplayDialog(GetLocalizedText("error"), GetLocalizedText("noAsepriteFile"), GetLocalizedText("ok"));
+                return;
+            }
+
+            // 确保输出目录存在
+            EnsureDirectoryExists(asepriteOutputPath);
+
+            string outputBaseName = Path.GetFileNameWithoutExtension(asepriteFilePath);
+
+            // 使用CLI导出精灵图
+            if (!string.IsNullOrEmpty(asepriteExePath))
+            {
+                // 将输出路径转换为绝对路径
+                string absoluteOutputDir = Path.Combine(Application.dataPath, asepriteOutputPath.Substring(7));
+                string outputPattern = Path.Combine(absoluteOutputDir, outputBaseName + "_{layer}.png");
+
+                // 构建完整的命令行参数 - 按图层分别导出
+                string arguments = string.Format(
+                    "-b \"{0}\" --split-layers --save-as \"{1}\"",
+                    asepriteFilePath,
+                    outputPattern
+                );
+
+                // 如果需要包含隐藏图层，添加 --all-layers 参数
+                if (includeHiddenLayers)
+                {
+                    arguments = string.Format(
+                        "-b \"{0}\" --all-layers --split-layers --save-as \"{1}\"",
+                        asepriteFilePath,
+                        outputPattern
+                    );
+                }
+
+                Debug.Log(GetLocalizedText("executingAsepriteCommand") + ": " + arguments);
+
+                ProcessStartInfo startInfo = new ProcessStartInfo();
+                startInfo.FileName = asepriteExePath;
+                startInfo.Arguments = arguments;
+                startInfo.UseShellExecute = false;
+                startInfo.RedirectStandardOutput = true;
+                startInfo.RedirectStandardError = true;
+                startInfo.CreateNoWindow = true;
+
+                using (Process process = Process.Start(startInfo))
+                {
+                    string output = process.StandardOutput.ReadToEnd();
+                    string error = process.StandardError.ReadToEnd();
+                    process.WaitForExit();
+
+                    if (process.ExitCode == 0)
+                    {
+                        Debug.Log(GetLocalizedText("asepriteExportSuccess") + ": " + output);
+                        AssetDatabase.Refresh();
+
+                        // 查找所有生成的图层文件
+                        string[] generatedFiles = Directory.GetFiles(
+                            absoluteOutputDir,
+                            outputBaseName + "_*.png")
+                            .Select(p => "Assets" + p.Substring(Application.dataPath.Length).Replace('\\', '/'))
+                            .ToArray();
+
+                        Debug.Log(GetLocalizedText("foundLayerFiles", generatedFiles.Length) + ": " + string.Join(", ", generatedFiles));
+
+                        if (generatedFiles.Length > 0)
+                        {
+                            // 处理所有生成的图层文件
+                            foreach (string filePath in generatedFiles)
+                            {
+                                Debug.Log(GetLocalizedText("processingLayerFile") + ": " + filePath);
+
+                                // 为每个导出的图层文件应用切片
+                                SliceExportedTexture(filePath);
+
+                                // 加载处理后的纹理
+                                Texture2D layerTexture = AssetDatabase.LoadAssetAtPath<Texture2D>(filePath);
+                                if (layerTexture != null)
+                                {
+                                    // 设置最后一个处理的纹理为当前纹理
+                                    sourceTexture = layerTexture;
+                                }
+                                else
+                                {
+                                    Debug.LogError(GetLocalizedText("failedToLoadTexture", filePath));
+                                }
+                            }
+
+                            EditorUtility.DisplayDialog(GetLocalizedText("importSuccess"),
+                                GetLocalizedText("asepriteImportSuccessWithLayers", generatedFiles.Length), GetLocalizedText("ok"));
+                        }
+                        else
+                        {
+                            Debug.LogWarning(GetLocalizedText("noLayerFilesGenerated"));
+                            Debug.LogWarning(GetLocalizedText("layerExportPossibleReasons"));
+
+                            // 尝试导出单一文件作为备选方案
+                            TryFallbackSingleExport(absoluteOutputDir, outputBaseName);
+                        }
+                    }
+                    else
+                    {
+                        Debug.LogError(GetLocalizedText("asepriteExportFailed") + ": " + error);
+                        EditorUtility.DisplayDialog(GetLocalizedText("importFailed"),
+                            GetLocalizedText("failedToExportFromAseprite") + ": " + error, GetLocalizedText("ok"));
+                    }
+                }
+            }
+            else
+            {
+                EditorUtility.DisplayDialog(GetLocalizedText("importFailed"),
+                    GetLocalizedText("asepriteCliNotConfigured"), GetLocalizedText("ok"));
+            }
+        }
+        private void TryFallbackSingleExport(string absoluteOutputDir, string outputBaseName)
+        {
+            Debug.Log(GetLocalizedText("attemptingFallbackExport"));
+
+            string singleOutputPath = Path.Combine(absoluteOutputDir, outputBaseName + ".png");
+            string singleArguments = string.Format(
+                "-b \"{0}\" --save-as \"{1}\"",
+                asepriteFilePath,
+                singleOutputPath
+            );
+
+            if (includeHiddenLayers)
+            {
+                singleArguments = string.Format(
+                    "-b \"{0}\" --all-layers --save-as \"{1}\"",
+                    asepriteFilePath,
+                    singleOutputPath
+                );
+            }
+
+            ProcessStartInfo startInfo = new ProcessStartInfo();
+            startInfo.FileName = asepriteExePath;
+            startInfo.Arguments = singleArguments;
+            startInfo.UseShellExecute = false;
+            startInfo.RedirectStandardOutput = true;
+            startInfo.RedirectStandardError = true;
+            startInfo.CreateNoWindow = true;
+
+            using (Process singleProcess = Process.Start(startInfo))
+            {
+                string singleOutput = singleProcess.StandardOutput.ReadToEnd();
+                string singleError = singleProcess.StandardError.ReadToEnd();
+                singleProcess.WaitForExit();
+
+                if (singleProcess.ExitCode == 0)
+                {
+                    AssetDatabase.Refresh();
+
+                    string assetPath = "Assets" + singleOutputPath.Substring(Application.dataPath.Length).Replace('\\', '/');
+                    Texture2D exportedTexture = AssetDatabase.LoadAssetAtPath<Texture2D>(assetPath);
+
+                    if (exportedTexture != null)
+                    {
+                        Debug.Log(GetLocalizedText("fallbackExportSuccess") + ": " + assetPath);
+
+                        // 设置为当前纹理
+                        sourceTexture = exportedTexture;
+
+                        // 自动切片纹理
+                        SliceExportedTexture(assetPath);
+
+                        EditorUtility.DisplayDialog(GetLocalizedText("importSuccess"),
+                            GetLocalizedText("asepriteImportSuccessSingleTexture"), GetLocalizedText("ok"));
+                    }
+                    else
+                    {
+                        Debug.LogError(GetLocalizedText("failedToLoadTexture", assetPath));
+                        EditorUtility.DisplayDialog(GetLocalizedText("importFailed"),
+                            GetLocalizedText("failedToLoadExportedTexture"), GetLocalizedText("ok"));
+                    }
+                }
+                else
+                {
+                    Debug.LogError(GetLocalizedText("fallbackExportFailed") + ": " + singleError);
+                    EditorUtility.DisplayDialog(GetLocalizedText("importFailed"),
+                        GetLocalizedText("bothExportMethodsFailed") + ": " + singleError, GetLocalizedText("ok"));
+                }
+            }
+        }
+
+        private void SliceExportedTexture(string texturePath)
+        {
+            TextureImporter importer = AssetImporter.GetAtPath(texturePath) as TextureImporter;
+            if (importer == null)
+            {
+                Debug.LogError($"无法获取 TextureImporter: {texturePath}");
+                return;
+            }
+
+            // 设置基本导入参数
+            importer.textureType = TextureImporterType.Sprite;
+            importer.spriteImportMode = SpriteImportMode.Multiple;
+            importer.spritePixelsPerUnit = 16;
+            importer.filterMode = FilterMode.Point;
+            importer.textureCompression = TextureImporterCompression.Uncompressed;
+            importer.isReadable = true;
+
+            // 先应用基本设置
+            AssetDatabase.ImportAsset(texturePath, ImportAssetOptions.ForceUpdate);
+
+            // 加载纹理
+            Texture2D texture = AssetDatabase.LoadAssetAtPath<Texture2D>(texturePath);
+            if (texture == null)
+            {
+                Debug.LogError($"无法加载纹理: {texturePath}");
+                return;
+            }
+
+            // 自动检测精灵尺寸
+            int spriteSize = sliceSize;
+            Debug.Log($"检测到精灵尺寸: {spriteSize}x{spriteSize}");
+
+            // 使用官方API进行切片
+            AutoSliceSpritesSkipEmpty(importer, texture, spriteSize, spriteSize);
+        }
+
+        private void AutoSliceSpritesSkipEmpty(TextureImporter importer, Texture2D texture, int cellWidth, int cellHeight)
+        {
+            try
+            {
+                // 创建 SpriteDataProviderFactories 实例
+                var factory = new SpriteDataProviderFactories();
+                factory.Init();
+
+                // 获取数据提供者
+                var dataProvider = factory.GetSpriteEditorDataProviderFromObject(importer);
+                if (dataProvider == null)
+                {
+                    Debug.LogError("无法获取 ISpriteEditorDataProvider");
+                    return;
+                }
+
+                // 初始化数据提供者
+                dataProvider.InitSpriteEditorDataProvider();
+
+                // 获取纹理像素数据
+                Color[] pixels = texture.GetPixels();
+
+                // 清除现有的精灵
+                var spriteRects = new List<SpriteRect>();
+
+                // 计算网格
+                int cols = texture.width / cellWidth;
+                int rows = texture.height / cellHeight;
+
+                Debug.Log($"分析 {cols}x{rows} 网格，检测非空白区域...");
+
+                int nonEmptyCount = 0;
+
+                // 遍历每个网格单元
+                for (int row = 0; row < rows; row++)
+                {
+                    for (int col = 0; col < cols; col++)
+                    {
+                        // 检查当前网格是否为空白
+                        if (IsCellEmpty(pixels, texture.width, texture.height, col, row, cellWidth, cellHeight))
+                        {
+                            continue; // 跳过空白单元格
+                        }
+
+                        var spriteRect = new SpriteRect()
+                        {
+                            name = $"sprite_{col}_{row}",
+                            spriteID = GUID.Generate(),
+                            rect = new Rect(
+                                col * cellWidth,
+                                row * cellHeight, // Unity坐标系从左下角开始
+                                cellWidth,
+                                cellHeight
+                            ),
+                            alignment = SpriteAlignment.Center,
+                            pivot = new Vector2(0.5f, 0.5f),
+                            border = Vector4.zero
+                        };
+
+                        spriteRects.Add(spriteRect);
+                        nonEmptyCount++;
+                    }
+                }
+
+                Debug.Log($"找到 {nonEmptyCount} 个非空白精灵（跳过了 {cols * rows - nonEmptyCount} 个空白格）");
+
+                if (spriteRects.Count == 0)
+                {
+                    Debug.LogWarning("没有找到任何非空白区域，请检查透明度阈值设置");
+                    return;
+                }
+
+                // 设置精灵数据
+                dataProvider.SetSpriteRects(spriteRects.ToArray());
+
+                // Unity 2021.2+ 需要额外设置名称和ID对
+#if UNITY_2021_2_OR_NEWER
+                try
+                {
+                    var spriteNameFileIdDataProvider = dataProvider.GetDataProvider<ISpriteNameFileIdDataProvider>();
+                    if (spriteNameFileIdDataProvider != null)
+                    {
+                        var nameFileIdPairs = spriteRects.Select(rect =>
+                            new SpriteNameFileIdPair(rect.name, rect.spriteID)).ToList();
+                        spriteNameFileIdDataProvider.SetNameFileIdPairs(nameFileIdPairs);
+                    }
+                }
+                catch (System.Exception e)
+                {
+                    Debug.LogWarning($"设置名称ID对时出错（可能是Unity版本问题）: {e.Message}");
+                }
+#endif
+
+                // 应用更改
+                dataProvider.Apply();
+
+                // 重新导入资源
+                var assetImporter = dataProvider.targetObject as AssetImporter;
+                if (assetImporter != null)
+                {
+                    assetImporter.SaveAndReimport();
+                }
+
+                Debug.Log($"成功创建 {spriteRects.Count} 个非空白精灵切片");
+
+                // 验证结果
+                EditorApplication.delayCall += () => VerifySlicingResult(importer.assetPath);
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogError($"使用官方API切片失败: {e.Message}");
+                Debug.LogError($"堆栈跟踪: {e.StackTrace}");
+            }
+        }
+
+// 空白检测的配置参数
+[SerializeField] private float alphaThreshold = 0.01f; // 透明度阈值
+[SerializeField] private float emptyPixelRatio = 0.95f; // 空白像素比例阈值
+
+        private bool IsCellEmpty(Color[] pixels, int textureWidth, int textureHeight, int cellCol, int cellRow, int cellWidth, int cellHeight)
+        {
+            int startX = cellCol * cellWidth;
+            int startY = cellRow * cellHeight;
+
+            int totalPixels = cellWidth * cellHeight;
+            int emptyPixels = 0;
+
+            // 检查网格内的每个像素
+            for (int y = startY; y < startY + cellHeight && y < textureHeight; y++)
+            {
+                for (int x = startX; x < startX + cellWidth && x < textureWidth; x++)
+                {
+                    int pixelIndex = y * textureWidth + x;
+
+                    if (pixelIndex >= 0 && pixelIndex < pixels.Length)
+                    {
+                        Color pixel = pixels[pixelIndex];
+
+                        // 检查像素是否为"空白"（透明或接近透明）
+                        if (IsPixelEmpty(pixel))
+                        {
+                            emptyPixels++;
+                        }
+                    }
+                }
+            }
+
+            // 如果空白像素比例超过阈值，则认为整个网格为空白
+            float emptyRatio = (float)emptyPixels / totalPixels;
+            return emptyRatio >= emptyPixelRatio;
+        }
+
+        private bool IsPixelEmpty(Color pixel)
+        {
+            // 方法1: 仅检查透明度
+            if (pixel.a <= alphaThreshold)
+                return true;
+
+            // 方法2: 检查是否为纯白色（常见的空白填充）
+            if (pixel.a > 0.9f && pixel.r > 0.95f && pixel.g > 0.95f && pixel.b > 0.95f)
+                return true;
+
+            // 方法3: 检查是否为纯黑色且透明度很低（某些导出格式）
+            if (pixel.a <= 0.1f && pixel.r <= 0.05f && pixel.g <= 0.05f && pixel.b <= 0.05f)
+                return true;
+
+            return false;
+        }
+
+        private void VerifySlicingResult(string assetPath)
+        {
+            try
+            {
+                var assets = AssetDatabase.LoadAllAssetsAtPath(assetPath);
+                int spriteCount = assets.Count(asset => asset is Sprite);
+                Debug.Log($"验证结果: 在 {assetPath} 中找到 {spriteCount} 个精灵");
+
+                if (spriteCount > 0)
+                {
+                    // 更新当前纹理引用
+                    sourceTexture = AssetDatabase.LoadAssetAtPath<Texture2D>(assetPath);
+                }
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogWarning($"验证切片结果时出错: {e.Message}");
+            }
+        }
+
+        // 菜单项测试
+        [MenuItem("Tools/Tilemap Tools/Auto Slice Selected Texture")]
+        private static void SliceSelectedTexture()
+        {
+            var selectedObject = Selection.activeObject;
+            if (selectedObject != null)
+            {
+                string path = AssetDatabase.GetAssetPath(selectedObject);
+                if (!string.IsNullOrEmpty(path) && (path.ToLower().EndsWith(".png") || path.ToLower().EndsWith(".jpg")))
+                {
+                    var window = GetWindow<TilePaletteGenerator>();
+                    window.SliceExportedTexture(path);
+                }
+                else
+                {
+                    Debug.LogWarning(GetLocalizedText("selectImageFile"));
+                }
+            }
+            else
+            {
+                Debug.LogWarning(GetLocalizedText("selectTextureFirst"));
+            }
         }
 
         private void OnGUI()
@@ -263,9 +887,101 @@ namespace TilemapTools
             // 使用本地化文本
             GUILayout.Label(GetLocalizedText("title"), EditorStyles.boldLabel);
 
+            // Aseprite文件支持
+            EditorGUILayout.Space();
+            EditorGUILayout.LabelField(GetLocalizedText("asepriteSupport"), EditorStyles.boldLabel);
+            EditorGUILayout.HelpBox(GetLocalizedText("HowTo"), MessageType.Info);
+
+            EditorGUILayout.BeginHorizontal();
+            EditorGUILayout.LabelField(GetLocalizedText("sliceSize"), GUILayout.Width(150));
+            sliceSize = EditorGUILayout.IntField(sliceSize);
+            EditorGUILayout.EndHorizontal();
+
+            if (!string.IsNullOrEmpty(asepriteExePath))
+            {
+                EditorGUILayout.BeginHorizontal();
+                EditorGUILayout.LabelField(GetLocalizedText("asepriteExecutable"), GUILayout.Width(150));
+                asepriteExePath = EditorGUILayout.TextField(asepriteExePath);
+                if (GUILayout.Button(GetLocalizedText("browse"), GUILayout.Width(60)))
+                {
+                    string path = EditorUtility.OpenFilePanel(
+                        GetLocalizedText("selectAsepriteExecutable"),
+                        "",
+                        GetAsepriteExecutableExtension());
+                    if (!string.IsNullOrEmpty(path))
+                    {
+                        asepriteExePath = path;
+                    }
+                }
+                EditorGUILayout.EndHorizontal();
+
+                // 添加Aseprite输出路径设置
+                EditorGUILayout.BeginHorizontal();
+                EditorGUILayout.LabelField(GetLocalizedText("asepriteOutputPath"), GUILayout.Width(150));
+                asepriteOutputPath = EditorGUILayout.TextField(asepriteOutputPath);
+                if (GUILayout.Button(GetLocalizedText("browse"), GUILayout.Width(60)))
+                {
+                    string selectedPath = EditorUtility.OpenFolderPanel(
+                        GetLocalizedText("selectAsepriteOutputFolder"),
+                        asepriteOutputPath,
+                        "");
+                    if (!string.IsNullOrEmpty(selectedPath) && selectedPath.StartsWith(Application.dataPath))
+                        asepriteOutputPath = "Assets" + selectedPath.Substring(Application.dataPath.Length);
+                }
+                EditorGUILayout.EndHorizontal();
+
+                // 测试Aseprite CLI按钮
+                if (GUILayout.Button(GetLocalizedText("testCLI")))
+                {
+                    TestAsepriteCLI();
+                }
+                includeHiddenLayers = EditorGUILayout.Toggle(GetLocalizedText("includeHiddenLayers"), includeHiddenLayers);
+            }
+
+            // 选择Aseprite文件
+            EditorGUILayout.Space();
+            EditorGUILayout.BeginHorizontal();
+            EditorGUILayout.LabelField("Aseprite File:", GUILayout.Width(150));
+            EditorGUILayout.LabelField(string.IsNullOrEmpty(asepriteFilePath) ? "No file selected" : Path.GetFileName(asepriteFilePath));
+            if (GUILayout.Button("Browse", GUILayout.Width(60)))
+            {
+                string path = EditorUtility.OpenFilePanel(
+                    "Select Aseprite File",
+                    "",
+                    "aseprite,ase");
+                if (!string.IsNullOrEmpty(path))
+                {
+                    asepriteFilePath = path;
+                    useAseprite = true;
+
+                    // 如果选择了Aseprite文件，自动设置调色板文件名
+                    if (!string.IsNullOrEmpty(asepriteFilePath))
+                    {
+                        paletteFileName = Path.GetFileNameWithoutExtension(asepriteFilePath);
+                    }
+                }
+            }
+            EditorGUILayout.EndHorizontal();
+
+            // 如果选择了Aseprite文件，显示导入按钮
+            if (!string.IsNullOrEmpty(asepriteFilePath))
+            {
+                if (GUILayout.Button("Import Aseprite File"))
+                {
+                    if (!useAseprite)
+                    {
+                        useAseprite = true; // 确保标志被设置
+                    }
+                    ImportAsepriteFile();
+                }
+            }
+
+            EditorGUILayout.Space();
+            EditorGUILayout.LabelField(GetLocalizedText("singleImageProcessing"), EditorStyles.boldLabel);
+            EditorGUILayout.Space();
+
             // 源纹理选择
             sourceTexture = (Texture2D)EditorGUILayout.ObjectField(GetLocalizedText("sourceTexture"), sourceTexture, typeof(Texture2D), false);
-            EditorGUILayout.HelpBox(GetLocalizedText("sliceHint"), MessageType.Info);
             EditorGUILayout.Space();
 
             // 透明度阈值设置
@@ -396,26 +1112,68 @@ namespace TilemapTools
 
         public void GenerateTilePalette()
         {
+            // 如果设置了使用Aseprite但没有源纹理，提示用户先导入
+            if (useAseprite && sourceTexture == null)
+            {
+                EditorUtility.DisplayDialog(
+                    GetLocalizedText("error"),
+                    GetLocalizedText("asepriteImportRequired"),
+                    GetLocalizedText("ok"));
+                return;
+            }
+
             string sanitizedFileName = SanitizeFileName(paletteFileName.Trim());
             if (string.IsNullOrEmpty(sanitizedFileName))
             {
-                Debug.LogError("Invalid palette file name!");
+                Debug.LogError(GetLocalizedText("invalidPaletteFileName"));
                 return;
             }
 
             EnsureDirectoryExists(tilesOutputPath);
             EnsureDirectoryExists(paletteOutputPath);
 
+            // 获取纹理路径
+            string texturePath = AssetDatabase.GetAssetPath(sourceTexture);
+
+            // 获取精灵
             Sprite[] sprites = GetSpritesFromTexture(sourceTexture);
+
+            // 检查纹理是否已被切片
             if (sprites == null || sprites.Length == 0)
             {
-                Debug.LogError("No sprites found in the texture! Please slice the texture first using Sprite Editor.");
-                return;
+                // 提示用户纹理未切片，询问是否自动切片
+                bool shouldSlice = EditorUtility.DisplayDialog(
+                    GetLocalizedText("textureNotSliced"),
+                    GetLocalizedText("textureNotSlicedMessage", sourceTexture.name),
+                    GetLocalizedText("autoSlice"),
+                    GetLocalizedText("cancel")
+                );
+
+                if (shouldSlice)
+                {
+                    // 自动切片纹理
+                    SliceExportedTexture(texturePath);
+
+                    // 重新获取精灵
+                    sprites = GetSpritesFromTexture(sourceTexture);
+
+                    // 如果切片后仍然没有精灵，则退出
+                    if (sprites == null || sprites.Length == 0)
+                    {
+                        Debug.LogError(GetLocalizedText("textureNotSliced"));
+                        return;
+                    }
+                }
+                else
+                {
+                    Debug.LogError(GetLocalizedText("noSpritesFound"));
+                    return;
+                }
             }
 
             // 检查是否有未被切片的区域
             bool hasUnslicedPixels = CheckForUnslicedPixels(sourceTexture, sprites);
-            string texturePath = AssetDatabase.GetAssetPath(sourceTexture);
+
             // 如果发现未切片区域，询问用户是否继续
             if (hasUnslicedPixels)
             {
@@ -425,10 +1183,10 @@ namespace TilemapTools
                     GetLocalizedText("continueGeneration"),
                     GetLocalizedText("cancelGeneration")
                 );
-                
+
                 if (!shouldContinue)
                 {
-                    Debug.LogWarning($"Sprite '{sourceTexture.name}' ({texturePath}) has unsliced pixel，workflow cancelled。");
+                    Debug.LogWarning(GetLocalizedText("workflowCancelled", sourceTexture.name, texturePath));
                     return;
                 }
             }
@@ -464,18 +1222,21 @@ namespace TilemapTools
 
             if (!allSquare || !sameSizes)
             {
-                string message = "Warning: Some sprites have irregular sizes:\n" + string.Join("\n", irregularSprites);
-                message += "\n\nThis tool only works with square sprites of the same size.";
+                string message = GetLocalizedText("irregularSizesWarning") + "\n" + string.Join("\n", irregularSprites);
+                message += "\n\n" + GetLocalizedText("squareSizesRequired");
 
-                EditorUtility.DisplayDialog("Irregular Sprite Sizes", message, "OK");
-                Debug.LogWarning("Tile palette generation cancelled due to irregular sprite sizes.");
+                EditorUtility.DisplayDialog(
+                    GetLocalizedText("irregularSizes"),
+                    message,
+                    GetLocalizedText("ok"));
+                Debug.LogWarning(GetLocalizedText("generationCancelledIrregular"));
                 return;
             }
 
             var spriteData = ProcessSprites(sprites);
             if (spriteData.Count == 0)
             {
-                Debug.LogError("No valid sprites found after processing");
+                Debug.LogError(GetLocalizedText("noValidSprites"));
                 return;
             }
 
@@ -515,7 +1276,7 @@ namespace TilemapTools
 
             if (!string.IsNullOrEmpty(finalPalettePath))
             {
-                Debug.LogFormat($"Tile palette created successfully: {finalPalettePath}");
+                Debug.LogFormat(GetLocalizedText("paletteCreatedSuccessfully"), finalPalettePath);
 
                 // 通知工作流管理器
                 TilemapWorkflowManager.SetLastGeneratedPalette(finalPalettePath);
@@ -569,7 +1330,7 @@ namespace TilemapTools
                     break;
                 }
             }
-            
+
             // 如果找到了瓦片，使用其精灵的枢轴点
             if (firstTile != null && firstTile.sprite != null)
             {
@@ -579,7 +1340,7 @@ namespace TilemapTools
                     sprite.pivot.x / sprite.rect.width,
                     sprite.pivot.y / sprite.rect.height
                 );
-                
+
                 // 设置瓦片地图的锚点
                 tilemap.tileAnchor = new Vector3(normalizedPivot.x, normalizedPivot.y, 0);
             }
@@ -618,27 +1379,27 @@ namespace TilemapTools
                     {
                         // 创建预制体的实例
                         GameObject existingInstance = PrefabUtility.InstantiatePrefab(existingPrefab) as GameObject;
-                        
+
                         // 查找现有的Tilemap组件
                         Tilemap existingTilemap = existingInstance.GetComponentInChildren<Tilemap>();
-                        
+
                         if (existingTilemap != null)
                         {
                             // 清除现有的瓦片
                             existingTilemap.ClearAllTiles();
-                            
+
                             // 复制新的瓦片到现有的Tilemap
                             foreach (var kvp in tilePositions)
                             {
                                 Vector3Int position = new Vector3Int(kvp.Key.x, gridHeight - 1 - kvp.Key.y, 0);
                                 existingTilemap.SetTile(position, kvp.Value);
                             }
-                            
+
                             // 应用更改到预制体
                             PrefabUtility.SaveAsPrefabAsset(existingInstance, prefabPath);
                             DestroyImmediate(existingInstance);
                             DestroyImmediate(paletteGO);
-                            
+
                             Debug.Log(GetLocalizedText("paletteUpdated", prefabPath));
                             return prefabPath;
                         }
@@ -697,27 +1458,27 @@ namespace TilemapTools
                             {
                                 // 创建预制体的实例
                                 GameObject existingInstance = PrefabUtility.InstantiatePrefab(existingPrefab) as GameObject;
-                                
+
                                 // 查找现有的Tilemap组件
                                 Tilemap existingTilemap = existingInstance.GetComponentInChildren<Tilemap>();
-                                
+
                                 if (existingTilemap != null)
                                 {
                                     // 清除现有的瓦片
                                     existingTilemap.ClearAllTiles();
-                                    
+
                                     // 复制新的瓦片到现有的Tilemap
                                     foreach (var kvp in tilePositions)
                                     {
                                         Vector3Int position = new Vector3Int(kvp.Key.x, gridHeight - 1 - kvp.Key.y, 0);
                                         existingTilemap.SetTile(position, kvp.Value);
                                     }
-                                    
+
                                     // 应用更改到预制体
                                     PrefabUtility.SaveAsPrefabAsset(existingInstance, prefabPath);
                                     DestroyImmediate(existingInstance);
                                     DestroyImmediate(paletteGO);
-                                    
+
                                     Debug.Log(GetLocalizedText("paletteUpdated", prefabPath));
                                     return prefabPath;
                                 }
@@ -822,7 +1583,7 @@ namespace TilemapTools
 
             // 检查是否有未被切片的区域
             bool hasUnslicedPixels = generator.CheckForUnslicedPixels(sourceTexture, sprites);
-            
+
             // 如果发现未切片区域，询问用户是否继续
             if (hasUnslicedPixels)
             {
@@ -832,7 +1593,7 @@ namespace TilemapTools
                     GetLocalizedText("continueGeneration"),
                     GetLocalizedText("cancelGeneration")
                 );
-                
+
                 if (!shouldContinue)
                 {
                     Debug.LogWarning($"Sprite '{sourceTexture.name}' ({texturePath}) has unsliced pixel，workflow cancelled。");
@@ -979,7 +1740,7 @@ namespace TilemapTools
                     bool shouldUpdate = EditorUtility.DisplayDialog(
                         GetLocalizedText("assetsExist"),
                         GetLocalizedText("updateExistingTiles"),
-                        GetLocalizedText("updateAll"), 
+                        GetLocalizedText("updateAll"),
                         GetLocalizedText("skipAll"));
 
                     // 更新静态变量以保持一致性
@@ -1090,7 +1851,8 @@ namespace TilemapTools
 
         private class SpriteData { public Sprite sprite; public bool isTransparent; public string hash; public Vector2 pivot; }
         private Sprite[] GetSpritesFromTexture(Texture2D texture) { string path = AssetDatabase.GetAssetPath(texture); return AssetDatabase.LoadAllAssetsAtPath(path).OfType<Sprite>().ToArray(); }
-        private List<SpriteData> ProcessSprites(Sprite[] sprites) {  
+        private List<SpriteData> ProcessSprites(Sprite[] sprites)
+        {
             List<SpriteData> spriteDataList = new List<SpriteData>();
             pixelHashCache.Clear();
             foreach (var sprite in sprites)
@@ -1104,17 +1866,20 @@ namespace TilemapTools
             }
             return spriteDataList;
         }
-        private Color[] GetSpritePixels(Sprite sprite) { 
+        private Color[] GetSpritePixels(Sprite sprite)
+        {
             MakeTextureReadable(sprite.texture);
             Rect rect = sprite.rect;
             return sprite.texture.GetPixels((int)rect.x, (int)rect.y, (int)rect.width, (int)rect.height);
         }
-        private bool IsTransparent(Color[] pixels) { 
+        private bool IsTransparent(Color[] pixels)
+        {
             float totalAlpha = 0f;
             foreach (Color pixel in pixels) totalAlpha += pixel.a;
             return (totalAlpha / pixels.Length) < transparencyThreshold;
         }
-        private string CalculatePixelHash(Color[] pixels) { 
+        private string CalculatePixelHash(Color[] pixels)
+        {
             switch (dedupPrecision)
             {
                 case DedupPrecision.Low: return CalculateLowPrecisionHash(pixels);
@@ -1122,7 +1887,8 @@ namespace TilemapTools
                 case DedupPrecision.Medium: default: return CalculateMediumPrecisionHash(pixels);
             }
         }
-        private string CalculateLowPrecisionHash(Color[] pixels) {  
+        private string CalculateLowPrecisionHash(Color[] pixels)
+        {
             int pixelsHashCode = GetPixelsHashCode(pixels);
             if (pixelHashCache.ContainsKey(pixelsHashCode)) return pixelHashCache[pixelsHashCode];
             int width = (int)Mathf.Sqrt(pixels.Length);
@@ -1142,9 +1908,9 @@ namespace TilemapTools
                     int startX = rx * regionSize, startY = ry * regionSize;
                     int endX = Mathf.Min(startX + regionSize, width), endY = Mathf.Min(startY + regionSize, height);
                     for (int y = startY; y < endY; y++) for (int x = startX; x < endX; x++)
-                    {
-                        if (y * width + x < pixels.Length) { Color pixel = pixels[y * width + x]; r += pixel.r; g += pixel.g; b += pixel.b; a += pixel.a; count++; }
-                    }
+                        {
+                            if (y * width + x < pixels.Length) { Color pixel = pixels[y * width + x]; r += pixel.r; g += pixel.g; b += pixel.b; a += pixel.a; count++; }
+                        }
                     if (count > 0) { r /= count; g /= count; b /= count; a /= count; }
                     Color32 avgColor = new Color(r, g, b, a);
                     hashBuilder.Append(avgColor.r.ToString("X2")); hashBuilder.Append(avgColor.g.ToString("X2")); hashBuilder.Append(avgColor.b.ToString("X2")); hashBuilder.Append(avgColor.a.ToString("X2"));
@@ -1154,14 +1920,16 @@ namespace TilemapTools
             pixelHashCache[pixelsHashCode] = hash;
             return hash;
         }
-        private string CalculateMediumPrecisionHash(Color[] pixels) { 
+        private string CalculateMediumPrecisionHash(Color[] pixels)
+        {
             int pixelsHashCode = GetPixelsHashCode(pixels);
             if (pixelHashCache.ContainsKey(pixelsHashCode)) return pixelHashCache[pixelsHashCode];
             string hash = ComputeExactHash(pixels);
             pixelHashCache[pixelsHashCode] = hash;
             return hash;
         }
-        private string CalculateHighPrecisionHash(Color[] pixels) { 
+        private string CalculateHighPrecisionHash(Color[] pixels)
+        {
             using (var sha256 = System.Security.Cryptography.SHA256.Create())
             using (var stream = new System.IO.MemoryStream())
             using (var writer = new System.IO.BinaryWriter(stream))
@@ -1172,7 +1940,8 @@ namespace TilemapTools
                 return System.BitConverter.ToString(hashBytes).Replace("-", "");
             }
         }
-        private int GetPixelsHashCode(Color[] pixels) { 
+        private int GetPixelsHashCode(Color[] pixels)
+        {
             unchecked
             {
                 int hash = 17;
@@ -1181,14 +1950,15 @@ namespace TilemapTools
                 return hash;
             }
         }
-        private string ComputeExactHash(Color[] pixels) {  return CalculateHighPrecisionHash(pixels); } // Simplified to use the most robust hash
-        private void MakeTextureReadable(Texture2D texture) { 
+        private string ComputeExactHash(Color[] pixels) { return CalculateHighPrecisionHash(pixels); } // Simplified to use the most robust hash
+        private void MakeTextureReadable(Texture2D texture)
+        {
             string path = AssetDatabase.GetAssetPath(texture);
             var importer = AssetImporter.GetAtPath(path) as TextureImporter;
             if (importer != null && !importer.isReadable) { importer.isReadable = true; importer.SaveAndReimport(); }
         }
-        private string SanitizeFileName(string fileName) {  return string.Join("_", fileName.Split(Path.GetInvalidFileNameChars())); }
-        private void EnsureDirectoryExists(string path) {  if (!Directory.Exists(path)) Directory.CreateDirectory(path); AssetDatabase.Refresh(); }
+        private string SanitizeFileName(string fileName) { return string.Join("_", fileName.Split(Path.GetInvalidFileNameChars())); }
+        private void EnsureDirectoryExists(string path) { if (!Directory.Exists(path)) Directory.CreateDirectory(path); AssetDatabase.Refresh(); }
     }
 }
 #endif
