@@ -1,3 +1,4 @@
+using UnityEditor;
 using UnityEngine;
 
 /// <summary>
@@ -618,13 +619,18 @@ public class EnhancedPlantSwayController : MonoBehaviour, IPlantController
           Vector3 pivotPos = useCustomPivot && interactionPivot != null ? 
               interactionPivot.position : transform.position;
           Gizmos.DrawSphere(pivotPos, defaultImpactRadius);
-          
-          // 如果使用自定义pivot，绘制连接线
-          if (useCustomPivot && interactionPivot != null && interactionPivot != transform)
-          {
-              Gizmos.color = Color.magenta;
-              Gizmos.DrawLine(transform.position, interactionPivot.position);
-              Gizmos.DrawWireSphere(interactionPivot.position, 0.2f);
+
+            // 如果使用自定义pivot，绘制连接线
+            if (useCustomPivot && interactionPivot != null && interactionPivot != transform)
+            {
+                Gizmos.color = Color.magenta;
+                Gizmos.DrawLine(transform.position, interactionPivot.position);
+                Gizmos.DrawWireSphere(interactionPivot.position, 0.2f);
+                          // 在重生点位置绘制坐标轴
+            Handles.color = Color.red;
+            Handles.ArrowHandleCap(0, interactionPivot.position, Quaternion.LookRotation(Vector3.right), 1f, EventType.Repaint);
+            Handles.color = Color.green;
+            Handles.ArrowHandleCap(0, interactionPivot.position, Quaternion.LookRotation(Vector3.up), 1f, EventType.Repaint);
           }
           
           // 绘制风向
