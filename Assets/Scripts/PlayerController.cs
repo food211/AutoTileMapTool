@@ -73,6 +73,7 @@ public class PlayerController : MonoBehaviour
     // 落地挤压效果参数
     [Header("落地挤压效果")]
     [SerializeField] private bool enableLandingSquash = true;
+    [SerializeField] private float fallSquashSpeedThreshold = 5f; // 下落速度阈值，超过此速度才触发挤压效果
     [SerializeField] private float squashIntensity = 0.3f; // 挤压强度
     [SerializeField] private float squashDuration = 0.2f; // 挤压持续时间
     [SerializeField] private float stretchDuration = 0.15f; // 拉伸恢复时间
@@ -388,7 +389,7 @@ public class PlayerController : MonoBehaviour
         if (enableLandingSquash && rbInitialized && !ropeSystem.IsRopeShootingOrHooked())
         {
             // 检测从空中落到地面的状态变化
-            if (isGrounded && rb.velocity.y < -5f) // 只有当下落速度足够大时才触发
+            if (isGrounded && rb.velocity.y < -fallSquashSpeedThreshold) // 只有当下落速度足够大时才触发
             {
                 // 记录落地速度，用于调整挤压强度
                 float landingVelocity = Mathf.Abs(rb.velocity.y);
@@ -2207,6 +2208,10 @@ private void CompleteEdgeAssist(string reason)
         {
             Gun.SetActive(false);
         }
+    }
+    public bool isPlayerJumping()
+    {
+        return isJumping;
     }
 
     public bool isPlayerAiming()

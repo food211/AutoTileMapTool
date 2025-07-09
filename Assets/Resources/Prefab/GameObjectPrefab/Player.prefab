@@ -391,6 +391,7 @@ GameObject:
   - component: {fileID: 6603980903830980839}
   - component: {fileID: 3156414638838583058}
   - component: {fileID: 8764406433208910332}
+  - component: {fileID: 8868005151816283541}
   m_Layer: 0
   m_Name: Player
   m_TagString: Player
@@ -556,6 +557,7 @@ MonoBehaviour:
   aimRotationSpeed: 250
   ropeSystem: {fileID: 9142167173418991407}
   statusManager: {fileID: 0}
+  healthManager: {fileID: 0}
   swingForce: 10
   maxSwingSpeed: 40
   bouncyBallMaterial: {fileID: 6200000, guid: 82034143d116bed46868247357b8036a, type: 2}
@@ -565,6 +567,7 @@ MonoBehaviour:
   edgeAssistForce: 5
   edgeAssistDuration: 0.2
   enableLandingSquash: 1
+  fallSquashSpeedThreshold: 5
   squashIntensity: 0.3
   squashDuration: 0.2
   stretchDuration: 0.15
@@ -671,3 +674,28 @@ Animator:
   m_AllowConstantClipSamplingOptimization: 1
   m_KeepAnimatorStateOnDisable: 0
   m_WriteDefaultValuesOnDisable: 0
+--- !u!114 &8868005151816283541
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5091384070288941404}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0c70c7abb220b1e45866359b4fa2035d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  landingImpactMultiplier: 0.4
+  movementImpactMultiplier: 0.3
+  ropeReleaseImpactMultiplier: 0.2
+  maxImpactStrength: 1.5
+  impactRadius: 4
+  movementImpactCooldown: 0.4
+  jumpingImpactCooldown: 0.2
+  landingImpactCooldown: 0
+  ropeReleaseImpactCooldown: 0
+  showDebugInfo: 0
+  currentSpeed: 0
+  lastImpactStrength: 0
+  lastImpactSource: 

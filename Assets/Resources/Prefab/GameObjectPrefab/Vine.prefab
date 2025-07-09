@@ -62,10 +62,11 @@ MonoBehaviour:
   colliderRadius: 0.15
   startColor: {r: 0.32471505, g: 0.6415094, b: 0.038329054, a: 1}
   endColor: {r: 0, g: 0.39, b: 0, a: 1}
-  lineWidth: 0.1
+  lineWidth: 0.25
   windSpeed: 5
   windVariation: 0.3
   segmentDelay: 0.2
+  noiseStrength: 0.5
   randomVariation: 0.3
   autoRandomizeOnStart: 1
 --- !u!120 &3621089067788950385
