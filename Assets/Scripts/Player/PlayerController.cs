@@ -1595,6 +1595,10 @@ private void CompleteEdgeAssist(string reason)
         if (movingAgainstWall)
         {
             jumpVelocity *= 1.3f;
+#if UNITY_EDITOR
+            if (debugmode)
+                Debug.LogFormat("正在向墙壁移动，增加跳跃力: {0} -> {1}", initialJumpVelocity, jumpVelocity);
+#endif
         }
 
         // 如果在陡峭斜坡上跳跃，减少跳跃力并施加斜坡方向的力
