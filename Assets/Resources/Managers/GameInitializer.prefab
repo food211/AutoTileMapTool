@@ -57,6 +57,9 @@ MonoBehaviour:
   - prefab: {fileID: 7200156805172211512, guid: 64f65beffb93e7c4e91c64d744f55993, type: 3}
     initializeOnStart: 1
     visibleInScenes: 1
+  - prefab: {fileID: 117576440789681659, guid: 648cfb65328d8d14bba0f1280ded3f4b, type: 3}
+    initializeOnStart: 1
+    visibleInScenes: 1
   sceneConfigs: []
   defaultSceneType: 1
   menuSceneNames:

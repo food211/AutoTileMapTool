@@ -45,7 +45,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   initialScene: StartMenu
-  firstLevelName: Level_0_1
+  firstLevelName: Level_1_1
   firstLevelStartPoint: FirstStartPoint
   playerPrefab: {fileID: 5091384070288941404, guid: f8e82ce3969e9b04c8f5e772185b718c, type: 3}
   continueButton: {fileID: 0}

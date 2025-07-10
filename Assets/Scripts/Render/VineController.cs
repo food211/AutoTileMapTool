@@ -1,9 +1,12 @@
+using UnityEditor;
 using UnityEngine;
 
 public class SimpleVine : MonoBehaviour
 {
     [Header("基础设置")]
+    [Min(1)]
     public int segmentCount = 8;
+    [Min(0.01f)]
     public float segmentLength = 0.3f;
 
     [Header("效果参数")]
@@ -51,6 +54,9 @@ public class SimpleVine : MonoBehaviour
     [Range(0f, 1f)]
     public float randomVariation = 0.3f; // 随机变化强度
     public bool autoRandomizeOnStart = true; // 是否自动随机化
+    [Header("编辑器设置")]
+    public bool showPreviewInEditor = true;  // 是否在编辑器中显示预览
+    public bool useLineRendererInEditor = true; // 是否在编辑器中使用LineRenderer预览
 
     private LineRenderer line;
     private Vector3[] positions;
@@ -73,23 +79,12 @@ public class SimpleVine : MonoBehaviour
 
     void Start()
     {
+        ValidateParameters();
         // 生成独特属性
         GenerateUniqueProperties();
 
         // 初始化LineRenderer
-        line = GetComponent<LineRenderer>() ?? gameObject.AddComponent<LineRenderer>();
-        line.positionCount = segmentCount;
-        line.useWorldSpace = true;
-        line.startWidth = lineWidth * uniqueScale;
-        line.endWidth = lineWidth * uniqueScale * 0.3f;
-
-        // 设置独特的渐变颜色
-        Gradient gradient = new Gradient();
-        gradient.SetKeys(
-            new GradientColorKey[] { new GradientColorKey(uniqueStartColor, 0.0f), new GradientColorKey(uniqueEndColor, 1.0f) },
-            new GradientAlphaKey[] { new GradientAlphaKey(1.0f, 0.0f), new GradientAlphaKey(1.0f, 1.0f) }
-        );
-        line.colorGradient = gradient;
+        InitializeLineRenderer();
 
         // 初始化位置数组
         positions = new Vector3[segmentCount];
@@ -103,6 +98,29 @@ public class SimpleVine : MonoBehaviour
         // 创建2D碰撞检测
         CreateColliders2D();
         UpdateLine();
+    }
+    void ValidateParameters()
+    {
+        segmentCount = Mathf.Max(1, segmentCount);
+        segmentLength = Mathf.Max(0.01f, segmentLength);
+    }
+
+    void InitializeLineRenderer()
+    {
+        line = GetComponent<LineRenderer>() ?? gameObject.AddComponent<LineRenderer>();
+        line.positionCount = segmentCount;
+        line.useWorldSpace = true;
+        line.startWidth = lineWidth * (uniqueScale > 0 ? uniqueScale : 1f);
+        line.endWidth = lineWidth * (uniqueScale > 0 ? uniqueScale : 1f) * 0.3f;
+
+        // 设置独特的渐变颜色
+        Gradient gradient = new Gradient();
+        gradient.SetKeys(
+            new GradientColorKey[] { new GradientColorKey(uniqueStartColor != null ? uniqueStartColor : startColor, 0.0f),
+                                     new GradientColorKey(uniqueEndColor != null ? uniqueEndColor : endColor, 1.0f) },
+            new GradientAlphaKey[] { new GradientAlphaKey(1.0f, 0.0f), new GradientAlphaKey(1.0f, 1.0f) }
+        );
+        line.colorGradient = gradient;
     }
 
     void InitializePositions()
@@ -124,26 +142,26 @@ public class SimpleVine : MonoBehaviour
         float progress = (float)segmentIndex / segmentCount;
         float direction = invertBend ? -1f : 1f;
         direction *= uniqueBendDirection;
-        
+
         // 根据选择的形状计算弯曲
         switch (uniqueBendShape)
         {
             case BendShape.Sine:
                 // 正弦波形
                 return Mathf.Sin(progress * Mathf.PI * uniqueBendFrequency) * uniqueBendStrength * direction;
-                
+
             case BendShape.Arc:
                 // 弧形 (抛物线)
                 return (progress * (1 - progress) * 4) * uniqueBendStrength * direction;
-                
+
             case BendShape.Zigzag:
                 // 锯齿形
                 return Mathf.PingPong(progress * uniqueBendFrequency * 2, 1f) * uniqueBendStrength * direction;
-                
+
             case BendShape.SShape:
                 // S形
                 return Mathf.Sin(progress * Mathf.PI * 2 * uniqueBendFrequency) * uniqueBendStrength * direction;
-                
+
             default:
                 return 0;
         }
@@ -151,7 +169,7 @@ public class SimpleVine : MonoBehaviour
 
     void GenerateUniqueProperties()
     {
-        if (!autoRandomizeOnStart) 
+        if (!autoRandomizeOnStart)
         {
             // 如果不自动随机化，使用设置的值
             uniqueScale = 1f;
@@ -260,7 +278,7 @@ public class SimpleVine : MonoBehaviour
 
             // 添加变化和噪音
             float variation = Mathf.Sin(Time.time * uniqueWindSpeed * 2.3f + delay) * windVariation * influence;
-            
+
             // 使用独特的噪声强度
             float noise = Mathf.PerlinNoise(Time.time * 0.5f + i * 0.1f + uniqueWindPhase, 0) * windVariation * uniqueNoiseStrength * influence;
 
@@ -332,51 +350,118 @@ public class SimpleVine : MonoBehaviour
 
     void UpdateLine()
     {
-        line.SetPositions(positions);
+        if (line != null && positions != null)
+        {
+            line.SetPositions(positions);
+        }
     }
 
-    // 手动随机化（在编辑器中调用）
-    [ContextMenu("随机化藤蔓")]
-    public void RandomizeVine()
+
+#if UNITY_EDITOR
+    // 编辑器相关代码
+    private void OnValidate()
     {
-        autoRandomizeOnStart = true;
-        GenerateUniqueProperties();
-        InitializePositions();
-        UpdateLine();
+        // 当在编辑器中修改属性时更新预览
+        if (EditorApplication.isPlaying)
+            return;
+
+        if (showPreviewInEditor)
+        {
+            // 生成临时预览属性
+            GeneratePreviewProperties();
+
+            // 如果启用了LineRenderer预览，则更新LineRenderer
+            if (useLineRendererInEditor)
+            {
+                UpdateEditorLineRenderer();
+            }
+        }
     }
 
-    // 重置为设置值（在编辑器中调用）
-    [ContextMenu("使用当前设置")]
-    public void UseCurrentSettings()
+    private void GeneratePreviewProperties()
     {
-        autoRandomizeOnStart = false;
-        GenerateUniqueProperties();
-        InitializePositions();
-        UpdateLine();
-    }
-
-    // 应用弯曲设置（在编辑器中调用）
-    [ContextMenu("应用弯曲设置")]
-    public void ApplyBendSettings()
-    {
+        // 使用当前设置的值
+        uniqueScale = 1f;
+        uniqueWindPhase = 0f;
         uniqueBendDirection = bendDirection;
         uniqueBendStrength = bendStrength;
         uniqueBendFrequency = bendFrequency;
         uniqueBendShape = bendShape;
-        InitializePositions();
-        UpdateLine();
-    }
-
-    // 应用噪声设置（在编辑器中调用）
-    [ContextMenu("应用噪声设置")]
-    public void ApplyNoiseSettings()
-    {
+        uniqueSegmentLength = segmentLength;
+        uniqueWindSpeed = windSpeed;
+        uniqueStartColor = startColor;
+        uniqueEndColor = endColor;
         uniqueNoiseStrength = noiseStrength;
     }
+
+    private void UpdateEditorLineRenderer()
+    {
+        // 确保有LineRenderer组件
+        if (line == null)
+        {
+            line = GetComponent<LineRenderer>() ?? gameObject.AddComponent<LineRenderer>();
+        }
+
+        line.positionCount = segmentCount;
+        line.useWorldSpace = true;
+        line.startWidth = lineWidth;
+        line.endWidth = lineWidth * 0.3f;
+
+        // 设置渐变颜色
+        Gradient gradient = new Gradient();
+        gradient.SetKeys(
+            new GradientColorKey[] { new GradientColorKey(startColor, 0.0f), new GradientColorKey(endColor, 1.0f) },
+            new GradientAlphaKey[] { new GradientAlphaKey(1.0f, 0.0f), new GradientAlphaKey(1.0f, 1.0f) }
+        );
+        line.colorGradient = gradient;
+
+        // 创建预览位置
+        Vector3[] previewPositions = new Vector3[segmentCount];
+
+        for (int i = 0; i < segmentCount; i++)
+        {
+            float progress = (float)i / segmentCount;
+            float direction = invertBend ? -1f : 1f;
+            direction *= bendDirection;
+
+            float bendOffset = 0;
+            switch (bendShape)
+            {
+                case BendShape.Sine:
+                    bendOffset = Mathf.Sin(progress * Mathf.PI * bendFrequency) * bendStrength * direction;
+                    break;
+                case BendShape.Arc:
+                    bendOffset = (progress * (1 - progress) * 4) * bendStrength * direction;
+                    break;
+                case BendShape.Zigzag:
+                    bendOffset = Mathf.PingPong(progress * bendFrequency * 2, 1f) * bendStrength * direction;
+                    break;
+                case BendShape.SShape:
+                    bendOffset = Mathf.Sin(progress * Mathf.PI * 2 * bendFrequency) * bendStrength * direction;
+                    break;
+            }
+
+            previewPositions[i] = transform.position + Vector3.down * (i * segmentLength) + Vector3.right * bendOffset;
+        }
+
+        // 更新LineRenderer但不调用UpdateLine方法
+        line.SetPositions(previewPositions);
+    }
+#endif
 
     // 可视化碰撞体
     void OnDrawGizmos()
     {
+#if UNITY_EDITOR
+        // 如果在编辑器中且启用了预览，但禁用了LineRenderer预览，则使用Gizmos绘制
+        if (showPreviewInEditor && !useLineRendererInEditor && !EditorApplication.isPlaying)
+        {
+            DrawGizmosPreview();
+            return;
+        }
+#endif
+
+        // 原有的OnDrawGizmos代码
         // 绘制藤蔓起点位置的绿色圆
         Gizmos.color = Color.green;
         Gizmos.DrawWireSphere(transform.position, 0.15f);
@@ -398,44 +483,126 @@ public class SimpleVine : MonoBehaviour
         }
         else
         {
-            // 在编辑器中预览弯曲形状
-            Gizmos.color = startColor;
-            Vector3[] previewPositions = new Vector3[segmentCount];
-            
-            for (int i = 0; i < segmentCount; i++)
+            DrawGizmosPreview();
+        }
+    }
+
+    // 新增方法：使用Gizmos绘制预览
+    private void DrawGizmosPreview()
+    {
+        // 在编辑器中预览弯曲形状
+        Gizmos.color = startColor;
+        Vector3[] previewPositions = new Vector3[segmentCount];
+
+        for (int i = 0; i < segmentCount; i++)
+        {
+            float progress = (float)i / segmentCount;
+            float direction = invertBend ? -1f : 1f;
+            direction *= bendDirection;
+
+            float bendOffset = 0;
+            switch (bendShape)
             {
-                float progress = (float)i / segmentCount;
-                float direction = invertBend ? -1f : 1f;
-                direction *= bendDirection;
-                
-                float bendOffset = 0;
-                switch (bendShape)
-                {
-                    case BendShape.Sine:
-                        bendOffset = Mathf.Sin(progress * Mathf.PI * bendFrequency) * bendStrength * direction;
-                        break;
-                    case BendShape.Arc:
-                        bendOffset = (progress * (1 - progress) * 4) * bendStrength * direction;
-                        break;
-                    case BendShape.Zigzag:
-                        bendOffset = Mathf.PingPong(progress * bendFrequency * 2, 1f) * bendStrength * direction;
-                        break;
-                    case BendShape.SShape:
-                        bendOffset = Mathf.Sin(progress * Mathf.PI * 2 * bendFrequency) * bendStrength * direction;
-                        break;
-                }
-                
-                previewPositions[i] = transform.position + Vector3.down * (i * segmentLength) + Vector3.right * bendOffset;
-                
-                if (i > 0)
-                {
-                    Gizmos.DrawLine(previewPositions[i-1], previewPositions[i]);
-                    Gizmos.DrawWireSphere(previewPositions[i], colliderRadius);
-                }
+                case BendShape.Sine:
+                    bendOffset = Mathf.Sin(progress * Mathf.PI * bendFrequency) * bendStrength * direction;
+                    break;
+                case BendShape.Arc:
+                    bendOffset = (progress * (1 - progress) * 4) * bendStrength * direction;
+                    break;
+                case BendShape.Zigzag:
+                    bendOffset = Mathf.PingPong(progress * bendFrequency * 2, 1f) * bendStrength * direction;
+                    break;
+                case BendShape.SShape:
+                    bendOffset = Mathf.Sin(progress * Mathf.PI * 2 * bendFrequency) * bendStrength * direction;
+                    break;
+            }
+
+            previewPositions[i] = transform.position + Vector3.down * (i * segmentLength) + Vector3.right * bendOffset;
+
+            if (i > 0)
+            {
+                Gizmos.DrawLine(previewPositions[i - 1], previewPositions[i]);
+                Gizmos.DrawWireSphere(previewPositions[i], colliderRadius);
             }
         }
     }
+
+    // 手动随机化（在编辑器中调用）
+    [ContextMenu("随机化藤蔓")]
+    public void RandomizeVine()
+    {
+        autoRandomizeOnStart = true;
+        GenerateUniqueProperties();
+        InitializePositions();
+
+#if UNITY_EDITOR
+        if (!EditorApplication.isPlaying)
+        {
+            // 在编辑器模式下，使用预览更新
+            if (useLineRendererInEditor)
+            {
+                UpdateEditorLineRenderer();
+            }
+            return;
+        }
+#endif
+        UpdateLine();
+    }
+
+        // 应用噪声设置（在编辑器中调用）
+    [ContextMenu("应用噪声设置")]
+    public void ApplyNoiseSettings()
+    {
+        uniqueNoiseStrength = noiseStrength;
+    }
+
+    // 重置为设置值（在编辑器中调用）
+    [ContextMenu("使用当前设置")]
+    public void UseCurrentSettings()
+    {
+        autoRandomizeOnStart = false;
+        GenerateUniqueProperties();
+        InitializePositions();
+
+#if UNITY_EDITOR
+        if (!EditorApplication.isPlaying)
+        {
+            // 在编辑器模式下，使用预览更新
+            if (useLineRendererInEditor)
+            {
+                UpdateEditorLineRenderer();
+            }
+            return;
+        }
+#endif
+        UpdateLine();
+    }
+
+    // 应用弯曲设置（在编辑器中调用）
+    [ContextMenu("应用弯曲设置")]
+    public void ApplyBendSettings()
+    {
+        uniqueBendDirection = bendDirection;
+        uniqueBendStrength = bendStrength;
+        uniqueBendFrequency = bendFrequency;
+        uniqueBendShape = bendShape;
+
+#if UNITY_EDITOR
+        if (!EditorApplication.isPlaying)
+        {
+            // 在编辑器模式下，使用预览更新
+            if (useLineRendererInEditor)
+            {
+                UpdateEditorLineRenderer();
+            }
+            return;
+        }
+#endif
+        InitializePositions();
+        UpdateLine();
+    }
 }
+
 
 // 2D碰撞检测组件
 public class VineSegment2D : MonoBehaviour

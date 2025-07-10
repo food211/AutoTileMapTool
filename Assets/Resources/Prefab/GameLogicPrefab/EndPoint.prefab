@@ -107,6 +107,18 @@ PrefabInstance:
       value: EndPointVFX_0
       objectReference: {fileID: 0}
     - target: {fileID: 2456940942924665688, guid: 1c108eea2da7a8d4ba95107355b8b2ff, type: 3}
+      propertyPath: m_LocalScale.x
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 2456940942924665688, guid: 1c108eea2da7a8d4ba95107355b8b2ff, type: 3}
+      propertyPath: m_LocalScale.y
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 2456940942924665688, guid: 1c108eea2da7a8d4ba95107355b8b2ff, type: 3}
+      propertyPath: m_LocalScale.z
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 2456940942924665688, guid: 1c108eea2da7a8d4ba95107355b8b2ff, type: 3}
       propertyPath: m_LocalPosition.x
       value: 0
       objectReference: {fileID: 0}

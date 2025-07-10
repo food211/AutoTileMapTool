@@ -69,6 +69,8 @@ MonoBehaviour:
   noiseStrength: 0.5
   randomVariation: 0.3
   autoRandomizeOnStart: 1
+  showPreviewInEditor: 1
+  useLineRendererInEditor: 1
 --- !u!120 &3621089067788950385
 LineRenderer:
   serializedVersion: 2
@@ -113,7 +115,21 @@ LineRenderer:
   m_SortingOrder: 0
   m_Positions:
   - {x: 0, y: 0, z: 0}
-  - {x: 0, y: 0, z: 1}
+  - {x: 0, y: -0.3, z: 0}
+  - {x: 0, y: -0.6, z: 0}
+  - {x: 0, y: -0.90000004, z: 0}
+  - {x: 0, y: -1.2, z: 0}
+  - {x: 0, y: -1.5, z: 0}
+  - {x: 0, y: -1.8000001, z: 0}
+  - {x: 0, y: -2.1000001, z: 0}
+  - {x: 0, y: -2.4, z: 0}
+  - {x: 0, y: -2.7, z: 0}
+  - {x: 0, y: -3, z: 0}
+  - {x: 0, y: -3.3000002, z: 0}
+  - {x: 0, y: -3.6000001, z: 0}
+  - {x: 0, y: -3.9, z: 0}
+  - {x: 0, y: -4.2000003, z: 0}
+  - {x: 0, y: -4.5, z: 0}
   m_Parameters:
     serializedVersion: 3
     widthMultiplier: 0.2
@@ -122,7 +138,16 @@ LineRenderer:
       m_Curve:
       - serializedVersion: 3
         time: 0
-        value: 1
+        value: 1.25
+        inSlope: 0
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0.33333334
+        outWeight: 0.33333334
+      - serializedVersion: 3
+        time: 1
+        value: 0.375
         inSlope: 0
         outSlope: 0
         tangentMode: 0
@@ -134,8 +159,8 @@ LineRenderer:
       m_RotationOrder: 4
     colorGradient:
       serializedVersion: 2
-      key0: {r: 1, g: 1, b: 1, a: 1}
-      key1: {r: 1, g: 1, b: 1, a: 1}
+      key0: {r: 0.32471505, g: 0.6415094, b: 0.038329054, a: 1}
+      key1: {r: 0, g: 0.39, b: 0, a: 1}
       key2: {r: 0, g: 0, b: 0, a: 0}
       key3: {r: 0, g: 0, b: 0, a: 0}
       key4: {r: 0, g: 0, b: 0, a: 0}

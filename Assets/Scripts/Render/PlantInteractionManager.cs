@@ -59,23 +59,26 @@ public class PlantInteractionManager : MonoBehaviour
   // 事件系统
   public System.Action<Vector3, float, float> OnPlayerImpact;  // 位置，强度，半径
   public System.Action<PlantPersonalityPreset> OnGlobalPresetChanged; // 全局预设改变
-  
-  #region Unity 生命周期
-  
-  void Awake()
-  {
-      // 单例模式
-      if (Instance == null)
-      {
-          Instance = this;
-          DontDestroyOnLoad(gameObject);
-          InitializeManager();
-      }
-      else
-      {
-          Destroy(gameObject);
-      }
-  }
+
+    #region Unity 生命周期
+
+    void Awake()
+    {
+        // 单例模式
+        if (Instance == null)
+        {
+            Instance = this;
+            DontDestroyOnLoad(gameObject);
+            InitializeManager();
+
+            // 添加场景加载事件监听
+            UnityEngine.SceneManagement.SceneManager.sceneLoaded += OnSceneLoaded;
+        }
+        else
+        {
+            Destroy(gameObject);
+        }
+    }
   
   void Start()
   {
@@ -116,42 +119,100 @@ public class PlantInteractionManager : MonoBehaviour
           UpdateDebugInfo();
       }
   }
-  
-  void OnDestroy()
-  {
-      // 停止所有正在运行的协程
-      if (transitionCoroutine != null)
-      {
-          StopCoroutine(transitionCoroutine);
-          transitionCoroutine = null;
-      }
-      
-      // 清理事件订阅
-      OnPlayerImpact = null;
-      OnGlobalPresetChanged = null;
-      
-      // 清空植物列表，避免在销毁过程中引用已销毁的对象
-      registeredPlants.Clear();
-      updateQueue.Clear();
-  }
+
+    void OnDestroy()
+    {
+        // 移除场景加载事件监听
+        UnityEngine.SceneManagement.SceneManager.sceneLoaded -= OnSceneLoaded;
+
+        // 停止所有正在运行的协程
+        if (transitionCoroutine != null)
+        {
+            StopCoroutine(transitionCoroutine);
+            transitionCoroutine = null;
+        }
+
+        // 清理事件订阅
+        OnPlayerImpact = null;
+        OnGlobalPresetChanged = null;
+
+        // 清理所有植物的引用
+        foreach (var plant in registeredPlants)
+        {
+            if (plant != null)
+            {
+                try
+                {
+                    plant.ClearInteractionEffect();
+                }
+                catch (System.Exception)
+                {
+                    // 忽略错误
+                }
+            }
+        }
+
+        // 清空植物列表，避免在销毁过程中引用已销毁的对象
+        registeredPlants.Clear();
+        updateQueue.Clear();
+
+        // 如果是单例实例，重置静态引用
+        if (Instance == this)
+        {
+            Instance = null;
+        }
+    }
+
+    private void OnSceneLoaded(UnityEngine.SceneManagement.Scene scene, UnityEngine.SceneManagement.LoadSceneMode mode)
+    {
+        // 清理所有已销毁的植物引用
+        CleanupDestroyedPlants();
+
+        // 重建更新队列
+        RebuildUpdateQueue();
+
+        // 延迟一帧后重新注册场景中的植物
+        StartCoroutine(DelayedRegisterAllPlantsInScene());
+
+        if (showDebugInfo)
+        {
+            Debug.Log($"[PlantInteractionManager] 场景已加载: {scene.name}，已清理植物引用");
+        }
+    }
+
+    // 延迟注册场景中的植物
+    private IEnumerator DelayedRegisterAllPlantsInScene()
+    {
+        // 等待一帧，确保所有对象都已实例化
+        yield return null;
+
+        // 重新查找玩家
+        if (playerTransform == null)
+        {
+            FindPlayerTransform();
+        }
+
+        // 注册新场景中的植物
+        RegisterAllPlantsInScene();
+    }
   
   #endregion
-  
-  #region 初始化
-  
-  /// <summary>
-  /// 初始化管理器
-  /// </summary>
-  private void InitializeManager()
-  {
-      // 初始化事件
-      OnPlayerImpact += HandlePlayerImpact;
-      
-      if (showDebugInfo)
-      {
-          Debug.Log("[PlantInteractionManager] 管理器初始化完成");
-      }
-  }
+
+    #region 初始化
+
+    /// <summary>
+    /// 初始化管理器
+    /// </summary>
+    private void InitializeManager()
+    {
+        // 初始化事件
+        OnPlayerImpact += HandlePlayerImpact;
+
+        if (showDebugInfo)
+        {
+            Debug.Log("[PlantInteractionManager] 管理器初始化完成");
+        }
+    }
   
   /// <summary>
   /// 查找玩家变换
@@ -497,8 +558,8 @@ private void CreateImpact(Vector3 position, float strength, float radius)
           Debug.Log("[PlantInteractionManager] 已清除所有交互效果");
       }
   }
-  
-  #endregion
+
+    #endregion
 
     #region 植物更新管理
 
@@ -526,12 +587,27 @@ private void CreateImpact(Vector3 position, float strength, float radius)
         {
             var plant = updateQueue.Dequeue();
 
-            // 再次检查植物是否有效
-            if (plant != null && plant.GetTransform() != null)
+            // 更严格的空值检查
+            if (plant != null)
             {
-                UpdatePlantState(plant);
-                plantsToRequeue.Add(plant); // 收集有效的植物以重新加入队列
-                plantsUpdatedThisFrame++;
+                try
+                {
+                    // 使用 try-catch 防止访问已销毁对象
+                    if (plant.GetTransform() != null)
+                    {
+                        UpdatePlantState(plant);
+                        plantsToRequeue.Add(plant); // 收集有效的植物以重新加入队列
+                        plantsUpdatedThisFrame++;
+                    }
+                }
+                catch (System.Exception e)
+                {
+                    if (showDebugInfo)
+                    {
+                        Debug.LogWarning($"[PlantInteractionManager] 更新植物时出错: {e.Message}");
+                    }
+                    // 不添加到重新入队列表中
+                }
             }
         }
 

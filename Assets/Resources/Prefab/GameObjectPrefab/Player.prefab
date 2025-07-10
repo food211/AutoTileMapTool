@@ -643,7 +643,7 @@ MonoBehaviour:
   idleRandomRange: 2
   idleIndexParam: IdleIndex
   stateCheckInterval: 0.5
-  stuckInAirTimeout: 1
+  stuckInAirTimeout: 5
   aimIdleTimeoutDuration: 2.5
   velocityYParam: VelocityY
   isAimingParam: IsAiming

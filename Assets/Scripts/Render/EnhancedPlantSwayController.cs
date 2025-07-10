@@ -607,49 +607,45 @@ public class EnhancedPlantSwayController : MonoBehaviour, IPlantController
           useCustomPivot = false;
       }
   }
-  
-  private void OnDrawGizmosSelected()
-  {
-      if (showDebugInfo)
-      {
-          // 绘制交互半径
-          Gizmos.color = new Color(1f, 0.92f, 0.016f, 0.3f); // 半透明黄色
-          
-          // 从正确的pivot点绘制
-          Vector3 pivotPos = useCustomPivot && interactionPivot != null ? 
-              interactionPivot.position : transform.position;
-          Gizmos.DrawSphere(pivotPos, defaultImpactRadius);
 
-            // 如果使用自定义pivot，绘制连接线
-            if (useCustomPivot && interactionPivot != null && interactionPivot != transform)
+    void OnDrawGizmos()
+    {
+        // 从正确的pivot点绘制
+        Vector3 pivotPos = useCustomPivot && interactionPivot != null ? 
+        interactionPivot.position : transform.position;
+        Gizmos.DrawSphere(pivotPos, 0.1f);
+
+        // 如果使用自定义pivot，绘制连接线
+        if (useCustomPivot && interactionPivot != null && interactionPivot != transform)
+        {
+            Gizmos.color = Color.magenta;
+            Gizmos.DrawLine(transform.position, interactionPivot.position);
+        }
+    }
+    private void OnDrawGizmosSelected()
+    {
+        if (showDebugInfo)
+        {
+            // 绘制交互半径
+            Gizmos.color = new Color(1f, 0.92f, 0.016f, 0.3f); // 半透明黄色
+
+            // 绘制风向
+            Gizmos.color = new Color(0f, 0.7f, 1f, 0.8f); // 蓝色
+            Vector3 windDir = new Vector3(windDirection.x, windDirection.y, windDirection.z).normalized;
+            Gizmos.DrawRay(transform.position, windDir * 2f);
+
+            // 绘制植物信息
+            if (personalitySettings != null)
             {
-                Gizmos.color = Color.magenta;
-                Gizmos.DrawLine(transform.position, interactionPivot.position);
-                Gizmos.DrawWireSphere(interactionPivot.position, 0.2f);
-                          // 在重生点位置绘制坐标轴
-            Handles.color = Color.red;
-            Handles.ArrowHandleCap(0, interactionPivot.position, Quaternion.LookRotation(Vector3.right), 1f, EventType.Repaint);
-            Handles.color = Color.green;
-            Handles.ArrowHandleCap(0, interactionPivot.position, Quaternion.LookRotation(Vector3.up), 1f, EventType.Repaint);
-          }
-          
-          // 绘制风向
-          Gizmos.color = new Color(0f, 0.7f, 1f, 0.8f); // 蓝色
-          Vector3 windDir = new Vector3(windDirection.x, windDirection.y, windDirection.z).normalized;
-          Gizmos.DrawRay(transform.position, windDir * 2f);
-          
-          // 绘制植物信息
-          if (personalitySettings != null)
-          {
-              UnityEditor.Handles.Label(transform.position + Vector3.up * 2f, 
-                  $"Type: {plantType}\n" +
-                  $"Wind: {personalitySettings.windStrength:F3}\n" +
-                  $"Elastic: {personalitySettings.elasticAmount:F3}\n" +
-                  $"Response: {personalitySettings.responseIntensity:F2}\n" +
-                  $"Custom Pivot: {(useCustomPivot ? "Yes" : "No")}");
-          }
-      }
-  }
+                UnityEditor.Handles.Label(transform.position + Vector3.up * 2f,
+                    $"Type: {plantType}\n" +
+                    $"Wind: {personalitySettings.windStrength:F3}\n" +
+                    $"Elastic: {personalitySettings.elasticAmount:F3}\n" +
+                    $"Response: {personalitySettings.responseIntensity:F2}\n" +
+                    $"Custom Pivot: {(useCustomPivot ? "Yes" : "No")}");
+            }
+        }
+    }
 #endif
   
   #endregion

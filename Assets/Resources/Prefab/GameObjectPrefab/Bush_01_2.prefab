@@ -164,6 +164,6 @@ MonoBehaviour:
   interactionUpdateRate: 0.1
   defaultImpactRadius: 3
   interactionPivot: {fileID: 6923034088314326692}
-  useCustomPivot: 0
+  useCustomPivot: 1
   showDebugInfo: 0
   previewInEditor: 0
