@@ -51,10 +51,6 @@
 1. 访问 `Window > AutoTileMapTool > Workflow Manager`
 2. 按照引导步骤完成完整的瓦片地图设置
 
-### 🤝 贡献
-
-欢迎贡献代码！请随时提交问题和拉取请求。
-
 ### 📄 许可证
 
 本项目采用MIT许可证 - 详情请查看 [LICENSE](LICENSE) 文件。
@@ -107,14 +103,6 @@ A powerful Unity Tilemap editing and auto-generation tool that streamlines tile 
 #### 4. Workflow Management
 1. Access `Window > AutoTileMapTool > Workflow Manager`
 2. Follow the guided steps for complete tilemap setup
-
-### 📖 Documentation
-
-For detailed usage instructions and advanced features, please refer to the [Wiki](https://github.com/food211/AutoTileMapTool/wiki).
-
-### 🤝 Contributing
-
-Contributions are welcome! Please feel free to submit issues and pull requests.
 
 ### 📄 License
 
