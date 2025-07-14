@@ -74,8 +74,9 @@ public class PlantInteractionManager : MonoBehaviour
             // 添加场景加载事件监听
             UnityEngine.SceneManagement.SceneManager.sceneLoaded += OnSceneLoaded;
         }
-        else
+        else if (Instance != this)
         {
+            // 如果已经存在实例，销毁当前对象
             Destroy(gameObject);
         }
     }
@@ -156,15 +157,26 @@ public class PlantInteractionManager : MonoBehaviour
         registeredPlants.Clear();
         updateQueue.Clear();
 
-        // 如果是单例实例，重置静态引用
-        if (Instance == this)
-        {
-            Instance = null;
-        }
+        // // 只有在应用退出时才重置单例引用
+        // if (Instance == this && !Application.isPlaying)
+        // {
+        //     Instance = null;
+        // }
     }
 
     private void OnSceneLoaded(UnityEngine.SceneManagement.Scene scene, UnityEngine.SceneManagement.LoadSceneMode mode)
     {
+        // 确保对象是激活状态
+        if (!gameObject.activeInHierarchy)
+        {
+            gameObject.SetActive(true);
+        }
+        // 立即尝试重新查找玩家
+        if (playerTransform == null)
+        {
+            FindPlayerTransform();
+        }
+
         // 清理所有已销毁的植物引用
         CleanupDestroyedPlants();
 
@@ -355,29 +367,43 @@ public class PlantInteractionManager : MonoBehaviour
           }
       }
   }
-  
+
     /// <summary>
     /// 清理已销毁的植物
     /// </summary>
     private void CleanupDestroyedPlants()
     {
         // 清理注册列表中已销毁的植物
-        int removedCount = registeredPlants.RemoveAll(plant => 
+        int removedCount = registeredPlants.RemoveAll(plant =>
         {
-            return plant == null || plant.GetTransform() == null;
+            if (plant == null)
+                return true;
+
+            // 使用更安全的方式检查Transform
+            try
+            {
+                var transform = plant.GetTransform();
+                return transform == null;
+            }
+            catch (System.Exception)
+            {
+                // 如果访问GetTransform()时出现异常，说明对象已被销毁
+                return true;
+            }
         });
-        
+
         // 如果有植物被移除，需要重建更新队列
         if (removedCount > 0)
         {
             RebuildUpdateQueue();
-            
+
             if (showDebugInfo)
             {
                 Debug.Log($"[PlantInteractionManager] 清理了 {removedCount} 个已销毁的植物");
             }
         }
     }
+    
     /// <summary>
     /// 重建更新队列
     /// </summary>

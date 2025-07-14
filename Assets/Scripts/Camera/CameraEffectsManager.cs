@@ -1,6 +1,7 @@
 using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
+using UnityEngine.SceneManagement;
 
 /// <summary>
 /// 相机效果管理器 - 提供预设的相机效果和动画
@@ -65,6 +66,65 @@ public class CameraEffectsManager : MonoBehaviour
         // 初始化原始偏移
         originalOffset = defaultOffset;
     }
+    
+    private void OnEnable()
+    {
+        // 订阅场景加载事件
+        SceneManager.sceneLoaded += OnSceneLoaded;
+    }
+
+    private void OnDisable()
+    {
+        // 取消订阅场景加载事件
+        SceneManager.sceneLoaded -= OnSceneLoaded;
+    }
+
+    /// <summary>
+    /// 场景加载完成时调用
+    /// </summary>
+    private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
+    {
+        // 重新查找相机管理器
+        FindCameraManager();
+        
+        // 重新初始化设置
+        if (cameraManager != null)
+        {
+            normalFollowSpeed = cameraManager.GetSmoothSpeed();
+            originalSmoothSpeed = normalFollowSpeed;
+            originalOffset = defaultOffset;
+        }
+    }
+
+    /// <summary>
+    /// 查找相机管理器
+    /// </summary>
+    private void FindCameraManager()
+    {
+        // 首先检查已有引用是否有效
+        if (cameraManager != null)
+        {
+            return;
+        }
+        
+        // 尝试在同一游戏对象上查找
+        cameraManager = GetComponent<CameraManager>();
+
+        // 如果还是找不到，尝试在场景中查找
+        if (cameraManager == null)
+        {
+            cameraManager = FindObjectOfType<CameraManager>();
+
+            if (cameraManager == null)
+            {
+                Debug.LogWarning("CameraEffectsManager无法找到CameraManager组件！");
+            }
+            else
+            {
+                Debug.Log("CameraEffectsManager成功找到新场景中的CameraManager组件");
+            }
+        }
+    }
 
     #region 公共效果方法
 
@@ -75,7 +135,7 @@ public class CameraEffectsManager : MonoBehaviour
     {
         // 停止当前效果
         StopCurrentEffect();
-        
+
         // 启动新效果
         currentEffectCoroutine = StartCoroutine(DramaticCloseUpCoroutine(duration));
     }

@@ -47,5 +47,5 @@ MonoBehaviour:
   startPointID: TestStartPoint_1
   isDefaultStartPoint: 0
   showVisuals: 1
-  gizmoColor: {r: 0.2, g: 0.8, b: 0.2, a: 0.7}
-  gizmoSize: 1
+  gizmoColor: {r: 1, g: 0.98785746, b: 0.009433806, a: 0.7}
+  gizmoSize: 0.1

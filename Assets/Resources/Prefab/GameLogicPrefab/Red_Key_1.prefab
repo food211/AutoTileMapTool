@@ -76,7 +76,7 @@ SpriteRenderer:
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 0
-  m_Sprite: {fileID: -720668289, guid: 17fa52d3ab3cee3459c4632269143d05, type: 3}
+  m_Sprite: {fileID: 466435474, guid: 1f9611aea7ed35c4884b16dc2aae83cd, type: 3}
   m_Color: {r: 1, g: 0.7643482, b: 0.6949685, a: 1}
   m_FlipX: 0
   m_FlipY: 0
@@ -194,6 +194,7 @@ MonoBehaviour:
   maxRepeatCount: 0
   targetRecievers: []
   interactionType: 1
+  uniqueID: 
   onTriggerActivated:
     m_PersistentCalls:
       m_Calls: []
@@ -203,12 +204,14 @@ MonoBehaviour:
   onPlayerExitInteractionZone:
     m_PersistentCalls:
       m_Calls: []
+  debugMode: 0
   targetLock: {fileID: 0}
   registerOnStart: 1
   deactivateOnReset: 1
+  disableWhenLockUnlocked: 1
   unlockerSpriteRenderer: {fileID: 3834058801939570819}
-  activeSprite: {fileID: 628087445, guid: 17fa52d3ab3cee3459c4632269143d05, type: 3}
-  inactiveSprite: {fileID: -720668289, guid: 17fa52d3ab3cee3459c4632269143d05, type: 3}
+  activeSprite: {fileID: -1187944485, guid: 1f9611aea7ed35c4884b16dc2aae83cd, type: 3}
+  inactiveSprite: {fileID: 466435474, guid: 1f9611aea7ed35c4884b16dc2aae83cd, type: 3}
   unlockerAnimator: {fileID: 0}
   activateAnimTrigger: Activate
   deactivateAnimTrigger: Deactivate

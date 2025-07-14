@@ -10,7 +10,6 @@ GameObject:
   m_Component:
   - component: {fileID: 950893542846302775}
   - component: {fileID: 7547076692166252666}
-  - component: {fileID: 7934051337861531361}
   - component: {fileID: 5337314206742528782}
   - component: {fileID: 8274247732729751880}
   m_Layer: 0
@@ -87,27 +86,6 @@ SpriteRenderer:
   m_WasSpriteAssigned: 1
   m_MaskInteraction: 0
   m_SpriteSortPoint: 0
---- !u!95 &7934051337861531361
-Animator:
-  serializedVersion: 5
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2462722458916692407}
-  m_Enabled: 1
-  m_Avatar: {fileID: 0}
-  m_Controller: {fileID: 9100000, guid: 2e6c8759c30a76046b603244fb133d46, type: 2}
-  m_CullingMode: 0
-  m_UpdateMode: 0
-  m_ApplyRootMotion: 0
-  m_LinearVelocityBlending: 0
-  m_StabilizeFeet: 0
-  m_WarningMessage: 
-  m_HasTransformHierarchy: 1
-  m_AllowConstantClipSamplingOptimization: 1
-  m_KeepAnimatorStateOnDisable: 0
-  m_WriteDefaultValuesOnDisable: 0
 --- !u!114 &5337314206742528782
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -121,6 +99,30 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   coinID: 
+  animationFrames:
+  - {fileID: -2017583474, guid: cb9d52886f1744a43905b39e2d8387d2, type: 3}
+  - {fileID: 1846952052, guid: cb9d52886f1744a43905b39e2d8387d2, type: 3}
+  - {fileID: 1624733621, guid: cb9d52886f1744a43905b39e2d8387d2, type: 3}
+  - {fileID: 2111068031, guid: cb9d52886f1744a43905b39e2d8387d2, type: 3}
+  - {fileID: -523665910, guid: cb9d52886f1744a43905b39e2d8387d2, type: 3}
+  - {fileID: 80372296, guid: cb9d52886f1744a43905b39e2d8387d2, type: 3}
+  - {fileID: 1603462743, guid: cb9d52886f1744a43905b39e2d8387d2, type: 3}
+  - {fileID: -1429654864, guid: cb9d52886f1744a43905b39e2d8387d2, type: 3}
+  - {fileID: -1337745374, guid: cb9d52886f1744a43905b39e2d8387d2, type: 3}
+  - {fileID: -1188358140, guid: cb9d52886f1744a43905b39e2d8387d2, type: 3}
+  - {fileID: -327525148, guid: cb9d52886f1744a43905b39e2d8387d2, type: 3}
+  - {fileID: 1550767846, guid: cb9d52886f1744a43905b39e2d8387d2, type: 3}
+  - {fileID: 803279312, guid: cb9d52886f1744a43905b39e2d8387d2, type: 3}
+  - {fileID: 301408427, guid: cb9d52886f1744a43905b39e2d8387d2, type: 3}
+  - {fileID: 2114434842, guid: cb9d52886f1744a43905b39e2d8387d2, type: 3}
+  - {fileID: 866633976, guid: cb9d52886f1744a43905b39e2d8387d2, type: 3}
+  - {fileID: 1323114218, guid: cb9d52886f1744a43905b39e2d8387d2, type: 3}
+  - {fileID: 696994830, guid: cb9d52886f1744a43905b39e2d8387d2, type: 3}
+  - {fileID: -947822725, guid: cb9d52886f1744a43905b39e2d8387d2, type: 3}
+  - {fileID: 1123999521, guid: cb9d52886f1744a43905b39e2d8387d2, type: 3}
+  frameRate: 30
+  collectDuration: 0.5
+  jumpHeight: 1
 --- !u!58 &8274247732729751880
 CircleCollider2D:
   m_ObjectHideFlags: 0

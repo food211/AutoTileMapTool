@@ -231,6 +231,10 @@ public class GameInitializer : MonoBehaviour
         // 如果管理器配置为在任何场景中都不可见
         if (managerSceneType == SceneType.None)
             return false;
+        
+        // 特殊处理：LoadingScene 类型在处理组件可见性时被视为 GameScene
+        if (currentSceneType == SceneType.LoadingScene && managerSceneType == SceneType.GameScene)
+            return true;
             
         // 否则，检查场景类型是否匹配
         return managerSceneType == currentSceneType;

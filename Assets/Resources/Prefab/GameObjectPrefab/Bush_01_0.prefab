@@ -129,9 +129,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 30100db35202a9f41bdb16169936158a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  plantRenderer: {fileID: 0}
+  plantRenderer: {fileID: 6643883870737349289}
   expectedShaderName: Custom/BushSwayInteractive
   plantType: 0
+  plantColor: {r: 1, g: 1, b: 1, a: 1}
+  useSharedColorMaterial: 1
+  colorVariantName: Default
   personalitySettings:
     timeOffset: 0
     randomSeed: 0
@@ -149,21 +152,17 @@ MonoBehaviour:
     responseCurveStrength: 1.5
     waveFrequency: 6
     waveDecay: 3
+    wholeObjectMovement: 0.8
+    wholeObjectRotation: 0.05
+    vertexDeformStrength: 0.8
+    vertexDeformSpread: 0.5
   applySettingsOnStart: 1
+  personalityPreset: 0
   windDirection: {x: 1, y: 0, z: 0, w: 0}
-  randomization:
-    autoRandomizeOnStart: 1
-    usePositionBasedSeed: 1
-    timeOffsetRandomness: 1
-    windRandomness: 0.2
-    elasticRandomness: 0.2
-    structureRandomness: 0.1
-    interactionRandomness: 0.15
-    waveRandomness: 0.2
   enableInteraction: 1
   interactionUpdateRate: 0.1
   defaultImpactRadius: 3
   interactionPivot: {fileID: 3348755556127756642}
   useCustomPivot: 1
   showDebugInfo: 0
-  previewInEditor: 0
+  previewInEditor: 1

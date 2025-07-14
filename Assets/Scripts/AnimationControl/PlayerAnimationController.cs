@@ -153,16 +153,37 @@ public class PlayerAnimationController : MonoBehaviour
         // 获取当前绳索模式状态
         isRopeMode = playerController.isPlayerRopeMode();
 
+        // 如果处于绳索模式，确保动画状态始终为InAir
+        if (isRopeMode && currentState != AnimState.InAir)
+        {
+            // 强制切换到InAir状态，不管当前是什么状态
+            ChangeState(AnimState.InAir);
+
+#if UNITY_EDITOR
+            if (debugMode)
+            {
+                Debug.LogFormat($"绳索模式中强制切换到InAir状态，之前状态: {previousState}");
+            }
+#endif
+        }
+
         // 如果绳索模式状态发生变化，更新动画参数
         if (isRopeMode != wasRopeMode)
         {
             animator.SetBool(isRopeModeParam, isRopeMode);
             wasRopeMode = isRopeMode;
 
-            // 如果进入绳索模式且当前不是InAir状态，则切换到InAir状态
-            if (isRopeMode && currentState != AnimState.InAir)
+            // 如果进入绳索模式，强制切换到InAir状态
+            if (isRopeMode)
             {
                 ChangeState(AnimState.InAir);
+
+#if UNITY_EDITOR
+                if (debugMode)
+                {
+                    Debug.LogFormat($"进入绳索模式，强制切换到InAir状态");
+                }
+#endif
             }
             // 如果退出绳索模式，检查是否已着地，决定切换到哪个状态
             else if (!isRopeMode)
@@ -206,13 +227,6 @@ public class PlayerAnimationController : MonoBehaviour
 #endif
                 }
             }
-
-#if UNITY_EDITOR
-            if (debugMode)
-            {
-                Debug.LogFormat($"绳索模式状态变化: {isRopeMode}");
-            }
-#endif
         }
     }
 

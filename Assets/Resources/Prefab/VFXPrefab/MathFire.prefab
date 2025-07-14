@@ -12,7 +12,7 @@ GameObject:
   - component: {fileID: 3333700155151084454}
   - component: {fileID: 2673201894566296454}
   m_Layer: 8
-  m_Name: Fire
+  m_Name: MathFire
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
