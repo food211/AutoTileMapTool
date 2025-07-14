@@ -1485,8 +1485,24 @@ private void ApplyTerrainOperation(TerrainOperation operation)
         
         // 处理emptyMarkerTile
         AutoTerrainTileEditor.ProcessEmptyMarkerTiles(operation.outputTilemap, operation.terrainRules);
-        
-        Debug.Log($"已应用地形操作: {operation.name}");
+
+        Debug.Log(GetLocalizedText("applyOperation") + $": {operation.name}");
+
+        // 添加弹窗通知
+        EditorUtility.DisplayDialog(
+            GetLocalizedText("success"),
+            $"{operation.name} {GetLocalizedText("applyOperation")}成功！",
+            GetLocalizedText("ok"));
+    }
+    catch (System.Exception e)
+    {
+        Debug.LogError(GetLocalizedText("applyOperation") + $": {operation.name} Fail: {e.Message}");
+
+        // 添加错误弹窗通知
+        EditorUtility.DisplayDialog(
+            GetLocalizedText("error"),
+            $"{operation.name} {GetLocalizedText("applyOperation")}Fail: {e.Message}",
+            GetLocalizedText("ok"));
     }
     finally
     {
@@ -1498,15 +1514,70 @@ private void ApplyTerrainOperation(TerrainOperation operation)
 // 应用所有已启用的地形操作
 private void ApplyAllEnabledOperations(List<TerrainOperation> operations)
 {
+    int successCount = 0;
+    int failCount = 0;
+    System.Text.StringBuilder errorMessages = new System.Text.StringBuilder();
+    
     foreach (var operation in operations)
     {
         if (operation.enabled)
         {
-            ApplyTerrainOperation(operation);
+            try
+            {
+                if (operation.sourceTilemap == null || operation.outputTilemap == null || operation.terrainRules == null)
+                    continue;
+                
+                // 如果需要，先清除输出Tilemap
+                if (operation.clearBeforeApply)
+                {
+                    operation.outputTilemap.ClearAllTiles();
+                }
+                
+                // 创建临时Tilemap用于处理
+                GameObject tempGO = new GameObject("TempTilemap");
+                Tilemap tempTilemap = tempGO.AddComponent<Tilemap>();
+                tempGO.AddComponent<TilemapRenderer>();
+                
+                // 应用地形规则
+                AutoTerrainTileEditor.ApplyTerrainRules(operation.sourceTilemap, tempTilemap, operation.terrainRules);
+                
+                // 合并结果到输出Tilemap
+                AutoTerrainTileEditor.MergeTilemapToOutput(tempTilemap, operation.outputTilemap);
+                
+                // 处理emptyMarkerTile
+                AutoTerrainTileEditor.ProcessEmptyMarkerTiles(operation.outputTilemap, operation.terrainRules);
+                
+                // 清理临时对象
+                DestroyImmediate(tempGO);
+                
+                successCount++;
+                Debug.Log(GetLocalizedText("applyOperation") + $": {operation.name}");
+            }
+            catch (System.Exception e)
+            {
+                failCount++;
+                string errorMsg = $"{operation.name}: {e.Message}";
+                errorMessages.AppendLine(errorMsg);
+                Debug.LogError(GetLocalizedText("applyOperation") + $": {operation.name} Fail: {e.Message}");
+            }
         }
     }
 
-    Debug.LogFormat("已应用所有已启用的地形操作");
+    // 显示执行结果的弹窗通知
+    if (failCount == 0)
+    {
+        EditorUtility.DisplayDialog(
+            GetLocalizedText("success"),
+            $"{GetLocalizedText("successfullyApplied")} {successCount} {GetLocalizedText("terrainOperations")}！",
+            GetLocalizedText("ok"));
+    }
+    else
+    {
+        EditorUtility.DisplayDialog(
+            GetLocalizedText("error"),
+            $"{GetLocalizedText("successfullyApplied")} {successCount} {GetLocalizedText("terrainOperations")}，{failCount} {GetLocalizedText("operationsFailed")}。\n\n{GetLocalizedText("errorDetails")}:\n{errorMessages}",
+            GetLocalizedText("ok"));
+    }
 }
 
         private void DrawLayerEditingStep()
