@@ -35,6 +35,10 @@ public class ParameterGroup
     public float elasticFrequency;
     public float centerDeadZone;
     public float edgeInfluence;
+    public float pixelSize;
+    public float pixelSnap;
+    public float elasticEasing;
+    public float pixelatedMovement;
     
     // 预设类型，用于标识这个参数组代表什么类型的植物行为
     public PlantPersonalityPreset presetType = PlantPersonalityPreset.Gentle;
@@ -149,6 +153,22 @@ public class PlantPersonalitySettings
     [Range(0.1f, 1.0f)]
     [Tooltip("顶点变形扩散 - 顶点变形的扩散范围")]
     public float vertexDeformSpread = 0.5f;
+        [Header("=== 像素风格参数 ===")]
+    [Range(0.01f, 0.5f)]
+    [Tooltip("像素大小 - 控制像素化效果的粒度")]
+    public float pixelSize = 0.1f;
+    
+    [Range(0f, 1f)]
+    [Tooltip("像素对齐 - 控制位移对齐到像素网格的程度")]
+    public float pixelSnap = 0.5f;
+    
+    [Range(0.1f, 1.0f)]
+    [Tooltip("弹性缓动 - 控制弹性动画的缓动效果")]
+    public float elasticEasing = 0.5f;
+    
+    [Range(0f, 1f)]
+    [Tooltip("像素化移动 - 控制整体移动的像素化程度")]
+    public float pixelatedMovement = 0.3f;
     
     /// <summary>
     /// 复制设置
@@ -176,7 +196,11 @@ public class PlantPersonalitySettings
             wholeObjectMovement = this.wholeObjectMovement,
             wholeObjectRotation = this.wholeObjectRotation,
             vertexDeformStrength = this.vertexDeformStrength,
-            vertexDeformSpread = this.vertexDeformSpread
+            vertexDeformSpread = this.vertexDeformSpread,
+            pixelSize = this.pixelSize,
+            pixelSnap = this.pixelSnap,
+            elasticEasing = this.elasticEasing,
+            pixelatedMovement = this.pixelatedMovement
         };
     }
     
@@ -208,10 +232,14 @@ public class PlantPersonalitySettings
             wholeObjectMovement = Mathf.Lerp(from.wholeObjectMovement, to.wholeObjectMovement, t),
             wholeObjectRotation = Mathf.Lerp(from.wholeObjectRotation, to.wholeObjectRotation, t),
             vertexDeformStrength = Mathf.Lerp(from.vertexDeformStrength, to.vertexDeformStrength, t),
-            vertexDeformSpread = Mathf.Lerp(from.vertexDeformSpread, to.vertexDeformSpread, t)
+            vertexDeformSpread = Mathf.Lerp(from.vertexDeformSpread, to.vertexDeformSpread, t),
+            pixelSize = Mathf.Lerp(from.pixelSize, to.pixelSize, t),
+            pixelSnap = Mathf.Lerp(from.pixelSnap, to.pixelSnap, t),
+            elasticEasing = Mathf.Lerp(from.elasticEasing, to.elasticEasing, t),
+            pixelatedMovement = Mathf.Lerp(from.pixelatedMovement, to.pixelatedMovement, t)
         };
     }
-    
+
     /// <summary>
     /// 提取批处理关键参数到参数组
     /// </summary>
@@ -226,8 +254,12 @@ public class PlantPersonalitySettings
         group.elasticFrequency = this.elasticFrequency;
         group.centerDeadZone = this.centerDeadZone;
         group.edgeInfluence = this.edgeInfluence;
+        group.pixelSize = this.pixelSize;
+        group.pixelSnap = this.pixelSnap;
+        group.elasticEasing = this.elasticEasing;
+        group.pixelatedMovement = this.pixelatedMovement;
     }
-    
+
     /// <summary>
     /// 从参数组应用批处理关键参数
     /// </summary>
@@ -242,6 +274,10 @@ public class PlantPersonalitySettings
         this.elasticFrequency = group.elasticFrequency;
         this.centerDeadZone = group.centerDeadZone;
         this.edgeInfluence = group.edgeInfluence;
+        this.pixelSize = group.pixelSize;
+        this.pixelSnap = group.pixelSnap;
+        this.elasticEasing = group.elasticEasing;
+        this.pixelatedMovement = group.pixelatedMovement;
     }
 }
 
@@ -508,7 +544,12 @@ public static class PlantPersonalityPresets
             wholeObjectMovement = 0.6f,  // 温和的整体移动
             wholeObjectRotation = 0.03f, // 温和的整体旋转
             vertexDeformStrength = 0.6f, // 温和的顶点变形
-            vertexDeformSpread = 0.4f    // 温和的变形扩散
+            vertexDeformSpread = 0.4f,    // 温和的变形扩散
+                    // 添加像素风格参数 - 温和预设
+            pixelSize = 0.08f,
+            pixelSnap = 0.4f,
+            elasticEasing = 0.6f,
+            pixelatedMovement = 0.25f
         };
     }
     
@@ -546,7 +587,12 @@ public static class PlantPersonalityPresets
             wholeObjectMovement = 0.9f,  // 活跃的整体移动
             wholeObjectRotation = 0.08f, // 活跃的整体旋转
             vertexDeformStrength = 1.2f, // 强烈的顶点变形
-            vertexDeformSpread = 0.7f    // 广泛的变形扩散
+            vertexDeformSpread = 0.7f,    // 广泛的变形扩散
+                    // 添加像素风格参数 - 活跃预设
+            pixelSize = 0.12f,
+            pixelSnap = 0.6f,
+            elasticEasing = 0.4f,
+            pixelatedMovement = 0.5f
         };
     }
     
@@ -584,7 +630,12 @@ public static class PlantPersonalityPresets
             wholeObjectMovement = 0.4f,  // 较少的整体移动
             wholeObjectRotation = 0.02f, // 较少的整体旋转
             vertexDeformStrength = 0.4f, // 较弱的顶点变形
-            vertexDeformSpread = 0.3f    // 较小的变形扩散
+            vertexDeformSpread = 0.3f,    // 较小的变形扩散
+            // 添加像素风格参数 - 坚固预设
+            pixelSize = 0.15f,
+            pixelSnap = 0.7f,
+            elasticEasing = 0.8f,
+            pixelatedMovement = 0.15f,
         };
     }
     
@@ -622,7 +673,12 @@ public static class PlantPersonalityPresets
             wholeObjectMovement = 0.7f,  // 中等的整体移动
             wholeObjectRotation = 0.06f, // 中等的整体旋转
             vertexDeformStrength = 0.9f, // 较强的顶点变形
-            vertexDeformSpread = 0.6f    // 中等的变形扩散
+            vertexDeformSpread = 0.6f,    // 中等的变形扩散
+            // 添加像素风格参数 - 精致预设
+            pixelSize = 0.05f,
+            pixelSnap = 0.3f,
+            elasticEasing = 0.5f,
+            pixelatedMovement = 0.35f
         };
     }
     
@@ -660,7 +716,12 @@ public static class PlantPersonalityPresets
             wholeObjectMovement = 1.0f,  // 最大的整体移动
             wholeObjectRotation = 0.1f,  // 最大的整体旋转
             vertexDeformStrength = 1.5f, // 最强的顶点变形
-            vertexDeformSpread = 0.8f    // 最广的变形扩散
+            vertexDeformSpread = 0.8f,    // 最广的变形扩散
+            // 添加像素风格参数 - 狂野预设
+            pixelSize = 0.2f,
+            pixelSnap = 0.8f,
+            elasticEasing = 0.3f,
+            pixelatedMovement = 0.7f
         };
     }
     

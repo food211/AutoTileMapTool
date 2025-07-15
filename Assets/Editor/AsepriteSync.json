@@ -1,0 +1,33 @@
+{
+    "externalFilePath": "D:/image/2022/同人/ProjectC/Tile/foliage_output/foliage.aseprite",
+    "unityTargetPath": "Assets/Resources/Images/Foliage/foliage_import",
+    "asepritePath": "E:/steam_d/steamapps/common/Aseprite/Aseprite.exe",
+    "autoSync": false,
+    "checkInterval": 300.0,
+    "trackedFilesList": [
+        {
+            "filePath": "D:/image/2022/同人/ProjectC/Tile/foliage_output/foliage.aseprite",
+            "lastModified": -8584490350466440222,
+            "exportedLayers": [
+                "branch_1",
+                "branch_2",
+                "Flower_1",
+                "Flower_2",
+                "Flower_3",
+                "2",
+                "3",
+                "4",
+                "5",
+                "GrassTile",
+                "groundGrass_1",
+                "highgrass_1",
+                "Rock_1",
+                "Rock_2",
+                "rock_3",
+                "TreeTrunk_1",
+                "TreeTrunk_2",
+                "TreeTrunk_3"
+            ]
+        }
+    ]
+}

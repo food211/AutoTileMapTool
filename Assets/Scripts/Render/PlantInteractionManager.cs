@@ -34,9 +34,13 @@ public class PlantInteractionManager : MonoBehaviour
   [SerializeField] private bool showDebugInfo = true;
   [SerializeField] private bool drawGizmos = true;
   [SerializeField] private Color impactGizmoColor = Color.red;
+  [Header("=== GPU Instancing优化 ===")]
+[SerializeField] private bool enableGPUInstancingOptimization = true;
+[SerializeField] private bool precomputePlantSeeds = true;
+[SerializeField] private Dictionary<Transform, float> plantSeedCache = new Dictionary<Transform, float>();
   
   // 植物管理 - 使用接口
-  private List<IPlantController> registeredPlants = new List<IPlantController>();
+    private List<IPlantController> registeredPlants = new List<IPlantController>();
   private Queue<IPlantController> updateQueue = new Queue<IPlantController>();
   
   // 当前影响状态
@@ -80,25 +84,93 @@ public class PlantInteractionManager : MonoBehaviour
             Destroy(gameObject);
         }
     }
-  
-  void Start()
-  {
-      // 自动查找玩家
-      if (playerTransform == null)
-      {
-          FindPlayerTransform();
-      }
-      
-      // 自动注册场景中的所有植物
-      RegisterAllPlantsInScene();
-      
-      // 设置初始预设
-      if (enableGlobalPresetControl)
-      {
-          ApplyGlobalPreset(currentGlobalPreset, false);
-      }
+
+    void Start()
+    {
+        // 自动查找玩家
+        if (playerTransform == null)
+        {
+            FindPlayerTransform();
+        }
+
+        // 自动注册场景中的所有植物
+        RegisterAllPlantsInScene();
+
+        // 设置初始预设
+        if (enableGlobalPresetControl)
+        {
+            ApplyGlobalPreset(currentGlobalPreset, false);
+        }
+
+        if (enableGPUInstancingOptimization)
+        {
+            StartCoroutine(SetupGPUInstancingForAllPlants());
+        }
   }
   
+    /// <summary>
+    /// 为所有植物设置GPU Instancing优化
+    /// </summary>
+    private IEnumerator SetupGPUInstancingForAllPlants()
+    {
+        yield return new WaitForSeconds(0.1f); // 等待一小段时间确保所有植物都已初始化
+        
+        foreach (var plant in registeredPlants)
+        {
+            if (plant != null)
+            {
+                try
+                {
+                    Transform plantTransform = plant.GetTransform();
+                    if (plantTransform != null)
+                    {
+                        Renderer renderer = plantTransform.GetComponent<Renderer>();
+                        if (renderer != null)
+                        {
+                            MaterialPropertyBlock props = new MaterialPropertyBlock();
+                            renderer.GetPropertyBlock(props);
+                            
+                            // 设置对象世界位置
+                            props.SetVector("_ObjectWorldPos", plantTransform.position);
+                            
+                            // 预计算植物随机种子
+                            if (precomputePlantSeeds)
+                            {
+                                float seed;
+                                if (!plantSeedCache.TryGetValue(plantTransform, out seed))
+                                {
+                                    seed = GenerateSeedForPosition(plantTransform.position);
+                                    plantSeedCache[plantTransform] = seed;
+                                }
+                                props.SetFloat("_PlantSeed", seed);
+                            }
+                            
+                            renderer.SetPropertyBlock(props);
+                        }
+                    }
+                }
+                catch (System.Exception e)
+                {
+                    if (showDebugInfo)
+                    {
+                        Debug.LogWarning($"[PlantInteractionManager] 设置GPU Instancing时出错: {e.Message}");
+                    }
+                }
+            }
+            
+            // 每帧只处理少量植物，避免卡顿
+            if (registeredPlants.Count > 100)
+            {
+                yield return null;
+            }
+        }
+        
+        if (showDebugInfo)
+        {
+            Debug.Log($"[PlantInteractionManager] 已为 {plantSeedCache.Count} 个植物设置GPU Instancing优化");
+        }
+    }
+
   void Update()
   {
       // 分帧更新植物
@@ -156,12 +228,6 @@ public class PlantInteractionManager : MonoBehaviour
         // 清空植物列表，避免在销毁过程中引用已销毁的对象
         registeredPlants.Clear();
         updateQueue.Clear();
-
-        // // 只有在应用退出时才重置单例引用
-        // if (Instance == this && !Application.isPlaying)
-        // {
-        //     Instance = null;
-        // }
     }
 
     private void OnSceneLoaded(UnityEngine.SceneManagement.Scene scene, UnityEngine.SceneManagement.LoadSceneMode mode)
@@ -219,6 +285,12 @@ public class PlantInteractionManager : MonoBehaviour
     {
         // 初始化事件
         OnPlayerImpact += HandlePlayerImpact;
+        
+        // 初始化植物种子缓存
+        if (enableGPUInstancingOptimization && precomputePlantSeeds)
+        {
+            plantSeedCache = new Dictionary<Transform, float>();
+        }
 
         if (showDebugInfo)
         {
@@ -484,106 +556,136 @@ private void CreateImpact(Vector3 position, float strength, float radius)
       ApplyImpactToAffectedPlants(currentStrength);
   }
   
- /// <summary>
-  /// 对受影响的植物应用冲击
-  /// </summary>
-  private void ApplyImpactToAffectedPlants(float strengthMultiplier = 1f)
-  {
-      if (showDebugInfo)
-      {
-          Debug.LogFormat($"[PlantInteractionManager] ApplyImpactToAffectedPlants 开始执行，植物数量: {registeredPlants.Count}");
-      }
+    /// <summary>
+    /// 对受影响的植物应用冲击
+    /// </summary>
+    private void ApplyImpactToAffectedPlants(float strengthMultiplier = 1f)
+    {
+        if (showDebugInfo)
+        {
+            Debug.LogFormat($"[PlantInteractionManager] ApplyImpactToAffectedPlants 开始执行，植物数量: {registeredPlants.Count}");
+        }
 
-      int affectedCount = 0;
-      
-      // 创建临时列表以避免在迭代过程中修改集合
-      List<IPlantController> validPlants = new List<IPlantController>();
-      
-      // 先收集所有有效的植物
-      foreach (var plant in registeredPlants)
-      {
-          if (plant != null)
-          {
-              try
-              {
-                  Transform plantTransform = plant.GetTransform();
-                  if (plantTransform != null)
-                  {
-                      validPlants.Add(plant);
-                  }
-              }
-              catch (System.Exception)
-              {
-                  // 忽略错误，这个植物将被下一次CleanupDestroyedPlants移除
-              }
-          }
-      }
-      
-      // 对有效植物应用效果
-      foreach (var plant in validPlants)
-      {
-          Transform plantTransform = plant.GetTransform();
-          
-          // 只考虑X和Y方向的距离，忽略Z方向
-          float distance = Vector2.Distance(
-              new Vector2(plantTransform.position.x, plantTransform.position.y),
-              new Vector2(currentImpactPosition.x, currentImpactPosition.y)
-          );
-          
-          if (distance <= currentImpactRadius)
-          {
-              // 计算影响强度
-              float influence = 1f - (distance / currentImpactRadius);
-              float finalStrength = currentImpactStrength * influence * strengthMultiplier;
+        int affectedCount = 0;
+        
+        // 创建临时列表以避免在迭代过程中修改集合
+        List<IPlantController> validPlants = new List<IPlantController>();
+        
+        // 先收集所有有效的植物
+        foreach (var plant in registeredPlants)
+        {
+            if (plant != null)
+            {
+                try
+                {
+                    Transform plantTransform = plant.GetTransform();
+                    if (plantTransform != null)
+                    {
+                        validPlants.Add(plant);
+                    }
+                }
+                catch (System.Exception)
+                {
+                    // 忽略错误，这个植物将被下一次CleanupDestroyedPlants移除
+                }
+            }
+        }
+        
+        // 对有效植物应用效果
+        foreach (var plant in validPlants)
+        {
+            Transform plantTransform = plant.GetTransform();
+            
+            // 只考虑X和Y方向的距离，忽略Z方向
+            float distance = Vector2.Distance(
+                new Vector2(plantTransform.position.x, plantTransform.position.y),
+                new Vector2(currentImpactPosition.x, currentImpactPosition.y)
+            );
+            
+            if (distance <= currentImpactRadius)
+            {
+                // 计算影响强度
+                float influence = 1f - (distance / currentImpactRadius);
+                float finalStrength = currentImpactStrength * influence * strengthMultiplier;
 
-              // 应用交互效果
-              plant.ApplyInteractionEffect(currentImpactPosition, finalStrength, currentImpactRadius);
-              affectedCount++;
-          }
-      }
+                // 应用交互效果
+                plant.ApplyInteractionEffect(currentImpactPosition, finalStrength, currentImpactRadius);
+                
+                // GPU Instancing优化 - 设置对象世界位置
+                if (enableGPUInstancingOptimization)
+                {
+                    Renderer renderer = plantTransform.GetComponent<Renderer>();
+                    if (renderer != null)
+                    {
+                        MaterialPropertyBlock props = new MaterialPropertyBlock();
+                        renderer.GetPropertyBlock(props);
+                        
+                        // 设置对象世界位置
+                        props.SetVector("_ObjectWorldPos", plantTransform.position);
+                        
+                        // 设置预计算的种子（如果没有缓存）
+                        if (precomputePlantSeeds && !plantSeedCache.ContainsKey(plantTransform))
+                        {
+                            float seed = GenerateSeedForPosition(plantTransform.position);
+                            plantSeedCache[plantTransform] = seed;
+                            props.SetFloat("_PlantSeed", seed);
+                        }
+                        
+                        // 设置时间差值
+                        props.SetFloat("_TimeSinceImpact", Time.time - impactStartTime);
+                        
+                        renderer.SetPropertyBlock(props);
+                    }
+                }
+                
+                affectedCount++;
+            }
+        }
 
-      if (showDebugInfo)
-      {
-          Debug.LogFormat($"[PlantInteractionManager] ApplyImpactToAffectedPlants 完成，影响了 {affectedCount} 个植物");
-      }
-  }
-  /// <summary>
-  /// 清除所有交互效果
-  /// </summary>
-  private void ClearAllInteractionEffects()
-  {
-      List<IPlantController> validPlants = new List<IPlantController>();
-      
-      // 收集有效植物
-      foreach (var plant in registeredPlants)
-      {
-          if (plant != null)
-          {
-              try
-              {
-                  if (plant.GetTransform() != null)
-                  {
-                      validPlants.Add(plant);
-                  }
-              }
-              catch (System.Exception)
-              {
-                  // 忽略错误
-              }
-          }
-      }
-      
-      // 清除效果
-      foreach (var plant in validPlants)
-      {
-          plant.ClearInteractionEffect();
-      }
-      
-      if (showDebugInfo)
-      {
-          Debug.Log("[PlantInteractionManager] 已清除所有交互效果");
-      }
-  }
+        if (showDebugInfo)
+        {
+            Debug.LogFormat($"[PlantInteractionManager] ApplyImpactToAffectedPlants 完成，影响了 {affectedCount} 个植物");
+        }
+    }
+    
+
+    /// <summary>
+    /// 清除所有交互效果
+    /// </summary>
+    private void ClearAllInteractionEffects()
+    {
+        List<IPlantController> validPlants = new List<IPlantController>();
+
+        // 收集有效植物
+        foreach (var plant in registeredPlants)
+        {
+            if (plant != null)
+            {
+                try
+                {
+                    if (plant.GetTransform() != null)
+                    {
+                        validPlants.Add(plant);
+                    }
+                }
+                catch (System.Exception)
+                {
+                    // 忽略错误
+                }
+            }
+        }
+
+        // 清除效果
+        foreach (var plant in validPlants)
+        {
+            plant.ClearInteractionEffect();
+        }
+
+        if (showDebugInfo)
+        {
+            Debug.Log("[PlantInteractionManager] 已清除所有交互效果");
+        }
+    }
 
     #endregion
 
@@ -643,96 +745,124 @@ private void CreateImpact(Vector3 position, float strength, float radius)
             updateQueue.Enqueue(plant);
         }
     }
-  
-/// <summary>
-  /// 更新单个植物状态
-  /// </summary>
-  private void UpdatePlantState(IPlantController plant)
-  {
-      // 安全检查
-      if (plant == null) return;
-      
-      Transform plantTransform = null;
-      
-      try
-      {
-          plantTransform = plant.GetTransform();
-      }
-      catch (System.Exception e)
-      {
-          if (showDebugInfo)
-          {
-              Debug.LogWarning($"[PlantInteractionManager] 获取植物Transform时出错: {e.Message}");
-          }
-          return;
-      }
-      
-      if (plantTransform == null) return;
-      
-      // 距离剔除优化 - 只考虑XY平面距离
-      if (enableDistanceCulling && playerTransform != null)
-      {
-          float distance = Vector2.Distance(
-              new Vector2(plantTransform.position.x, plantTransform.position.y),
-              new Vector2(playerTransform.position.x, playerTransform.position.y)
-          );
-          
-          if (distance > maxUpdateDistance)
-          {
-              return; // 距离太远，跳过更新
-          }
-      }
-      
-      // 这里可以添加其他植物状态更新逻辑
-      // 比如LOD切换、动画状态管理等
-  }
+
+    /// <summary>
+    /// 更新单个植物状态
+    /// </summary>
+    private void UpdatePlantState(IPlantController plant)
+    {
+        // 安全检查
+        if (plant == null) return;
+
+        Transform plantTransform = null;
+
+        try
+        {
+            plantTransform = plant.GetTransform();
+        }
+        catch (System.Exception e)
+        {
+            if (showDebugInfo)
+            {
+                Debug.LogWarning($"[PlantInteractionManager] 获取植物Transform时出错: {e.Message}");
+            }
+            return;
+        }
+
+        if (plantTransform == null) return;
+
+        // 距离剔除优化 - 只考虑XY平面距离
+        if (enableDistanceCulling && playerTransform != null)
+        {
+            float distance = Vector2.Distance(
+                new Vector2(plantTransform.position.x, plantTransform.position.y),
+                new Vector2(playerTransform.position.x, playerTransform.position.y)
+            );
+
+            if (distance > maxUpdateDistance)
+            {
+                return; // 距离太远，跳过更新
+            }
+        }
+
+        // GPU Instancing优化 - 预计算植物种子
+        if (enableGPUInstancingOptimization && precomputePlantSeeds)
+        {
+            // 确保植物有缓存的随机种子
+            if (!plantSeedCache.ContainsKey(plantTransform))
+            {
+                // 生成确定性的随机种子
+                float seed = GenerateSeedForPosition(plantTransform.position);
+                plantSeedCache[plantTransform] = seed;
+
+                // 应用种子到植物
+                MaterialPropertyBlock props = new MaterialPropertyBlock();
+                Renderer renderer = plantTransform.GetComponent<Renderer>();
+                if (renderer != null)
+                {
+                    renderer.GetPropertyBlock(props);
+                    props.SetFloat("_PlantSeed", seed);
+                    renderer.SetPropertyBlock(props);
+                }
+            }
+        }
+    }
+    
+        /// <summary>
+    /// 生成确定性的随机种子
+    /// </summary>
+    private float GenerateSeedForPosition(Vector3 position)
+    {
+        // 使用位置的哈希值生成种子，这样同一位置的植物总是有相同的种子
+        return Mathf.Abs((position.x * 12.9898f + position.y * 78.233f) % 1.0f);
+    }
   
   #endregion
-  
-  #region 全局预设管理
-  
-  /// <summary>
-  /// 切换全局个性预设
-  /// </summary>
-  public void SwitchGlobalPreset(PlantPersonalityPreset preset, float transitionDuration = -1f)
-  {
-      if (!enableGlobalPresetControl) 
-      {
-          if (showDebugInfo)
-          {
-              Debug.LogWarning("[PlantInteractionManager] 全局预设控制已禁用");
-          }
-          return;
-      }
-      
-      if (preset == currentGlobalPreset && !isTransitioning)
-      {
-          if (showDebugInfo)
-          {
-              Debug.Log($"[PlantInteractionManager] 已经是当前预设: {preset}");
-          }
-          return;
-      }
-      
-      if (transitionDuration < 0)
-      {
-          transitionDuration = presetTransitionDuration;
-      }
-      
-      // 停止当前过渡
-      if (isTransitioning && transitionCoroutine != null)
-      {
-          StopCoroutine(transitionCoroutine);
-      }
-      
-      // 开始新的过渡
-      transitionCoroutine = StartCoroutine(TransitionToPreset(preset, transitionDuration));
-      
-      if (showDebugInfo)
-      {
-          Debug.Log($"[PlantInteractionManager] 开始切换到预设: {PlantPersonalityPresets.GetPresetDisplayName(preset)}，过渡时间: {transitionDuration:F1}s");
-      }
-  }
+
+    #region 全局预设管理
+
+    /// <summary>
+    /// 切换全局个性预设
+    /// </summary>
+    public void SwitchGlobalPreset(PlantPersonalityPreset preset, float transitionDuration = -1f)
+    {
+        if (!enableGlobalPresetControl)
+        {
+            if (showDebugInfo)
+            {
+                Debug.LogWarning("[PlantInteractionManager] 全局预设控制已禁用");
+            }
+            return;
+        }
+
+        if (preset == currentGlobalPreset && !isTransitioning)
+        {
+            if (showDebugInfo)
+            {
+                Debug.Log($"[PlantInteractionManager] 已经是当前预设: {preset}");
+            }
+            return;
+        }
+
+        if (transitionDuration < 0)
+        {
+            transitionDuration = presetTransitionDuration;
+        }
+
+        // 停止当前过渡
+        if (isTransitioning && transitionCoroutine != null)
+        {
+            StopCoroutine(transitionCoroutine);
+        }
+
+        // 开始新的过渡
+        transitionCoroutine = StartCoroutine(TransitionToPreset(preset, transitionDuration));
+
+        if (showDebugInfo)
+        {
+            Debug.Log($"[PlantInteractionManager] 开始切换到预设: {PlantPersonalityPresets.GetPresetDisplayName(preset)}，过渡时间: {transitionDuration:F1}s");
+        }
+    }
   
     /// <summary>
     /// 立即应用全局预设（无过渡）
