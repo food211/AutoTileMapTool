@@ -584,35 +584,12 @@ private void OnDisable()
     }
     
     /// <summary>
-    /// 设置最大显示生命值（用于临时限制生命值上限）
-    /// </summary>
-    /// <param name="limit">显示上限</param>
-    public void SetMaxDisplayHealth(int limit)
-    {
-        maxDisplayHealth = Mathf.Clamp(limit, 0, maxHealth);
-        UpdateHealthDisplay();
-    }
-    
-    /// <summary>
-    /// 重置最大显示生命值
-    /// </summary>
-    public void ResetMaxDisplayHealth()
-    {
-        maxDisplayHealth = maxHealth;
-        UpdateHealthDisplay();
-    }
-    
-    /// <summary>
     /// 玩家重生后的处理
     /// </summary>
     private void OnPlayerRespawned()
     {
         // 重置护盾
         shieldHealth = 0;
-        
-        // 重置显示限制
-        ResetMaxDisplayHealth();
-        
         // 更新显示
         UpdateHealthDisplay();
     }

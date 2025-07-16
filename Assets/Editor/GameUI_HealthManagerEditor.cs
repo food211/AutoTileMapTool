@@ -54,12 +54,12 @@ public class GameUI_HealthManagerEditor : Editor
             
             if (GUILayout.Button("限制生命值显示为3"))
             {
-                healthManager.SetMaxDisplayHealth(3);
+                player.LimitMaxHealth(3, 4);
             }
             
             if (GUILayout.Button("重置生命值显示"))
             {
-                healthManager.ResetMaxDisplayHealth();
+                player.ResetMaxHealthLimit();
             }
             
             EditorGUILayout.EndHorizontal();
