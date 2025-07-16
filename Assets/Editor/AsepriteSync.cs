@@ -14,6 +14,10 @@ public class AsepriteSyncConfig
     public string asepritePath = "";
     public bool autoSync = false;
     public float checkInterval = 2f;
+    // 默认像素单位
+    public float defaultPixelsPerUnit = 16f;
+    // 是否包含隐藏图层
+    public bool includeHiddenLayers = false;
     // 添加一个可序列化的文件列表
     public List<TrackedFileEntry> trackedFilesList = new List<TrackedFileEntry>();
 
@@ -29,11 +33,17 @@ public class TrackedFileEntry
     public string filePath;
     public long lastModified;
     public List<string> exportedLayers = new List<string>();
+    public string outputPath; // 添加输出路径字段
+    public float pixelsPerUnit = 16f; // 添加像素单位设置
+    public bool includeHiddenLayers = false; // 添加是否包含隐藏图层设置
     
     public TrackedFileEntry(string path, long timestamp)
     {
         filePath = path;
         lastModified = timestamp;
+        outputPath = "Assets/AsepriteAssets"; // 默认输出路径
+        pixelsPerUnit = 16f; // 默认像素单位
+        includeHiddenLayers = false; // 默认不包含隐藏图层
     }
     
     public TrackedFileEntry(AsepriteFileInfo info)
@@ -41,6 +51,9 @@ public class TrackedFileEntry
         filePath = info.filePath;
         lastModified = info.lastModified;
         exportedLayers = new List<string>(info.exportedLayers);
+        outputPath = info.outputPath; // 复制输出路径
+        pixelsPerUnit = info.pixelsPerUnit; // 复制像素单位设置
+        includeHiddenLayers = info.includeHiddenLayers; // 复制是否包含隐藏图层设置
     }
 }
 
@@ -51,83 +64,111 @@ public class AsepriteFileInfo
     public string filePath;
     public long lastModified;
     public List<string> exportedLayers = new List<string>();
+    public string outputPath; // 添加输出路径字段
+    public float pixelsPerUnit = 16f; // 添加像素单位设置
+    public bool includeHiddenLayers = false; // 添加是否包含隐藏图层设置
     
     public AsepriteFileInfo(string path, long timestamp)
     {
         filePath = path;
         lastModified = timestamp;
+        outputPath = "Assets/AsepriteAssets"; // 默认输出路径
+        pixelsPerUnit = 16f; // 默认像素单位
+        includeHiddenLayers = false; // 默认不包含隐藏图层
+    }
+    
+    public AsepriteFileInfo(string path, long timestamp, string output)
+    {
+        filePath = path;
+        lastModified = timestamp;
+        outputPath = output;
+        pixelsPerUnit = 16f; // 默认像素单位
+        includeHiddenLayers = false; // 默认不包含隐藏图层
     }
 }
 
 public class AsepriteAutoSync : EditorWindow
 {
-  private AsepriteSyncConfig config = new AsepriteSyncConfig();
-  private double lastCheckTime = 0;
-  private const string CONFIG_PATH = "Assets/Editor/AsepriteSync.json";
-  
-  // 静态属性，让AsepriteImportProcessor可以访问
-  public static string TargetPath { get; private set; } = "Assets/AsepriteAssets";
+    private AsepriteSyncConfig config = new AsepriteSyncConfig();
+    private double lastCheckTime = 0;
+    private const string CONFIG_PATH = "Assets/Editor/AsepriteSync.json";
 
-  [MenuItem("Tools/Aseprite Auto Sync")]
-  public static void ShowWindow()
-  {
-      GetWindow<AsepriteAutoSync>("Aseprite Auto Sync");
-  }
-  
-  void OnEnable()
-  {
-      LoadConfig();
-      // 更新静态属性
-      TargetPath = config.unityTargetPath;
-  }
+    // 静态属性，让AsepriteImportProcessor可以访问
+    public static string TargetPath { get; private set; } = "Assets/AsepriteAssets";
+    // 添加静态属性，存储当前处理文件的像素单位
+    public static Dictionary<string, float> FilePixelsPerUnit { get; private set; } = new Dictionary<string, float>();
 
-  void OnDisable()
-  {
-      SaveConfig();
-  }
-
-  void LoadConfig()
-{
-    // 尝试从JSON文件加载配置
-    if (File.Exists(CONFIG_PATH))
+    [MenuItem("Tools/Aseprite Auto Sync")]
+    public static void ShowWindow()
     {
-        try
+        GetWindow<AsepriteAutoSync>("Aseprite Auto Sync");
+    }
+
+    void OnEnable()
+    {
+        LoadConfig();
+        // 更新静态属性
+        TargetPath = config.unityTargetPath;
+    }
+
+    void OnDisable()
+    {
+        SaveConfig();
+    }
+
+    void LoadConfig()
+    {
+        // 尝试从JSON文件加载配置
+        if (File.Exists(CONFIG_PATH))
         {
-            string json = File.ReadAllText(CONFIG_PATH);
-            JsonUtility.FromJsonOverwrite(json, config);
-            
-            // 将序列化列表转换为字典
-            config.trackedFiles.Clear();
-            foreach (var entry in config.trackedFilesList)
+            try
             {
-                if (!string.IsNullOrEmpty(entry.filePath))
+                string json = File.ReadAllText(CONFIG_PATH);
+                JsonUtility.FromJsonOverwrite(json, config);
+
+                // 将序列化列表转换为字典
+                config.trackedFiles.Clear();
+                foreach (var entry in config.trackedFilesList)
                 {
-                    config.trackedFiles[entry.filePath] = new AsepriteFileInfo(entry.filePath, entry.lastModified)
+                    if (!string.IsNullOrEmpty(entry.filePath))
                     {
-                        exportedLayers = new List<string>(entry.exportedLayers)
-                    };
+                        config.trackedFiles[entry.filePath] = new AsepriteFileInfo(entry.filePath, entry.lastModified)
+                        {
+                            exportedLayers = new List<string>(entry.exportedLayers),
+                            outputPath = entry.outputPath, // 确保输出路径被正确复制
+                            pixelsPerUnit = entry.pixelsPerUnit, // 复制像素单位设置
+                            includeHiddenLayers = entry.includeHiddenLayers // 复制是否包含隐藏图层设置
+                        };
+                    }
                 }
+
+                // 更新静态属性，确保它与加载的配置同步
+                TargetPath = config.unityTargetPath;
+
+                UnityEngine.Debug.Log("已加载Aseprite同步配置");
             }
-            
-            UnityEngine.Debug.Log("已加载Aseprite同步配置");
+            catch (System.Exception e)
+            {
+                UnityEngine.Debug.LogError($"加载配置失败: {e.Message}");
+                // 使用默认配置
+                config = new AsepriteSyncConfig();
+            }
         }
-        catch (System.Exception e)
+        else
         {
-            UnityEngine.Debug.LogError($"加载配置失败: {e.Message}");
-            // 使用默认配置
-            config = new AsepriteSyncConfig();
+            // 如果配置文件不存在，尝试从EditorPrefs加载旧的配置
+            config.externalFilePath = EditorPrefs.GetString("AsepriteSync_ExternalPath", "");
+            config.unityTargetPath = EditorPrefs.GetString("AsepriteSync_TargetPath", "Assets/AsepriteAssets");
+            config.asepritePath = EditorPrefs.GetString("AsepriteSync_AsepritePath", "");
+            config.autoSync = EditorPrefs.GetBool("AsepriteSync_AutoSync", false);
+            config.checkInterval = EditorPrefs.GetFloat("AsepriteSync_CheckInterval", 2f);
+            config.defaultPixelsPerUnit = EditorPrefs.GetFloat("AsepriteSync_DefaultPPU", 16f);
+            config.includeHiddenLayers = EditorPrefs.GetBool("AsepriteSync_IncludeHidden", false);
+
+            // 更新静态属性，确保它与加载的配置同步
+            TargetPath = config.unityTargetPath;
         }
     }
-    else
-    {
-        // 如果配置文件不存在，尝试从EditorPrefs加载旧的配置
-        config.externalFilePath = EditorPrefs.GetString("AsepriteSync_ExternalPath", "");
-        config.unityTargetPath = EditorPrefs.GetString("AsepriteSync_TargetPath", "Assets/AsepriteAssets");
-        config.asepritePath = EditorPrefs.GetString("AsepriteSync_AsepritePath", "");
-        config.autoSync = EditorPrefs.GetBool("AsepriteSync_AutoSync", false);
-        config.checkInterval = EditorPrefs.GetFloat("AsepriteSync_CheckInterval", 2f);
-    }
-}
 
     void SaveConfig()
     {
@@ -159,6 +200,8 @@ public class AsepriteAutoSync : EditorWindow
             EditorPrefs.SetString("AsepriteSync_AsepritePath", config.asepritePath);
             EditorPrefs.SetBool("AsepriteSync_AutoSync", config.autoSync);
             EditorPrefs.SetFloat("AsepriteSync_CheckInterval", config.checkInterval);
+            EditorPrefs.SetFloat("AsepriteSync_DefaultPPU", config.defaultPixelsPerUnit);
+            EditorPrefs.SetBool("AsepriteSync_IncludeHidden", config.includeHiddenLayers);
         }
         catch (System.Exception e)
         {
@@ -166,8 +209,9 @@ public class AsepriteAutoSync : EditorWindow
         }
     }
 
-private Vector2 trackedFilesScrollPosition;
-private bool showTrackedFiles = false;
+    private Vector2 trackedFilesScrollPosition;
+    private bool showTrackedFiles = false;
+    private bool showAdvancedSettings = false; // 添加高级设置折叠栏
 
     void OnGUI()
     {
@@ -216,21 +260,22 @@ private bool showTrackedFiles = false;
         }
 
         // 添加当前文件到跟踪列表
-        if (!string.IsNullOrEmpty(config.externalFilePath) && File.Exists(config.externalFilePath))
+        if (GUILayout.Button("添加当前文件到跟踪列表"))
         {
-            if (GUILayout.Button("添加当前文件到跟踪列表"))
+            if (!config.trackedFiles.ContainsKey(config.externalFilePath))
             {
-                if (!config.trackedFiles.ContainsKey(config.externalFilePath))
-                {
-                    FileInfo fileInfo = new FileInfo(config.externalFilePath);
-                    config.trackedFiles[config.externalFilePath] = new AsepriteFileInfo(config.externalFilePath, fileInfo.LastWriteTime.ToBinary());
-                    SaveConfig();
-                    UnityEngine.Debug.Log($"已添加文件到跟踪列表: {Path.GetFileName(config.externalFilePath)}");
-                }
-                else
-                {
-                    UnityEngine.Debug.Log("该文件已在跟踪列表中");
-                }
+                FileInfo fileInfo = new FileInfo(config.externalFilePath);
+                AsepriteFileInfo info = new AsepriteFileInfo(config.externalFilePath, fileInfo.LastWriteTime.ToBinary());
+                info.outputPath = config.unityTargetPath; // 保存当前输出路径
+                info.pixelsPerUnit = config.defaultPixelsPerUnit; // 使用默认像素单位
+                info.includeHiddenLayers = config.includeHiddenLayers; // 使用默认隐藏图层设置
+                config.trackedFiles[config.externalFilePath] = info;
+                SaveConfig();
+                UnityEngine.Debug.Log($"已添加文件到跟踪列表: {Path.GetFileName(config.externalFilePath)}");
+            }
+            else
+            {
+                UnityEngine.Debug.Log("该文件已在跟踪列表中");
             }
         }
 
@@ -245,17 +290,49 @@ private bool showTrackedFiles = false;
         if (oldPath != config.unityTargetPath)
         {
             TargetPath = config.unityTargetPath;
+            
+            // 同时更新当前选中文件的输出路径
+            if (!string.IsNullOrEmpty(config.externalFilePath) && config.trackedFiles.ContainsKey(config.externalFilePath))
+            {
+                config.trackedFiles[config.externalFilePath].outputPath = config.unityTargetPath;
+            }
+            
             SaveConfig();
         }
 
         EditorGUILayout.Space();
 
-        // 检查间隔
-        float oldInterval = config.checkInterval;
-        config.checkInterval = EditorGUILayout.FloatField("检查间隔(秒):", config.checkInterval);
-        if (oldInterval != config.checkInterval)
+        // 高级设置折叠栏
+        showAdvancedSettings = EditorGUILayout.Foldout(showAdvancedSettings, "高级设置");
+        if (showAdvancedSettings)
         {
-            SaveConfig();
+            EditorGUI.indentLevel++;
+
+            // 默认像素单位设置
+            float oldDefaultPPU = config.defaultPixelsPerUnit;
+            config.defaultPixelsPerUnit = EditorGUILayout.FloatField("默认像素单位:", config.defaultPixelsPerUnit);
+            if (oldDefaultPPU != config.defaultPixelsPerUnit)
+            {
+                SaveConfig();
+            }
+
+            // 是否包含隐藏图层
+            bool oldIncludeHidden = config.includeHiddenLayers;
+            config.includeHiddenLayers = EditorGUILayout.Toggle("包含隐藏图层:", config.includeHiddenLayers);
+            if (oldIncludeHidden != config.includeHiddenLayers)
+            {
+                SaveConfig();
+            }
+
+            // 检查间隔
+            float oldInterval = config.checkInterval;
+            config.checkInterval = EditorGUILayout.FloatField("检查间隔(秒):", config.checkInterval);
+            if (oldInterval != config.checkInterval)
+            {
+                SaveConfig();
+            }
+
+            EditorGUI.indentLevel--;
         }
 
         EditorGUILayout.Space();
@@ -290,7 +367,7 @@ private bool showTrackedFiles = false;
             EditorGUILayout.Space();
 
             // 文件列表
-            trackedFilesScrollPosition = EditorGUILayout.BeginScrollView(trackedFilesScrollPosition, GUILayout.Height(200));
+            trackedFilesScrollPosition = EditorGUILayout.BeginScrollView(trackedFilesScrollPosition, GUILayout.Height(500));
 
             List<string> filesToRemove = new List<string>();
 
@@ -305,6 +382,26 @@ private bool showTrackedFiles = false;
                 EditorGUILayout.BeginVertical();
                 EditorGUILayout.LabelField(Path.GetFileName(filePath), EditorStyles.boldLabel);
                 EditorGUILayout.LabelField(filePath, EditorStyles.miniLabel);
+
+                // 输出路径 
+                string outputPathDisplay = fileInfo.outputPath ?? config.unityTargetPath;
+                EditorGUILayout.LabelField(outputPathDisplay, EditorStyles.miniLabel);
+
+                // 像素单位设置
+                float oldPPU = fileInfo.pixelsPerUnit;
+                fileInfo.pixelsPerUnit = EditorGUILayout.FloatField("像素单位:", fileInfo.pixelsPerUnit);
+                if (oldPPU != fileInfo.pixelsPerUnit)
+                {
+                    SaveConfig();
+                }
+
+                // 是否包含隐藏图层
+                bool oldIncludeHidden = fileInfo.includeHiddenLayers;
+                fileInfo.includeHiddenLayers = EditorGUILayout.Toggle("包含隐藏图层:", fileInfo.includeHiddenLayers);
+                if (oldIncludeHidden != fileInfo.includeHiddenLayers)
+                {
+                    SaveConfig();
+                }
 
                 // 最后修改时间
                 System.DateTime lastModified = System.DateTime.FromBinary(fileInfo.lastModified);
@@ -330,6 +427,15 @@ private bool showTrackedFiles = false;
                 if (GUILayout.Button("设为当前"))
                 {
                     config.externalFilePath = filePath;
+
+                    // 如果该文件有自定义输出路径，则使用它
+                    if (config.trackedFiles.ContainsKey(filePath) && !string.IsNullOrEmpty(config.trackedFiles[filePath].outputPath))
+                    {
+                        config.unityTargetPath = config.trackedFiles[filePath].outputPath;
+                        // 更新静态属性
+                        TargetPath = config.unityTargetPath;
+                    }
+
                     SaveConfig();
                 }
                 EditorGUILayout.EndVertical();
@@ -381,7 +487,11 @@ private bool showTrackedFiles = false;
         // 更新或添加跟踪信息
         if (!config.trackedFiles.ContainsKey(filePath))
         {
-            config.trackedFiles[filePath] = new AsepriteFileInfo(filePath, currentTimestamp);
+            config.trackedFiles[filePath] = new AsepriteFileInfo(filePath, currentTimestamp)
+            {
+                pixelsPerUnit = config.defaultPixelsPerUnit,
+                includeHiddenLayers = config.includeHiddenLayers
+            };
         }
         else
         {
@@ -448,267 +558,345 @@ private bool showTrackedFiles = false;
         }
     }
 
-void CheckAndSyncAllTrackedFiles()
-{
-    if (!File.Exists(config.asepritePath))
+    void CheckAndSyncAllTrackedFiles()
     {
-        UnityEngine.Debug.LogWarning("Aseprite可执行文件不存在: " + config.asepritePath);
-        return;
-    }
-
-    bool hasChanges = false;
-    List<string> invalidFiles = new List<string>();
-    
-    foreach (var pair in config.trackedFiles)
-    {
-        string filePath = pair.Key;
-        
-        if (File.Exists(filePath))
+        if (!File.Exists(config.asepritePath))
         {
-            FileInfo fileInfo = new FileInfo(filePath);
-            long currentTimestamp = fileInfo.LastWriteTime.ToBinary();
-            
-            // 检查文件是否已修改
-            if (pair.Value.lastModified != currentTimestamp)
+            UnityEngine.Debug.LogWarning("Aseprite可执行文件不存在: " + config.asepritePath);
+            return;
+        }
+
+        bool hasChanges = false;
+        List<string> invalidFiles = new List<string>();
+
+        foreach (var pair in config.trackedFiles)
+        {
+            string filePath = pair.Key;
+
+            if (File.Exists(filePath))
             {
-                // 更新时间戳
-                config.trackedFiles[filePath].lastModified = currentTimestamp;
-                
-                ProcessAsepriteFile(filePath);
-                hasChanges = true;
+                FileInfo fileInfo = new FileInfo(filePath);
+                long currentTimestamp = fileInfo.LastWriteTime.ToBinary();
+
+                // 检查文件是否已修改
+                if (pair.Value.lastModified != currentTimestamp)
+                {
+                    // 更新时间戳
+                    config.trackedFiles[filePath].lastModified = currentTimestamp;
+
+                    ProcessAsepriteFile(filePath);
+                    hasChanges = true;
+                }
+            }
+            else
+            {
+                invalidFiles.Add(filePath);
             }
         }
-        else
-        {
-            invalidFiles.Add(filePath);
-        }
-    }
-    
-    // 删除无效文件
-    foreach (string invalidFile in invalidFiles)
-    {
-        config.trackedFiles.Remove(invalidFile);
-        UnityEngine.Debug.Log($"已从跟踪列表中移除不存在的文件: {invalidFile}");
-    }
-    
-    if (hasChanges || invalidFiles.Count > 0)
-    {
-        SaveConfig();
-        AssetDatabase.Refresh();
-        UnityEngine.Debug.Log("已同步修改的Aseprite文件到Unity");
-    }
-}
 
-  void ProcessAsepriteFile(string sourcePath)
-{
-    try
-    {
-        // 确保目标文件夹存在
-        if (!Directory.Exists(config.unityTargetPath))
+        // 删除无效文件
+        foreach (string invalidFile in invalidFiles)
         {
-            Directory.CreateDirectory(config.unityTargetPath);
+            config.trackedFiles.Remove(invalidFile);
+            UnityEngine.Debug.Log($"已从跟踪列表中移除不存在的文件: {invalidFile}");
+        }
+
+        if (hasChanges || invalidFiles.Count > 0)
+        {
+            SaveConfig();
             AssetDatabase.Refresh();
+            UnityEngine.Debug.Log("已同步修改的Aseprite文件到Unity");
         }
-
-        string fileName = Path.GetFileNameWithoutExtension(sourcePath);
-        
-        // 创建临时输出文件夹
-        string tempOutputDir = Path.Combine(Path.GetTempPath(), "AsepriteExport");
-        if (!Directory.Exists(tempOutputDir))
-        {
-            Directory.CreateDirectory(tempOutputDir);
-        }
-
-        // 调用Aseprite CLI导出图层
-        List<string> exportedLayers = ExportAsepriteLayersToSprites(sourcePath, tempOutputDir, fileName);
-        
-        // 更新跟踪信息
-        if (config.trackedFiles.ContainsKey(sourcePath))
-        {
-            config.trackedFiles[sourcePath].exportedLayers = exportedLayers;
-        }
-        
-        // 将导出的PNG文件复制到Unity项目
-        CopyExportedSpritesToUnity(tempOutputDir, "", fileName);
-        
-        UnityEngine.Debug.Log($"已处理Aseprite文件: {fileName}");
     }
-    catch (System.Exception e)
+
+    void ProcessAsepriteFile(string sourcePath)
     {
-        UnityEngine.Debug.LogError($"处理Aseprite文件失败: {sourcePath}, 错误: {e.Message}");
+        try
+        {
+            // 获取该文件的输出路径（如果有）
+            string targetPath = config.unityTargetPath;
+            float pixelsPerUnit = config.defaultPixelsPerUnit;
+            bool includeHiddenLayers = config.includeHiddenLayers;
+            
+            if (config.trackedFiles.ContainsKey(sourcePath))
+            {
+                var fileInfo = config.trackedFiles[sourcePath];
+                if (!string.IsNullOrEmpty(fileInfo.outputPath))
+                {
+                    targetPath = fileInfo.outputPath;
+                }
+                pixelsPerUnit = fileInfo.pixelsPerUnit;
+                includeHiddenLayers = fileInfo.includeHiddenLayers;
+            }
+
+            // 确保目标文件夹存在
+            if (!Directory.Exists(targetPath))
+            {
+                Directory.CreateDirectory(targetPath);
+                AssetDatabase.Refresh();
+            }
+
+            string fileName = Path.GetFileNameWithoutExtension(sourcePath);
+
+            // 创建临时输出文件夹
+            string tempOutputDir = Path.Combine(Path.GetTempPath(), "AsepriteExport");
+            if (!Directory.Exists(tempOutputDir))
+            {
+                Directory.CreateDirectory(tempOutputDir);
+            }
+
+            // 调用Aseprite CLI导出图层
+            List<string> exportedLayers = ExportAsepriteLayersToSprites(sourcePath, tempOutputDir, fileName, includeHiddenLayers);
+
+            // 更新跟踪信息
+            if (config.trackedFiles.ContainsKey(sourcePath))
+            {
+                config.trackedFiles[sourcePath].exportedLayers = exportedLayers;
+            }
+
+            // 将导出的PNG文件复制到Unity项目
+            CopyExportedSpritesToUnity(tempOutputDir, "", fileName, targetPath, pixelsPerUnit);
+
+            UnityEngine.Debug.Log($"已处理Aseprite文件: {fileName}");
+        }
+        catch (System.Exception e)
+        {
+            UnityEngine.Debug.LogError($"处理Aseprite文件失败: {sourcePath}, 错误: {e.Message}");
+        }
     }
-}
 
-  List<string> ExportAsepriteLayersToSprites(string aseFilePath, string outputDir, string baseName)
-  {
-      List<string> exportedLayers = new List<string>();
-      
-      try
-      {
-          // 使用Aseprite CLI命令导出所有可见图层
-          // --split-layers 会将每个图层导出为独立文件
-          // --filename-format 指定文件名格式，{layer} 会被替换为图层名
-          string arguments = $"-b \"{aseFilePath}\" --split-layers --ignore-empty --trim --save-as \"{Path.Combine(outputDir, baseName + "_{layer}.png")}\"";
-          
-          ProcessStartInfo startInfo = new ProcessStartInfo
-          {
-              FileName = config.asepritePath,
-              Arguments = arguments,
-              UseShellExecute = false,
-              RedirectStandardOutput = true,
-              RedirectStandardError = true,
-              CreateNoWindow = true
-          };
+    void CopyExportedSpritesToUnity(string tempOutputDir, string relativePath, string baseName, string targetPath = null, float pixelsPerUnit = 16f)
+    {
+        try
+        {
+            // 获取临时文件夹中的所有PNG文件
+            if (!Directory.Exists(tempOutputDir))
+            {
+                return;
+            }
 
-          using (Process process = Process.Start(startInfo))
-          {
-              process.WaitForExit();
-              
-              if (process.ExitCode != 0)
-              {
-                  string error = process.StandardError.ReadToEnd();
-                  UnityEngine.Debug.LogError($"Aseprite导出失败: {error}");
-              }
-              else
-              {
-                  string output = process.StandardOutput.ReadToEnd();
-                  if (!string.IsNullOrEmpty(output))
-                  {
-                      UnityEngine.Debug.Log($"Aseprite导出成功: {output}");
-                  }
-                  
-                  // 获取导出的所有图层文件
-                  if (Directory.Exists(outputDir))
-                  {
-                      string[] pngFiles = Directory.GetFiles(outputDir, "*.png");
-                      foreach (string file in pngFiles)
-                      {
-                          string layerName = Path.GetFileNameWithoutExtension(file).Replace(baseName + "_", "");
-                          exportedLayers.Add(layerName);
-                      }
-                  }
-              }
-          }
-      }
-      catch (System.Exception e)
-      {
-          UnityEngine.Debug.LogError($"调用Aseprite CLI失败: {e.Message}");
-      }
-      
-      return exportedLayers;
-  }
+            string[] pngFiles = Directory.GetFiles(tempOutputDir, "*.png");
 
-  void CopyExportedSpritesToUnity(string tempOutputDir, string relativePath, string baseName)
-  {
-      try
-      {
-          // 获取临时文件夹中的所有PNG文件
-          if (!Directory.Exists(tempOutputDir))
-          {
-              return;
-          }
+            // 如果没有提供目标路径，使用配置中的默认路径
+            if (string.IsNullOrEmpty(targetPath))
+            {
+                targetPath = config.unityTargetPath;
+            }
 
-          string[] pngFiles = Directory.GetFiles(tempOutputDir, "*.png");
-          
-          foreach (string pngFile in pngFiles)
-          {
-              // 计算Unity项目中的目标路径
-              string targetDir = string.IsNullOrEmpty(relativePath) ? 
-                  config.unityTargetPath : 
-                  Path.Combine(config.unityTargetPath, relativePath);
-              
-              if (!Directory.Exists(targetDir))
-              {
-                  Directory.CreateDirectory(targetDir);
-              }
+            List<string> importedAssets = new List<string>();
 
-              string fileName = Path.GetFileName(pngFile);
-              string targetPath = Path.Combine(targetDir, fileName);
-              
-              bool isNewFile = !File.Exists(targetPath);
-              
-              // 复制文件到Unity项目
-              File.Copy(pngFile, targetPath, true);
-              
-              // 如果是更新现有文件，确保保留引用
-              if (!isNewFile)
-              {
-                  // 导入资源但保留原有设置
-                  AssetDatabase.ImportAsset(targetPath, ImportAssetOptions.ForceUpdate);
-              }
-              
-              UnityEngine.Debug.Log($"已{(isNewFile ? "创建" : "更新")}图层精灵: {fileName}");
-          }
+            foreach (string pngFile in pngFiles)
+            {
+                // 计算Unity项目中的目标路径
+                string targetDir = string.IsNullOrEmpty(relativePath) ?
+                    targetPath :
+                    Path.Combine(targetPath, relativePath);
 
-          // 清理临时文件
-          Directory.Delete(tempOutputDir, true);
-      }
-      catch (System.Exception e)
-      {
-          UnityEngine.Debug.LogError($"复制导出的精灵失败: {e.Message}");
-      }
-  }
+                if (!Directory.Exists(targetDir))
+                {
+                    Directory.CreateDirectory(targetDir);
+                }
+
+                string fileName = Path.GetFileName(pngFile);
+                string targetFilePath = Path.Combine(targetDir, fileName);
+
+                bool isNewFile = !File.Exists(targetFilePath);
+
+                // 复制文件到Unity项目
+                File.Copy(pngFile, targetFilePath, true);
+
+                // 将文件添加到Aseprite处理列表，并记录像素单位
+                AsepriteImportProcessor.AddFileToProcess(targetFilePath, pixelsPerUnit);
+
+                // 记录导入的资源路径
+                importedAssets.Add(targetFilePath);
+
+                UnityEngine.Debug.Log($"已{(isNewFile ? "创建" : "更新")}图层精灵: {fileName}, 路径: {targetFilePath}, PPU: {pixelsPerUnit}");
+            }
+
+            // 清理临时文件
+            Directory.Delete(tempOutputDir, true);
+
+            // 刷新资源数据库
+            UnityEngine.Debug.Log("刷新资源数据库...");
+            AssetDatabase.Refresh();
+
+            // 确保导入设置被应用
+            foreach (string assetPath in importedAssets)
+            {
+                UnityEngine.Debug.Log($"强制重新导入: {assetPath}");
+                // 强制重新导入，确保设置被应用
+                AssetDatabase.ImportAsset(assetPath, ImportAssetOptions.ForceUpdate);
+            }
+
+            // 再次刷新，确保所有变更都被应用
+            AssetDatabase.Refresh();
+
+            // 清理处理列表
+            EditorApplication.delayCall += AsepriteImportProcessor.CleanupProcessingFiles;
+        }
+        catch (System.Exception e)
+        {
+            UnityEngine.Debug.LogError($"复制导出的精灵失败: {e.Message}");
+        }
+    }
+
+    List<string> ExportAsepriteLayersToSprites(string aseFilePath, string outputDir, string baseName, bool includeHiddenLayers = false)
+    {
+        List<string> exportedLayers = new List<string>();
+
+        try
+        {
+            // 构建Aseprite CLI命令
+            string arguments = $"-b \"{aseFilePath}\" --split-layers --ignore-empty --trim";
+            
+            // 添加是否包含隐藏图层的参数
+            if (includeHiddenLayers)
+            {
+                arguments += " --all-layers";
+            }
+            
+            // 添加输出文件名格式
+            arguments += $" --save-as \"{Path.Combine(outputDir, baseName + "_{layer}.png")}\"";
+
+            ProcessStartInfo startInfo = new ProcessStartInfo
+            {
+                FileName = config.asepritePath,
+                Arguments = arguments,
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true
+            };
+
+            using (Process process = Process.Start(startInfo))
+            {
+                process.WaitForExit();
+
+                if (process.ExitCode != 0)
+                {
+                    string error = process.StandardError.ReadToEnd();
+                    UnityEngine.Debug.LogError($"Aseprite导出失败: {error}");
+                }
+                else
+                {
+                    string output = process.StandardOutput.ReadToEnd();
+                    if (!string.IsNullOrEmpty(output))
+                    {
+                        UnityEngine.Debug.Log($"Aseprite导出成功: {output}");
+                    }
+
+                    // 获取导出的所有图层文件
+                    if (Directory.Exists(outputDir))
+                    {
+                        string[] pngFiles = Directory.GetFiles(outputDir, "*.png");
+                        foreach (string file in pngFiles)
+                        {
+                            string layerName = Path.GetFileNameWithoutExtension(file).Replace(baseName + "_", "");
+                            exportedLayers.Add(layerName);
+                        }
+                    }
+                }
+            }
+        }
+        catch (System.Exception e)
+        {
+            UnityEngine.Debug.LogError($"调用Aseprite CLI失败: {e.Message}");
+        }
+
+        return exportedLayers;
+    }
 }
 
 // Aseprite导入后处理器 - 专门处理单个精灵
 public class AsepriteImportProcessor : AssetPostprocessor
 {
-  void OnPreprocessTexture()
-  {
-      // 使用静态属性获取目标路径
-      string targetPath = AsepriteAutoSync.TargetPath;
-      
-      // 只处理目标文件夹下的PNG文件
-      if (assetPath.EndsWith(".png") && assetPath.StartsWith(targetPath))
-      {
-          TextureImporter textureImporter = (TextureImporter)assetImporter;
+    // 静态字段，用于存储当前正在处理的Aseprite导出文件
+    private static Dictionary<string, float> currentProcessingFiles = new Dictionary<string, float>();
+    
+    // 添加文件到处理列表的公共方法
+    public static void AddFileToProcess(string filePath, float pixelsPerUnit = 16f)
+    {
+        if (!string.IsNullOrEmpty(filePath))
+        {
+            string normalizedPath = filePath.Replace('\\', '/');
+            currentProcessingFiles[normalizedPath] = pixelsPerUnit;
+            UnityEngine.Debug.Log($"添加文件到Aseprite处理列表: {normalizedPath}, PPU: {pixelsPerUnit}");
+        }
+    }
+    
+    // 清理过期的处理文件
+    public static void CleanupProcessingFiles()
+    {
+        // 每隔一段时间清理列表，防止内存泄漏
+        if (currentProcessingFiles.Count > 0)
+        {
+            UnityEngine.Debug.Log($"清理Aseprite处理列表，移除 {currentProcessingFiles.Count} 个文件");
+            currentProcessingFiles.Clear();
+        }
+    }
+    
+    // 检查文件是否是当前正在处理的Aseprite导出文件
+    private bool IsAsepriteExportedFile(out float pixelsPerUnit)
+    {
+        pixelsPerUnit = 16f; // 默认值
+        
+        if (!assetPath.EndsWith(".png"))
+            return false;
+            
+        string normalizedPath = assetPath.Replace('\\', '/');
+        if (currentProcessingFiles.TryGetValue(normalizedPath, out float ppu))
+        {
+            pixelsPerUnit = ppu;
+            return true;
+        }
+        
+        return false;
+    }
 
-          // 保留原始设置以避免破坏引用
-          SpriteImportMode originalMode = textureImporter.spriteImportMode;
-          float originalPPU = textureImporter.spritePixelsPerUnit;
-          Vector2 originalPivot = textureImporter.spritePivot;
+    void OnPreprocessTexture()
+    {
+        float pixelsPerUnit;
+        if (!IsAsepriteExportedFile(out pixelsPerUnit))
+            return;
 
-          // 设置为单个Sprite模式（不是Multiple）
-          textureImporter.textureType = TextureImporterType.Sprite;
-          
-          // 如果之前不是精灵或者是新资源，设置为Single模式
-          if (textureImporter.spriteImportMode == SpriteImportMode.None)
-          {
-              textureImporter.spriteImportMode = SpriteImportMode.Single;
-              textureImporter.spritePixelsPerUnit = 16;
-              textureImporter.spritePivot = new Vector2(0.5f, 0.5f);
-          }
-          else
-          {
-              // 保留原始的模式和设置
-              textureImporter.spriteImportMode = originalMode;
-              textureImporter.spritePixelsPerUnit = originalPPU;
-              textureImporter.spritePivot = originalPivot;
-          }
+        TextureImporter textureImporter = (TextureImporter)assetImporter;
+        
+        // 记录导入前的设置
+        UnityEngine.Debug.Log($"处理Aseprite导出图片: {assetPath}, 导入前PPU: {textureImporter.spritePixelsPerUnit}, 设置为: {pixelsPerUnit}");
 
-          // 像素艺术设置
-          textureImporter.filterMode = FilterMode.Point;
-          textureImporter.textureCompression = TextureImporterCompression.Uncompressed;
-          textureImporter.alphaIsTransparency = true;
+        // 设置为单个Sprite模式
+        textureImporter.textureType = TextureImporterType.Sprite;
+        textureImporter.spriteImportMode = SpriteImportMode.Single;
+        
+        // 使用指定的像素单位
+        textureImporter.spritePixelsPerUnit = pixelsPerUnit;
+        textureImporter.spritePivot = new Vector2(0.5f, 0.5f);
 
-          // 禁用mipmap
-          textureImporter.mipmapEnabled = false;
+        // 像素艺术设置
+        textureImporter.filterMode = FilterMode.Point;
+        textureImporter.textureCompression = TextureImporterCompression.Uncompressed;
+        textureImporter.alphaIsTransparency = true;
+        textureImporter.mipmapEnabled = false;
 
-          UnityEngine.Debug.Log($"已配置Aseprite图层精灵导入设置: {assetPath}");
-      }
-  }
-  
-  // 添加后处理方法，确保不会破坏现有引用
-  void OnPostprocessSprites(Texture2D texture, Sprite[] sprites)
-  {
-      string targetPath = AsepriteAutoSync.TargetPath;
-      
-      if (assetPath.EndsWith(".png") && assetPath.StartsWith(targetPath))
-      {
-          // 这里我们可以进一步处理精灵，如果需要的话
-          // 例如，可以保留或修改精灵的名称等
-          
-          UnityEngine.Debug.Log($"已完成精灵处理: {assetPath}, 精灵数量: {sprites.Length}");
-      }
-  }
+        // 确保设置被应用
+        EditorUtility.SetDirty(textureImporter);
+
+        UnityEngine.Debug.Log($"已配置Aseprite图层精灵导入设置: {assetPath}, PixelsPerUnit: {textureImporter.spritePixelsPerUnit}");
+    }
+
+    // 添加后处理方法，确保不会破坏现有引用
+    void OnPostprocessSprites(Texture2D texture, Sprite[] sprites)
+    {
+        float pixelsPerUnit;
+        if (!IsAsepriteExportedFile(out pixelsPerUnit))
+            return;
+            
+        TextureImporter textureImporter = (TextureImporter)assetImporter;
+        UnityEngine.Debug.Log($"已完成精灵处理: {assetPath}, 精灵数量: {sprites.Length}, 最终PPU: {textureImporter.spritePixelsPerUnit}");
+        
+        // 处理完成后从列表中移除
+        string normalizedPath = assetPath.Replace('\\', '/');
+        currentProcessingFiles.Remove(normalizedPath);
+    }
 }

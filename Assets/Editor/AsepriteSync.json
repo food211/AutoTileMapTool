@@ -1,9 +1,11 @@
 {
-    "externalFilePath": "D:/image/2022/同人/ProjectC/Tile/foliage_output/foliage.aseprite",
-    "unityTargetPath": "Assets/Resources/Images/Foliage/foliage_import",
+    "externalFilePath": "D:/image/2022/同人/ProjectC/Tile/GameUi.aseprite",
+    "unityTargetPath": "Assets/Resources/Images/GameUI",
     "asepritePath": "E:/steam_d/steamapps/common/Aseprite/Aseprite.exe",
     "autoSync": false,
     "checkInterval": 300.0,
+    "defaultPixelsPerUnit": 16.0,
+    "includeHiddenLayers": false,
     "trackedFilesList": [
         {
             "filePath": "D:/image/2022/同人/ProjectC/Tile/foliage_output/foliage.aseprite",
@@ -27,7 +29,23 @@
                 "TreeTrunk_1",
                 "TreeTrunk_2",
                 "TreeTrunk_3"
-            ]
+            ],
+            "outputPath": "Assets/Resources/Images/Foliage/foliage_import",
+            "pixelsPerUnit": 16.0,
+            "includeHiddenLayers": false
+        },
+        {
+            "filePath": "D:/image/2022/同人/ProjectC/Tile/GameUi.aseprite",
+            "lastModified": -8584489663754235442,
+            "exportedLayers": [
+                "gameui_heart",
+                "gameui_noheart",
+                "gameui_sheildheart",
+                "gameui_x"
+            ],
+            "outputPath": "Assets/Resources/Images/GameUI",
+            "pixelsPerUnit": 16.0,
+            "includeHiddenLayers": false
         }
     ]
 }
