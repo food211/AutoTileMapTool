@@ -10,6 +10,7 @@ public class GameUI_HealthManagerEditor : Editor
         DrawDefaultInspector();
         
         GameUI_HealthManager healthManager = (GameUI_HealthManager)target;
+        var player = FindObjectOfType<PlayerHealthManager>();
         
         EditorGUILayout.Space();
         EditorGUILayout.LabelField("测试功能", EditorStyles.boldLabel);
@@ -26,9 +27,7 @@ public class GameUI_HealthManagerEditor : Editor
             
             if (GUILayout.Button("恢复 +1"))
             {
-                // 这里需要获取当前玩家的生命值
-                // 由于我们没有直接访问PlayerHealthManager的方法，可以通过事件系统触发
-                var player = FindObjectOfType<PlayerHealthManager>();
+                // 这里需要获取当前玩家的生命值               
                 if (player != null)
                 {
                     player.Heal(1);
@@ -41,12 +40,12 @@ public class GameUI_HealthManagerEditor : Editor
             
             if (GUILayout.Button("添加护盾"))
             {
-                healthManager.SetShieldHealth(1);
+                player.AddShield(1);
             }
             
             if (GUILayout.Button("移除护盾"))
             {
-                healthManager.SetShieldHealth(0);
+                player.RemoveShield(1);
             }
             
             EditorGUILayout.EndHorizontal();

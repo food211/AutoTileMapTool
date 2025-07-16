@@ -11,14 +11,23 @@ public class PlayerHealthManager : MonoBehaviour
     [Header("生命值设置")]
     [SerializeField] public int maxHealth = 5;
     [SerializeField] public int currentHealth;
+
+    [Header("护盾设置")]
+    [SerializeField] private int maxShield = 5; // 最大护盾值
+    [SerializeField] private int currentShield; // 当前护盾值
     
     [Header("无敌时间")]
     [SerializeField] private float invincibilityDuration = 1.5f; // 受伤后的无敌时间
     [SerializeField] private float respawnInvincibilityDuration = 3.0f; // 重生后的无敌时间
+
+    [Header("生命值限制设置")]
+    [SerializeField] private int maxHealthLimit; // 临时最大生命值限制
+    private Coroutine healthLimitCoroutine; // 用于跟踪生命值限制的协程
     
     [Header("视觉效果")]
     [SerializeField] private SpriteRenderer playerRenderer;
     [SerializeField] private Color damageFlashColor = Color.red;
+    [SerializeField] private Color shieldDamageColor = new Color(0.3f, 0.6f, 1f); // 护盾受伤闪烁颜色
     [SerializeField] private float flashDuration = 0.1f;
     
     [Header("相机震动")]
@@ -40,7 +49,9 @@ public class PlayerHealthManager : MonoBehaviour
     private bool isInvincible = false; // 是否处于无敌状态
     private bool isRespawning = false; // 标记玩家是否正在重生
     private int lastReportedHealth; // 用于跟踪上次报告的健康值
+    private int lastReportedShield; // 用于跟踪上次报告的护盾值
     private bool isProcessingHealthChange = false; // 防止循环触发
+    public bool debugmode = false; // 调试模式开关
 
     private void Awake()
     {
@@ -56,9 +67,9 @@ public class PlayerHealthManager : MonoBehaviour
     {
         UnsubscribeFromEvents();
     }
-    
+
     #region 初始化方法
-    
+
     /// <summary>
     /// 初始化组件和变量
     /// </summary>
@@ -67,11 +78,18 @@ public class PlayerHealthManager : MonoBehaviour
         // 初始化生命值
         currentHealth = maxHealth;
         lastReportedHealth = currentHealth;
-        
+        maxHealthLimit = maxHealth; // 初始化最大生命值限制为最大生命值
+
+        // 初始化护盾值
+        currentShield = 0; // 默认开始时没有护盾
+        lastReportedShield = currentShield;
+        // 确保最大护盾不超过最大生命值
+        maxShield = Mathf.Min(maxShield, maxHealth);
+
         // 获取组件引用
         if (statusManager == null)
             statusManager = GetComponent<StatusManager>();
-            
+
         if (playerRenderer == null)
             playerRenderer = GetComponent<SpriteRenderer>();
 
@@ -88,31 +106,33 @@ public class PlayerHealthManager : MonoBehaviour
         // 保存初始位置
         initialPosition = transform.position;
     }
-    
+
     /// <summary>
     /// 订阅事件
     /// </summary>
     private void SubscribeToEvents()
     {
-        GameEvents.OnPlayerDamaged += TakeDamage;
-        GameEvents.OnPlayerRespawn += RespawnPlayer;
-        GameEvents.OnPlayerHealthChanged += HandleHealthChanged;
+        OnPlayerDamaged += TakeDamage;
+        OnPlayerRespawn += RespawnPlayer;
+        OnPlayerHealthChanged += HandleHealthChanged;
+        OnPlayerShieldChanged += HandleShieldChanged;
     }
-    
+
     /// <summary>
     /// 取消订阅事件
     /// </summary>
     private void UnsubscribeFromEvents()
     {
-        GameEvents.OnPlayerDamaged -= TakeDamage;
-        GameEvents.OnPlayerRespawn -= RespawnPlayer;
-        GameEvents.OnPlayerHealthChanged -= HandleHealthChanged;
+        OnPlayerDamaged -= TakeDamage;
+        OnPlayerRespawn -= RespawnPlayer;
+        OnPlayerHealthChanged -= HandleHealthChanged;
+        OnPlayerShieldChanged -= HandleShieldChanged;
     }
-    
+
     #endregion
-    
+
     #region 生命值管理
-    
+
     /// <summary>
     /// 受到伤害
     /// </summary>
@@ -123,19 +143,36 @@ public class PlayerHealthManager : MonoBehaviour
         if (IsInvincible() || isRespawning)
             return;
 
+        // 计算实际伤害和护盾吸收
+        int shieldDamage = Mathf.Min(currentShield, damage);
+        int healthDamage = damage - shieldDamage;
+
+        // 减少护盾值
+        if (shieldDamage > 0)
+        {
+            currentShield -= shieldDamage;
+
+            // 触发护盾变化事件
+            TriggerPlayerShieldChanged(currentShield, maxShield);
+            lastReportedShield = currentShield;
+        }
+
         // 减少生命值
         int previousHealth = currentHealth;
-        currentHealth = Mathf.Max(0, currentHealth - damage);
-        
+        if (healthDamage > 0)
+        {
+            currentHealth = Mathf.Max(0, currentHealth - healthDamage);
+
+            // 只有当实际扣除生命值时才应用相机震动
+            ApplyCameraShake(healthDamage);
+        }
+
         // 防止重复处理
         isProcessingHealthChange = true;
-        
+
         // 触发受伤事件
-        GameEvents.TriggerPlayerHealthChanged(currentHealth, maxHealth);
-        
-        // 应用相机震动
-        ApplyCameraShake(damage);
-        
+        TriggerPlayerHealthChanged(currentHealth, maxHealth);
+
         // 重置处理标志
         isProcessingHealthChange = false;
         lastReportedHealth = currentHealth;
@@ -150,9 +187,126 @@ public class PlayerHealthManager : MonoBehaviour
             // 播放受伤视觉效果后再进入无敌状态
             if (flashCoroutine != null)
                 StopCoroutine(flashCoroutine);
-                
-            flashCoroutine = StartCoroutine(DamageFlashThenInvincibility());
+
+            // 根据伤害类型选择闪烁效果
+            if (shieldDamage > 0 && healthDamage == 0)
+                flashCoroutine = StartCoroutine(ShieldDamageFlashThenInvincibility());
+            else
+                flashCoroutine = StartCoroutine(DamageFlashThenInvincibility());
         }
+    }
+    
+    private IEnumerator ShieldDamageFlashThenInvincibility()
+    {
+        // 先执行护盾伤害闪烁
+        yield return StartCoroutine(ShieldDamageFlashEffect());
+
+        // 闪烁完成后再进入无敌状态
+        SetInvincible(true);
+    }
+
+    private IEnumerator ShieldDamageFlashEffect()
+    {
+        if (playerRenderer == null) yield break;
+
+        // 设置为蓝色
+        playerRenderer.color = shieldDamageColor;
+
+        // 等待闪烁时间
+        yield return new WaitForSeconds(flashDuration);
+
+        // 恢复原始颜色
+        playerRenderer.color = originalColor;
+    }
+
+    /// <summary>
+    /// 临时限制最大生命值
+    /// </summary>
+    /// <param name="limit">生命值上限</param>
+    /// <param name="duration">限制持续时间（秒）</param>
+    public void LimitMaxHealth(int limit, float duration)
+    {
+        // 确保限制在合理范围内
+        int newLimit = Mathf.Clamp(limit, 1, maxHealth);
+
+        // 如果已经有一个限制协程在运行，先停止它
+        if (healthLimitCoroutine != null)
+        {
+            StopCoroutine(healthLimitCoroutine);
+        }
+
+        // 保存当前的最大生命值限制
+        int previousLimit = maxHealthLimit;
+        maxHealthLimit = newLimit;
+
+        // 如果当前生命值超过新的限制，则减少生命值
+        if (currentHealth > maxHealthLimit)
+        {
+            SetHealth(maxHealthLimit);
+        }
+
+        // 触发生命值上限变化事件
+        TriggerPlayerMaxHealthLimitChanged(maxHealthLimit, maxHealth);
+
+        // 开始计时协程
+        healthLimitCoroutine = StartCoroutine(ResetMaxHealthLimitAfterDelay(duration));
+
+#if UNITY_EDITOR
+        if (debugmode)
+            Debug.LogFormat($"临时限制最大生命值: {previousLimit} -> {maxHealthLimit}, 持续 {duration} 秒");
+            #endif
+    }
+
+    /// <summary>
+    /// 重置最大生命值限制的协程
+    /// </summary>
+    private IEnumerator ResetMaxHealthLimitAfterDelay(float delay)
+    {
+        // 等待指定的时间
+        yield return new WaitForSeconds(delay);
+
+        // 重置最大生命值限制
+        int previousLimit = maxHealthLimit;
+        maxHealthLimit = maxHealth;
+
+        // 触发生命值上限变化事件
+        TriggerPlayerMaxHealthLimitChanged(maxHealthLimit, maxHealth);
+
+        // 清除协程引用
+        healthLimitCoroutine = null;
+#if UNITY_EDITOR
+        if (debugmode)
+        {
+            Debug.LogFormat($"最大生命值限制已解除: {previousLimit} -> {maxHealthLimit}");
+        }
+#endif
+    }
+
+    /// <summary>
+    /// 立即重置最大生命值限制
+    /// </summary>
+    public void ResetMaxHealthLimit()
+    {
+        // 如果有限制协程在运行，停止它
+        if (healthLimitCoroutine != null)
+        {
+            StopCoroutine(healthLimitCoroutine);
+            healthLimitCoroutine = null;
+        }
+
+        // 重置最大生命值限制
+        int previousLimit = maxHealthLimit;
+        maxHealthLimit = maxHealth;
+
+        // 触发生命值上限变化事件
+        TriggerPlayerMaxHealthLimitChanged(maxHealthLimit, maxHealth);
+
+#if UNITY_EDITOR
+        if (debugmode)
+        {
+            Debug.LogFormat($"最大生命值限制已手动解除: {previousLimit} -> {maxHealthLimit}");
+        }
+        #endif
     }
     
     /// <summary>
@@ -163,28 +317,77 @@ public class PlayerHealthManager : MonoBehaviour
         // 如果是自己触发的事件，则忽略
         if (isProcessingHealthChange)
             return;
-            
+
         // 如果血量减少了
         if (newHealth < lastReportedHealth && !isRespawning)
         {
             int healthLoss = lastReportedHealth - newHealth;
-            
+
             // 应用相机震动
             ApplyCameraShake(healthLoss);
-            
+
             // 如果不是死亡，播放受伤效果
             if (newHealth > 0)
             {
                 if (flashCoroutine != null)
                     StopCoroutine(flashCoroutine);
-                    
+
                 flashCoroutine = StartCoroutine(DamageFlashEffect());
             }
         }
-        
+
         // 更新上次报告的健康值
         lastReportedHealth = newHealth;
         currentHealth = newHealth; // 确保内部状态一致
+    }
+
+    /// <summary>
+    /// 处理护盾值变化事件
+    /// </summary>
+    /// <param name="newShield">新的护盾值</param>
+    /// <param name="maxShield">最大护盾值</param>
+    private void HandleShieldChanged(int newShield, int maxShield)
+    {
+        // 如果是自己触发的事件，则忽略（防止循环触发）
+        if (isProcessingHealthChange)
+            return;
+
+        // 保存旧的护盾值用于比较
+        int previousShield = currentShield;
+
+        // 更新内部护盾值
+        currentShield = newShield;
+
+        // 如果最大护盾值发生变化
+        if (this.maxShield != maxShield)
+        {
+            // 更新最大护盾值，但确保不超过最大生命值
+            this.maxShield = Mathf.Min(maxShield, maxHealth);
+        }
+
+        // 如果护盾值减少了（受到伤害）
+        if (newShield < previousShield)
+        {
+            // 播放护盾受损视觉效果
+            if (flashCoroutine != null)
+                StopCoroutine(flashCoroutine);
+
+            flashCoroutine = StartCoroutine(ShieldDamageFlashEffect());
+        }
+        // 如果护盾值增加了（获得护盾）
+        else if (newShield > previousShield)
+        {
+            // 播放获得护盾视觉效果
+            StartCoroutine(ShieldAddedVisualEffect());
+        }
+
+        // 更新上次报告的护盾值
+        lastReportedShield = newShield;
+
+#if UNITY_EDITOR
+        if (debugmode)
+            Debug.LogFormat("护盾值更新: {0} -> {1} / {2}", previousShield, newShield, this.maxShield);
+#endif
     }
     
     /// <summary>
@@ -194,39 +397,40 @@ public class PlayerHealthManager : MonoBehaviour
     {
         // 计算血量损失的百分比（相对于最大生命值）
         float healthLossPercent = (float)damage / maxHealth;
-        
+
         // 限制震动强度在设定范围内
         float shakeIntensity = Mathf.Clamp(healthLossPercent, minShakeIntensity, maxShakeIntensity);
-        
+
         // 相机震动
-        GameEvents.TriggerCameraShake(shakeIntensity);
-        
-        #if UNITY_EDITOR
-        Debug.LogFormat("血量变化: -{0}, 当前血量: {1}/{2}, 震动强度: {3:F2}",
-            damage, currentHealth, maxHealth, shakeIntensity);
-        #endif
+        TriggerCameraShake(shakeIntensity);
+
+#if UNITY_EDITOR
+        if (debugmode)
+            Debug.LogFormat("血量变化: -{0}, 当前血量: {1}/{2}, 震动强度: {3:F2}",
+                damage, currentHealth, maxHealth, shakeIntensity);
+#endif
     }
-    
+
     /// <summary>
     /// 恢复生命值
     /// </summary>
     /// <param name="amount">恢复量</param>
     public void Heal(int amount)
     {
-        // 增加生命值，但不超过最大值
+        // 增加生命值，但不超过最大值限制
         int previousHealth = currentHealth;
-        currentHealth = Mathf.Min(maxHealth, currentHealth + amount);
-        
+        currentHealth = Mathf.Min(maxHealthLimit, currentHealth + amount);
+
         // 如果生命值没有变化，直接返回
         if (previousHealth == currentHealth)
             return;
-            
+
         // 防止重复处理
         isProcessingHealthChange = true;
-        
+
         // 触发生命值变化事件
-        GameEvents.TriggerPlayerHealthChanged(currentHealth, maxHealth);
-        
+        TriggerPlayerHealthChanged(currentHealth, maxHealth);
+
         // 重置处理标志
         isProcessingHealthChange = false;
         lastReportedHealth = currentHealth;
@@ -245,41 +449,48 @@ public class PlayerHealthManager : MonoBehaviour
     {
         Heal(maxHealth - currentHealth);
     }
-    
+
     /// <summary>
     /// 设置当前生命值
     /// </summary>
     public void SetHealth(int health)
     {
         int previousHealth = currentHealth;
-        currentHealth = Mathf.Clamp(health, 0, maxHealth);
-        
+        // 使用maxHealthLimit而不是maxHealth作为上限
+        currentHealth = Mathf.Clamp(health, 0, maxHealthLimit);
+
         // 如果生命值没有变化，直接返回
         if (previousHealth == currentHealth)
             return;
-            
+
         // 防止重复处理
         isProcessingHealthChange = true;
-        
+
         // 触发生命值变化事件
-        GameEvents.TriggerPlayerHealthChanged(currentHealth, maxHealth);
-        
+        TriggerPlayerHealthChanged(currentHealth, maxHealth);
+
         // 重置处理标志
         isProcessingHealthChange = false;
         lastReportedHealth = currentHealth;
     }
-    
+
     /// <summary>
     /// 设置最大生命值
     /// </summary>
     public void SetMaxHealth(int health)
     {
         maxHealth = Mathf.Max(1, health);
-        
+
         // 如果当前生命值超过最大值，调整为最大值
         if (currentHealth > maxHealth)
         {
             SetHealth(maxHealth);
+        }
+
+        // 确保最大护盾不超过最大生命值
+        if (maxShield > maxHealth)
+        {
+            SetMaxShield(maxHealth);
         }
     }
     
@@ -300,9 +511,130 @@ public class PlayerHealthManager : MonoBehaviour
     }
     
     #endregion
+    #region 护盾管理
+
+/// <summary>
+/// 添加护盾
+/// </summary>
+/// <param name="amount">护盾量</param>
+public void AddShield(int amount)
+{
+    if (amount <= 0) return;
     
+    int previousShield = currentShield;
+    // 确保不超过最大护盾值和最大生命值
+    currentShield = Mathf.Min(maxShield, currentShield + amount);
+    
+    // 如果护盾值没有变化，直接返回
+    if (previousShield == currentShield)
+        return;
+        
+    // 触发护盾变化事件
+    TriggerPlayerShieldChanged(currentShield, maxShield);
+    lastReportedShield = currentShield;
+    
+    // 播放获得护盾的视觉效果
+    StartCoroutine(ShieldAddedVisualEffect());
+}
+
+/// <summary>
+/// 移除护盾
+/// </summary>
+/// <param name="amount">移除量</param>
+public void RemoveShield(int amount)
+{
+    if (amount <= 0) return;
+    
+    int previousShield = currentShield;
+    currentShield = Mathf.Max(0, currentShield - amount);
+    
+    // 如果护盾值没有变化，直接返回
+    if (previousShield == currentShield)
+        return;
+        
+    // 触发护盾变化事件
+    TriggerPlayerShieldChanged(currentShield, maxShield);
+    lastReportedShield = currentShield;
+}
+
+/// <summary>
+/// 设置护盾值
+/// </summary>
+/// <param name="shield">护盾值</param>
+public void SetShield(int shield)
+{
+    int previousShield = currentShield;
+    currentShield = Mathf.Clamp(shield, 0, maxShield);
+    
+    // 如果护盾值没有变化，直接返回
+    if (previousShield == currentShield)
+        return;
+        
+    // 触发护盾变化事件
+    TriggerPlayerShieldChanged(currentShield, maxShield);
+    lastReportedShield = currentShield;
+}
+
+/// <summary>
+/// 设置最大护盾值
+/// </summary>
+/// <param name="shield">最大护盾值</param>
+public void SetMaxShield(int shield)
+{
+    // 确保最大护盾不超过最大生命值
+    maxShield = Mathf.Min(Mathf.Max(0, shield), maxHealth);
+    
+    // 如果当前护盾值超过最大值，调整为最大值
+    if (currentShield > maxShield)
+    {
+        SetShield(maxShield);
+    }
+    else
+    {
+        // 触发护盾变化事件以更新UI
+        TriggerPlayerShieldChanged(currentShield, maxShield);
+    }
+}
+
+/// <summary>
+/// 获取当前护盾值
+/// </summary>
+public int GetCurrentShield()
+{
+    return currentShield;
+}
+
+/// <summary>
+/// 获取最大护盾值
+/// </summary>
+public int GetMaxShield()
+{
+    return maxShield;
+}
+
+/// <summary>
+/// 护盾添加的视觉效果
+/// </summary>
+private IEnumerator ShieldAddedVisualEffect()
+{
+    if (playerRenderer == null) yield break;
+    
+    // 保存原始颜色
+    Color originalColor = playerRenderer.color;
+    
+    // 设置为蓝色
+    playerRenderer.color = new Color(0.3f, 0.6f, 1f); // 蓝色
+    
+    // 等待闪烁时间
+    yield return new WaitForSeconds(flashDuration);
+    
+    // 恢复原始颜色
+    playerRenderer.color = originalColor;
+}
+
+    #endregion
     #region 无敌状态管理
-    
+
     /// <summary>
     /// 设置无敌状态
     /// </summary>
@@ -457,8 +789,8 @@ public class PlayerHealthManager : MonoBehaviour
     {
         if (statusManager == null) return false;
         
-        return statusManager.IsInState(GameEvents.PlayerState.Electrified) || 
-               statusManager.IsInState(GameEvents.PlayerState.Paralyzed);
+        return statusManager.IsInState(PlayerState.Electrified) || 
+               statusManager.IsInState(PlayerState.Paralyzed);
     }
     
     /// <summary>
@@ -490,9 +822,10 @@ public class PlayerHealthManager : MonoBehaviour
     /// </summary>
     private void Die()
     {
+        // 清空护盾
+        SetShield(0);
         // 触发玩家死亡事件
-        GameEvents.TriggerPlayerDied();
-            
+        TriggerPlayerDied();
         // 播放死亡动画或效果
         StartCoroutine(DeathSequence());
     }
@@ -523,7 +856,8 @@ public class PlayerHealthManager : MonoBehaviour
         Die();
 
 #if UNITY_EDITOR
-        Debug.Log("玩家被立即杀死");
+if (debugmode)
+        Debug.LogFormat("玩家被立即杀死");
 #endif
     }
 
@@ -560,7 +894,7 @@ public class PlayerHealthManager : MonoBehaviour
         yield return new WaitForSeconds(0.5f);
         
         // 触发重生事件
-        GameEvents.TriggerPlayerRespawn();
+        TriggerPlayerRespawn();
     }
     
     /// <summary>
@@ -571,7 +905,7 @@ public class PlayerHealthManager : MonoBehaviour
         // 开始重生序列
         StartCoroutine(RespawnSequence());
     }
-    
+
     /// <summary>
     /// 重生序列
     /// </summary>
@@ -579,43 +913,47 @@ public class PlayerHealthManager : MonoBehaviour
     {
         // 设置重生标志
         isRespawning = true;
-        
+
         // 确保玩家不可见
         SetSpriteAlpha(0f);
-            
+
         // 等待短暂延迟
         yield return new WaitForSeconds(respawnDelay);
-        
+
         // 确定重生位置并重置玩家
         Vector3 respawnPosition = GetRespawnPosition();
         ResetPlayerState(respawnPosition);
-        
+
         // 等待短暂时间
         yield return new WaitForSeconds(0.5f);
-        
+
         // 淡入效果
         yield return StartCoroutine(FadeInPlayer());
-        
+
         // 设置无敌状态
         SetInvincible(true, respawnInvincibilityDuration);
-        
+
         // 给玩家控制器也设置无敌状态
         if (playerController != null)
         {
             playerController.SetInvincible(true, respawnInvincibilityDuration);
             playerController.SetPlayerInput(true); // 重新启用玩家输入
         }
-   
+
         // 触发状态重置事件
-        GameEvents.TriggerPlayerStateChanged(GameEvents.PlayerState.Normal);
-        
+        TriggerPlayerStateChanged(PlayerState.Normal);
+
         // 重生完成，取消重生标志
         isRespawning = false;
-        
+
         // 触发重生完成事件
-        GameEvents.TriggerPlayerRespawnCompleted();
-        
-        Debug.Log($"玩家在位置 {respawnPosition} 重生");
+        TriggerPlayerRespawnCompleted();
+#if UNITY_EDITOR
+        if (debugmode)
+        {
+            Debug.LogFormat("玩家重生完成，位置: {0}", respawnPosition);
+        } 
+        #endif  
     }
     
     /// <summary>
@@ -643,7 +981,7 @@ public class PlayerHealthManager : MonoBehaviour
         Debug.LogWarning("没有找到CheckpointManager，使用初始位置作为重生点");
         return initialPosition;
     }
-    
+
     /// <summary>
     /// 重置玩家状态
     /// </summary>
@@ -651,7 +989,7 @@ public class PlayerHealthManager : MonoBehaviour
     {
         // 重置玩家位置
         transform.position = position;
-        
+
         // 重置物理状态
         Rigidbody2D rb = GetComponent<Rigidbody2D>();
         if (rb != null)
@@ -659,15 +997,17 @@ public class PlayerHealthManager : MonoBehaviour
             rb.velocity = Vector2.zero;
             rb.angularVelocity = 0f;
         }
-        
+
         // 如果绳索系统处于活跃状态，释放绳索
-        GameEvents.TriggerRopeReleased();
-        
+        TriggerRopeReleased();
+
         // 恢复生命值（如果没有通过存档点恢复）
         if (currentHealth <= 0)
         {
             SetHealth(maxHealth);
         }
+        // 重置护盾
+        SetShield(0);
     }
     
     /// <summary>

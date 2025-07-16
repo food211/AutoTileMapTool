@@ -302,7 +302,7 @@ public static class GameEvents
     {
         OnRopeElectrifiedEnd?.Invoke();
     }
-    
+
     #region 故事模式相关事件
     // 故事模式相关事件
     public static event System.Action<bool, float> OnStoryModeChanged; // true=进入故事模式，false=退出故事模式
@@ -326,4 +326,30 @@ public static class GameEvents
     }
     #endregion
 
+    #region 护盾相关事件
+    // 护盾变化事件委托
+    public delegate void PlayerShieldChangedEvent(int currentShield, int maxShield);
+
+    // 护盾变化事件
+    public static event PlayerShieldChangedEvent OnPlayerShieldChanged;
+
+    // 触发护盾变化事件
+    public static void TriggerPlayerShieldChanged(int currentShield, int maxShield)
+    {
+        OnPlayerShieldChanged?.Invoke(currentShield, maxShield);
+    }
+    #endregion
+    #region 最大生命值限制变化事件
+    // 最大生命值限制变化事件委托
+    public delegate void PlayerMaxHealthLimitChangedEvent(int maxHealthLimit, int maxHealth);
+
+    // 最大生命值限制变化事件
+    public static event PlayerMaxHealthLimitChangedEvent OnPlayerMaxHealthLimitChanged;
+
+    // 触发最大生命值限制变化事件
+    public static void TriggerPlayerMaxHealthLimitChanged(int maxHealthLimit, int maxHealth)
+    {
+        OnPlayerMaxHealthLimitChanged?.Invoke(maxHealthLimit, maxHealth);
+    }
+#endregion
 }

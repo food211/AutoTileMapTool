@@ -613,10 +613,14 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   maxHealth: 5
   currentHealth: 0
+  maxShield: 5
+  currentShield: 0
   invincibilityDuration: 1.5
   respawnInvincibilityDuration: 1.5
+  maxHealthLimit: 0
   playerRenderer: {fileID: 4060904137555431898}
   damageFlashColor: {r: 1, g: 0, b: 0, a: 1}
+  shieldDamageColor: {r: 0.3, g: 0.6, b: 1, a: 1}
   flashDuration: 0.1
   minShakeIntensity: 0.1
   maxShakeIntensity: 0.3
@@ -625,6 +629,7 @@ MonoBehaviour:
   arrow: {fileID: 9072072273875727217}
   checkpointManager: {fileID: 0}
   respawnDelay: 0.1
+  debugmode: 0
 --- !u!114 &3156414638838583058
 MonoBehaviour:
   m_ObjectHideFlags: 0
