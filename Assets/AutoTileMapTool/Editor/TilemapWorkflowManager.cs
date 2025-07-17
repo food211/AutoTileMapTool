@@ -5,6 +5,7 @@ using UnityEngine.Tilemaps;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using UnityEditor.SceneManagement;
 
 namespace TilemapTools
 {
@@ -813,6 +814,7 @@ namespace TilemapTools
         }
 
         // 在 ExecuteAutomatedWorkflow 方法中，修改生成调色板后的代码部分
+        // 在 ExecuteAutomatedWorkflow 方法中，修改生成调色板后的代码部分
         private void ExecuteAutomatedWorkflow(
             bool preserveGuids,
             Texture2D sourceTexture,
@@ -884,8 +886,23 @@ namespace TilemapTools
                     GameObject inputPalette = AssetDatabase.LoadAssetAtPath<GameObject>(inputPalettePath);
                     if (inputPalette != null)
                     {
+                        // 关闭当前打开的任何Tile Palette窗口，避免冲突
+                        CloseTilePaletteWindow();
+
+                        // 标记资产为已修改
                         EditorUtility.SetDirty(inputPalette);
+
+                        // 保存资产前先保存场景，避免冲突
+                        if (EditorSceneManager.GetActiveScene().isDirty)
+                        {
+                            EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo();
+                        }
+
+                        // 保存资产
                         AssetDatabase.SaveAssets();
+
+                        // 再次刷新确保变更被应用
+                        AssetDatabase.Refresh();
                     }
                     else
                     {
@@ -926,14 +943,23 @@ namespace TilemapTools
                             GameObject outputPalette = AssetDatabase.LoadAssetAtPath<GameObject>(outputPalettePath);
                             if (outputPalette != null)
                             {
+                                // 标记资产为已修改
                                 EditorUtility.SetDirty(outputPalette);
+
+                                // 保存资产
                                 AssetDatabase.SaveAssets();
+
+                                // 再次刷新确保变更被应用
+                                AssetDatabase.Refresh();
                             }
                         }
                     }
+
+                    // 在完成所有调色板生成后等待一小段时间，确保资产完全保存
+                    System.Threading.Thread.Sleep(500);
                 }
 
-                // 步骤2：创建规则
+                // 步骤2：创建规则 - 确保在调色板完全保存后进行
                 if (automatedExtractRules && !string.IsNullOrEmpty(inputPalettePath))
                 {
                     EditorUtility.DisplayProgressBar(
@@ -970,13 +996,13 @@ namespace TilemapTools
                     // 再次刷新确保调色板资产被正确加载
                     AssetDatabase.Refresh();
 
-                    // 加载调色板
-                    GameObject inputPalette = AssetDatabase.LoadAssetAtPath<GameObject>(inputPalettePath);
+                    // 加载调色板 - 使用 LoadMainAssetAtPath 确保加载完整资产
+                    GameObject inputPalette = AssetDatabase.LoadMainAssetAtPath(inputPalettePath) as GameObject;
                     GameObject outputPalette = null;
 
                     if (!string.IsNullOrEmpty(outputPalettePath))
                     {
-                        outputPalette = AssetDatabase.LoadAssetAtPath<GameObject>(outputPalettePath);
+                        outputPalette = AssetDatabase.LoadMainAssetAtPath(outputPalettePath) as GameObject;
                     }
 
                     if (inputPalette != null)
@@ -1088,11 +1114,38 @@ namespace TilemapTools
                 }
 
                 Debug.LogException(e);
+
+                // 显示错误对话框
+                EditorUtility.DisplayDialog(
+                    GetLocalizedText("error"),
+                    e.Message,
+                    GetLocalizedText("ok"));
             }
             finally
             {
                 EditorUtility.ClearProgressBar();
                 IsAutomatedWorkflow = false;
+            }
+        }
+
+        // 添加一个关闭Tile Palette窗口的方法，避免冲突
+        private void CloseTilePaletteWindow()
+        {
+            // 尝试查找并关闭Tile Palette窗口
+            System.Type gridPaintPaletteWindowType = System.Type.GetType("UnityEditor.GridPaintPaletteWindow,UnityEditor");
+            if (gridPaintPaletteWindowType != null)
+            {
+                // 获取所有打开的窗口
+                UnityEngine.Object[] windows = Resources.FindObjectsOfTypeAll(gridPaintPaletteWindowType);
+                foreach (var window in windows)
+                {
+                    // 调用Close方法关闭窗口
+                    var closeMethod = gridPaintPaletteWindowType.GetMethod("Close");
+                    if (closeMethod != null)
+                    {
+                        closeMethod.Invoke(window, null);
+                    }
+                }
             }
         }
 

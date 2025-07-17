@@ -174,6 +174,8 @@ namespace TilemapTools
                 {"asepriteCliError", "Error executing Aseprite CLI: {0}"},
                 {"selectImageFile", "Please select an image file (PNG/JPG)"},
                 {"selectTextureFirst", "Please select a texture asset first"},
+                {"unslicedPixelsMessageWithFileName", "Some areas of the texture '{0}' ({1}) are not covered by any sprite. This may result in incomplete tile palette.\n\nDo you want to continue anyway?"},
+
             };
             localizedTexts["en"] = enTexts;
 
@@ -292,6 +294,7 @@ namespace TilemapTools
                 {"asepriteCliError", "执行Aseprite CLI时出错：{0}"},
                 {"selectImageFile", "请选择一个图片文件（PNG/JPG）"},
                 {"selectTextureFirst", "请先选择一个纹理资源"},
+                {"unslicedPixelsMessageWithFileName", "纹理 '{0}' ({1}) 的某些区域没有被任何精灵覆盖。这可能导致生成的调色板不完整。\n\n是否仍要继续？"},
             };
             localizedTexts["zh-CN"] = zhTexts;
         }
