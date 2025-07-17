@@ -499,7 +499,7 @@ namespace TilemapTools
                         BoundsInt ruleBounds = FindRuleBoundsStatic(x, y, inputBounds, inputTilemap);
 
                         // 打印找到的规则边界
-                        Debug.Log($"找到规则区块: min=({ruleBounds.min.x}, {ruleBounds.min.y}), 大小={ruleBounds.size.x}x{ruleBounds.size.y}");
+                        // Debug.Log($"找到规则区块: min=({ruleBounds.min.x}, {ruleBounds.min.y}), 大小={ruleBounds.size.x}x{ruleBounds.size.y}");
 
                         // 标记该区域为已访问
                         for (int ry = ruleBounds.min.y; ry < ruleBounds.max.y; ry++)
