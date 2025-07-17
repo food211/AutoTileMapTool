@@ -9,9 +9,11 @@ Write-Host "Options:" -ForegroundColor Cyan
 Write-Host "0. Initialize subtree (first time setup)" -ForegroundColor Cyan
 Write-Host "1. Pull remote changes first (recommended)" -ForegroundColor Cyan
 Write-Host "2. Push directly (may fail if remote has changes)" -ForegroundColor Cyan
-Write-Host "3. Cancel operation" -ForegroundColor Cyan
+Write-Host "3. Compressed push (reduces history, faster)" -ForegroundColor Cyan
+Write-Host "4. Direct snapshot push (fastest)" -ForegroundColor Cyan
+Write-Host "5. Cancel operation" -ForegroundColor Cyan
 
-$OPTION = Read-Host "Select option (0-3)"
+$OPTION = Read-Host "Select option (0-5)"
 
 if ($OPTION -eq "0") {
     # 初始化 subtree 关系
@@ -106,6 +108,114 @@ elseif ($OPTION -eq "2") {
     }
     else {
         Write-Host "Operation cancelled." -ForegroundColor Yellow
+    }
+}
+elseif ($OPTION -eq "3") {
+    # 压缩推送（使用split+merge方式）
+    Write-Host "WARNING: Compressed push will create a new commit with current state only." -ForegroundColor Yellow
+    Write-Host "Previous history in the plugin repo will be preserved but not connected to this push." -ForegroundColor Yellow
+    $CONTINUE = Read-Host "Continue with compressed push? (Y/N)"
+    
+    if ($CONTINUE -eq "Y" -or $CONTINUE -eq "y") {
+        # 获取当前分支
+        $currentBranch = git rev-parse --abbrev-ref HEAD
+        
+        # 创建临时分支来存储当前子树内容
+        $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
+        $tempBranch = "temp_plugin_$timestamp"
+        
+        Write-Host "Creating temporary branch for plugin content..." -ForegroundColor Yellow
+        git checkout -b $tempBranch
+        
+        # 删除除了插件目录外的所有内容
+        Write-Host "Isolating plugin content..." -ForegroundColor Yellow
+        Get-ChildItem -Path . -Exclude "Assets" | Remove-Item -Recurse -Force
+        Get-ChildItem -Path "Assets" -Exclude "AutoTileMapTool" | Remove-Item -Recurse -Force
+        
+        # 移动插件内容到根目录
+        Write-Host "Preparing content for push..." -ForegroundColor Yellow
+        Move-Item -Path "Assets/AutoTileMapTool/*" -Destination "."
+        Remove-Item -Path "Assets" -Recurse -Force
+        
+        # 添加所有更改并提交
+        git add -A
+        git commit -m "Compressed plugin update $(Get-Date -Format 'yyyy-MM-dd')"
+        
+        # 推送到插件仓库
+        Write-Host "Pushing compressed content to plugin repository..." -ForegroundColor Yellow
+        git push plugin-repo $tempBranch:main --force
+        
+        # 检查推送结果
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "Compressed push successful! Plugin has been updated on GitHub." -ForegroundColor Green
+        } 
+        else {
+            Write-Host "Error during compressed push. Please check the log above." -ForegroundColor Red
+        }
+        
+        # 返回原始分支并删除临时分支
+        Write-Host "Cleaning up..." -ForegroundColor Yellow
+        git checkout $currentBranch
+        git branch -D $tempBranch
+    }
+    else {
+        Write-Host "Compressed push operation cancelled." -ForegroundColor Yellow
+    }
+}
+elseif ($OPTION -eq "4") {
+    # 直接快照推送（最快）
+    Write-Host "WARNING: Direct snapshot push will replace the remote repository content." -ForegroundColor Yellow
+    Write-Host "All remote history will be lost. This is the fastest method but most destructive." -ForegroundColor Yellow
+    $CONTINUE = Read-Host "Continue with direct snapshot push? (Y/N)"
+    
+    if ($CONTINUE -eq "Y" -or $CONTINUE -eq "y") {
+        # 创建临时目录
+        $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
+        $tempDir = "temp_plugin_$timestamp"
+        
+        Write-Host "Creating temporary directory for plugin content..." -ForegroundColor Yellow
+        New-Item -ItemType Directory -Path $tempDir | Out-Null
+        
+        # 复制插件内容到临时目录
+        Write-Host "Copying plugin content..." -ForegroundColor Yellow
+        Copy-Item -Path "Assets/AutoTileMapTool/*" -Destination $tempDir -Recurse
+        
+        # 初始化临时Git仓库
+        Write-Host "Initializing temporary Git repository..." -ForegroundColor Yellow
+        Push-Location $tempDir
+        git init
+        
+        # 确保使用main作为默认分支
+        git checkout -b main
+        
+        git add -A
+        git commit -m "Snapshot update $(Get-Date -Format 'yyyy-MM-dd')"
+        
+        # 获取远程仓库URL
+        Pop-Location
+        $remoteUrl = git remote get-url plugin-repo
+        
+        # 推送到插件仓库
+        Write-Host "Pushing snapshot to plugin repository..." -ForegroundColor Yellow
+        Push-Location $tempDir
+        git remote add origin $remoteUrl
+        git push -f origin main
+        
+        # 检查推送结果
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "Direct snapshot push successful! Plugin has been updated on GitHub." -ForegroundColor Green
+        } 
+        else {
+            Write-Host "Error during direct snapshot push. Please check the log above." -ForegroundColor Red
+        }
+        
+        # 清理临时目录
+        Pop-Location
+        Write-Host "Cleaning up..." -ForegroundColor Yellow
+        Remove-Item -Path $tempDir -Recurse -Force
+    }
+    else {
+        Write-Host "Direct snapshot push operation cancelled." -ForegroundColor Yellow
     }
 }
 else {
