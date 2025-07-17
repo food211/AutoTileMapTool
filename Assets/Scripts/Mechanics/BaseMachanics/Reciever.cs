@@ -18,7 +18,7 @@ public class Reciever : MonoBehaviour, ISaveable
 
     [Header("接收器设置")]
     [SerializeField] protected ActivationType activationType = ActivationType.Toggle;
-    [SerializeField] private bool startActive = false;
+    [SerializeField] private bool startActive = false; // 接收器的初始激活状态，如果为true，则在Start时会自动激活所有行为
 
     [Header("行为组件")]
     [SerializeField] private MonoBehaviour[] actionComponents;

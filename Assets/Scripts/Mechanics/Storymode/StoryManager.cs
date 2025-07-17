@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Events;
 
-[AddComponentMenu("Mechanics/Story/Story Manager")]
+[AddComponentMenu("Mechanics/Storymode/StoryManager")]
 public class StoryManager : Reciever
 {
     [System.Serializable]
