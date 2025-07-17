@@ -30,6 +30,20 @@ namespace TilemapTools
         private Vector2 tileInfoScrollPosition;
         private Material highlightMaterial;
         private Dictionary<TileBase, Sprite> tileToSpriteMap = new Dictionary<TileBase, Sprite>();
+        // 添加录制相关字段
+        private bool isRecording = false;
+        private List<TilemapOperation> recordedOperations = new List<TilemapOperation>();
+        private string newRecordingName = "New Recording";
+        private List<SavedRecording> savedRecordings = new List<SavedRecording>();
+        private int selectedRecordingIndex = -1;
+        private bool isPlayingRecording = false;
+        private int currentOperationIndex = 0;
+        private double lastOperationTime = 0;
+
+        // 语言相关
+        private string languageCode;
+        private Vector2 scrollPositionRecordings;
+        private Dictionary<string, Dictionary<string, string>> localizedTexts;
 
         // 添加选择模式枚举
         private enum SelectionMode
@@ -107,15 +121,15 @@ namespace TilemapTools
 
         // 添加可序列化的Vector2Int结构
         [System.Serializable]
-        private struct SerializableVector2Int
+        public class SerializableVector2Int
         {
             public int x;
             public int y;
 
-            public SerializableVector2Int(Vector2Int v)
+            public SerializableVector2Int(Vector2Int vector)
             {
-                x = v.x;
-                y = v.y;
+                this.x = vector.x;
+                this.y = vector.y;
             }
         }
 
@@ -126,9 +140,404 @@ namespace TilemapTools
         // 保存选区的文件路径
         private string SaveFilePath => Path.Combine(Application.dataPath, "Editor", "TilemapSelections.json");
 
+
+        // 保存录制的文件路径
+        private string RecordingsFilePath => Path.Combine(Application.dataPath, "Editor", "TilemapRecordings.json");
+
+        // 操作类型枚举
+        private enum OperationType
+        {
+            SelectTile,
+            MoveTile,
+            ReplaceTile,
+            SelectArea
+        }
+
+        // 可序列化的操作基类
+        [System.Serializable]
+        private abstract class TilemapOperation
+        {
+            public OperationType operationType;
+            public float timeStamp; // 相对于录制开始的时间戳
+
+            public TilemapOperation(OperationType type)
+            {
+                operationType = type;
+                timeStamp = Time.realtimeSinceStartup;
+            }
+
+            public abstract void Execute(TilemapLayerTool tool);
+        }
+
+        // 选择瓦片操作
+        [System.Serializable]
+        private class SelectTileOperation : TilemapOperation
+        {
+            public List<SerializableVector2Int> selectedCells = new List<SerializableVector2Int>();
+
+            public SelectTileOperation() : base(OperationType.SelectTile) { }
+
+            public SelectTileOperation(HashSet<Vector2Int> cells) : base(OperationType.SelectTile)
+            {
+                foreach (Vector2Int cell in cells)
+                {
+                    selectedCells.Add(new SerializableVector2Int(cell));
+                }
+            }
+
+            public override void Execute(TilemapLayerTool tool)
+            {
+                tool.selectedCells.Clear();
+                foreach (SerializableVector2Int cell in selectedCells)
+                {
+                    tool.selectedCells.Add(new Vector2Int(cell.x, cell.y));
+                }
+                SceneView.RepaintAll();
+            }
+        }
+
+        // 移动瓦片操作
+        [System.Serializable]
+        private class MoveTileOperation : TilemapOperation
+        {
+            public List<SerializableVector2Int> movedCells = new List<SerializableVector2Int>();
+            public bool clearBeforeMove;
+
+            public MoveTileOperation() : base(OperationType.MoveTile) { }
+
+            public MoveTileOperation(HashSet<Vector2Int> cells, bool clear) : base(OperationType.MoveTile)
+            {
+                foreach (Vector2Int cell in cells)
+                {
+                    movedCells.Add(new SerializableVector2Int(cell));
+                }
+                clearBeforeMove = clear;
+            }
+
+            public override void Execute(TilemapLayerTool tool)
+            {
+                if (tool.sourceTilemap == null || tool.targetTilemap == null)
+                    return;
+
+                // 转换回HashSet<Vector2Int>
+                HashSet<Vector2Int> cells = new HashSet<Vector2Int>();
+                foreach (SerializableVector2Int cell in movedCells)
+                {
+                    cells.Add(new Vector2Int(cell.x, cell.y));
+                }
+
+                // 设置选区
+                tool.selectedCells = cells;
+
+                // 执行移动
+                tool.clearTargetBeforeMove = clearBeforeMove;
+                tool.MoveTiles();
+            }
+        }
+
+        // 替换瓦片操作
+        [System.Serializable]
+        private class ReplaceTileOperation : TilemapOperation
+        {
+            public List<SerializableVector2Int> replacedCells = new List<SerializableVector2Int>();
+            public string originalTileName;
+            public string replacementTileName;
+            public bool replaceAll;
+
+            public ReplaceTileOperation() : base(OperationType.ReplaceTile) { }
+
+            public ReplaceTileOperation(HashSet<Vector2Int> cells, TileBase original, TileBase replacement, bool all)
+                : base(OperationType.ReplaceTile)
+            {
+                foreach (Vector2Int cell in cells)
+                {
+                    replacedCells.Add(new SerializableVector2Int(cell));
+                }
+                originalTileName = original != null ? original.name : "";
+                replacementTileName = replacement != null ? replacement.name : "";
+                replaceAll = all;
+            }
+
+            public override void Execute(TilemapLayerTool tool)
+            {
+                if (tool.sourceTilemap == null)
+                    return;
+
+                // 查找原始瓦片和替换瓦片
+                TileBase originalTile = FindTileByName(originalTileName);
+                TileBase replacementTile = FindTileByName(replacementTileName);
+
+                if (originalTile == null || replacementTile == null)
+                {
+                    Debug.LogError($"Cannot find tiles for replacement: {originalTileName} -> {replacementTileName}");
+                    return;
+                }
+
+                // 设置瓦片
+                tool.selectedTile = originalTile;
+                tool.replacementTile = replacementTile;
+
+                // 转换回HashSet<Vector2Int>
+                HashSet<Vector2Int> cells = new HashSet<Vector2Int>();
+                foreach (SerializableVector2Int cell in replacedCells)
+                {
+                    cells.Add(new Vector2Int(cell.x, cell.y));
+                }
+
+                // 设置选区
+                tool.selectedCells = cells;
+
+                // 执行替换
+                if (replaceAll)
+                {
+                    tool.ReplaceAllSimilarTiles();
+                }
+                else
+                {
+                    tool.ReplaceTiles();
+                }
+            }
+
+            // 辅助方法：通过名称查找瓦片
+            private TileBase FindTileByName(string tileName)
+            {
+                if (string.IsNullOrEmpty(tileName))
+                    return null;
+
+                // 查找项目中所有瓦片资源
+                string[] guids = AssetDatabase.FindAssets("t:TileBase");
+                foreach (string guid in guids)
+                {
+                    string path = AssetDatabase.GUIDToAssetPath(guid);
+                    TileBase tile = AssetDatabase.LoadAssetAtPath<TileBase>(path);
+                    if (tile != null && tile.name == tileName)
+                    {
+                        return tile;
+                    }
+                }
+
+                return null;
+            }
+        }
+
+        // 选择区域操作
+        [System.Serializable]
+        private class SelectAreaOperation : TilemapOperation
+        {
+            public SerializableVector2Int start;
+            public SerializableVector2Int end;
+            public SelectionMode selectionMode;
+
+            public SelectAreaOperation() : base(OperationType.SelectArea) { }
+
+            public SelectAreaOperation(Vector2Int start, Vector2Int end, SelectionMode mode) : base(OperationType.SelectArea)
+            {
+                this.start = new SerializableVector2Int(start);
+                this.end = new SerializableVector2Int(end);
+                this.selectionMode = mode;
+            }
+
+            public override void Execute(TilemapLayerTool tool)
+            {
+                if (tool.sourceTilemap == null)
+                    return;
+
+                // 设置选择模式
+                tool.currentSelectionMode = selectionMode;
+
+                // 设置选择起点和终点
+                tool.selectionStart = new Vector2Int(start.x, start.y);
+                tool.selectionEnd = new Vector2Int(end.x, end.y);
+
+                // 应用选择
+                tool.ApplyCurrentSelection();
+
+                // 重置选择框
+                tool.selectionStart = Vector2Int.zero;
+                tool.selectionEnd = Vector2Int.zero;
+
+                SceneView.RepaintAll();
+            }
+        }
+
+        // 保存的录制
+        [System.Serializable]
+        private class SavedRecording
+        {
+            public string name;
+            public string sourceMapPath;
+            public string targetMapPath;
+            public List<TilemapOperation> operations = new List<TilemapOperation>();
+
+            // 无参构造函数，用于反序列化
+            public SavedRecording() { }
+
+            public SavedRecording(string name, string sourcePath, string targetPath, List<TilemapOperation> ops)
+            {
+                this.name = name;
+                this.sourceMapPath = sourcePath;
+                this.targetMapPath = targetPath;
+                this.operations = ops;
+            }
+        }
+
+        // 用于序列化的包装类
+        [System.Serializable]
+        private class SavedRecordingList
+        {
+            public List<SavedRecording> recordings;
+        }
+
+        private string GetLocalizedText(string key, params object[] args)
+        {
+            // 检查当前语言是否有该文本
+            if (localizedTexts.ContainsKey(languageCode) && localizedTexts[languageCode].ContainsKey(key))
+            {
+                string text = localizedTexts[languageCode][key];
+                if (args != null && args.Length > 0)
+                {
+                    return string.Format(text, args);
+                }
+                return text;
+            }
+
+            // 如果没有找到，使用英语
+            if (localizedTexts.ContainsKey("en") && localizedTexts["en"].ContainsKey(key))
+            {
+                string text = localizedTexts["en"][key];
+                if (args != null && args.Length > 0)
+                {
+                    return string.Format(text, args);
+                }
+                return text;
+            }
+
+            // 如果英语也没有，返回键名
+            return key;
+        }
+
         public static void ShowWindow()
         {
-            GetWindow<TilemapLayerTool>("Tilemap Layer Tool");
+            var window = GetWindow<TilemapLayerTool>();
+            window.titleContent = new GUIContent(window.GetLocalizedText("windowTitle"));
+        }
+
+        private void InitializeLocalization()
+        {
+            localizedTexts = new Dictionary<string, Dictionary<string, string>>();
+
+            // 英语文本
+            var enTexts = new Dictionary<string, string>
+            {
+                {"windowTitle", "Tilemap Layer Editor"},
+                {"tilemapLayerTool", "Tilemap Layer Tool"},
+                {"tilemapSelection", "Tilemap Selection"},
+                {"sourceTilemap", "Source Tilemap"},
+                {"targetTilemap", "Target Tilemap"},
+                {"clearTargetBeforeMove", "Clear Target Before Move"},
+                {"selectionTools", "Selection Tools"},
+                {"useModifierKeys", "Use Modifier Keys (Shift/Alt)"},
+                {"new", "New"},
+                {"add", "Add"},
+                {"subtract", "Subtract"},
+                {"intersect", "Intersect"},
+                {"startSelectionMode", "Start Selection Mode"},
+                {"exitSelectionMode", "Exit Selection Mode"},
+                {"clearSelection", "Clear Selection"},
+                {"selectSimilarTiles", "Select Similar Tiles"},
+                {"selectionHelp", "Click and drag in Scene View to select tiles\nShift+Drag: Add to selection\nAlt+Drag: Subtract from selection"},
+                {"currentSelection", "Current selection: {0} cells"},
+                {"finishSelection", "Finish Selection"},
+                {"moveSelectedTiles", "Move Selected Tiles"},
+                {"saveLoadSelections", "Save/Load Selections"},
+                {"saveSelection", "Save Selection"},
+                {"savedSelections", "Saved Selections"},
+                {"noSavedSelections", "No saved selections"},
+                {"loadSelectedArea", "Load Selected Area"},
+                {"tileReplacement", "Tile Replacement"},
+                {"tileReplacementOptions", "Tile Replacement Options"},
+                {"selectedTileInfo", "Selected Tile Info:"},
+                {"noTileSelected", "No tile selected. Use the selection tools above to select tiles first."},
+                {"tileName", "Tile Name:"},
+                {"spriteName", "Sprite Name:"},
+                {"sprite", "Sprite: None"},
+                {"replaceWith", "Replace With:"},
+                {"replacementTile", "Replacement Tile"},
+                {"replaceSelectedTiles", "Replace Selected Tiles"},
+                {"replaceAllSimilarTiles", "Replace All Similar Tiles"},
+                {"recordingTitle", "Action Recorder"},
+                {"recordingName", "Recording Name"},
+                {"startRecording", "Start Recording"},
+                {"stopRecording", "Stop Recording"},
+                {"recordingInProgress", "Recording in progress... {0} operations recorded"},
+                {"savedRecordings", "Saved Recordings"},
+                {"noSavedRecordings", "No saved recordings"},
+                {"operations", "operations"},
+                {"playRecording", "Play Recording"},
+                {"stopPlaying", "Stop Playing"},
+                {"operationsCompleted", "operations completed"},
+                {"newRecording", "New Recording"},
+                {"Recording started with source tilemap: {0}", "Recording started with source tilemap: {0}"},
+                {"Target tilemap: {0}", "Target tilemap: {0}"}
+
+            };
+            localizedTexts["en"] = enTexts;
+
+            // 中文文本
+            var zhTexts = new Dictionary<string, string>
+            {
+                {"windowTitle", "瓦片地图层编辑器"},
+                {"tilemapLayerTool", "瓦片地图层工具"},
+                {"tilemapSelection", "瓦片地图选择"},
+                {"sourceTilemap", "源瓦片地图"},
+                {"targetTilemap", "目标瓦片地图"},
+                {"clearTargetBeforeMove", "移动前清空目标区域"},
+                {"selectionTools", "选择工具"},
+                {"useModifierKeys", "使用修饰键 (Shift/Alt)"},
+                {"new", "新建"},
+                {"add", "增选"},
+                {"subtract", "减选"},
+                {"intersect", "交集"},
+                {"startSelectionMode", "开始选择模式"},
+                {"exitSelectionMode", "退出选择模式"},
+                {"clearSelection", "清除选择"},
+                {"selectSimilarTiles", "选择相似瓦片"},
+                {"selectionHelp", "在场景视图中点击并拖动以选择瓦片\nShift+拖动: 添加到选区\nAlt+拖动: 从选区中减去"},
+                {"currentSelection", "当前选择: {0} 个单元格"},
+                {"finishSelection", "完成选择"},
+                {"moveSelectedTiles", "移动选中的瓦片"},
+                {"saveLoadSelections", "保存/加载选区"},
+                {"saveSelection", "保存选区"},
+                {"savedSelections", "已保存的选区"},
+                {"noSavedSelections", "没有已保存的选区"},
+                {"loadSelectedArea", "加载选中区域"},
+                {"tileReplacement", "瓦片替换"},
+                {"tileReplacementOptions", "瓦片替换选项"},
+                {"selectedTileInfo", "已选瓦片信息:"},
+                {"noTileSelected", "未选择瓦片。请先使用上方的选择工具选择瓦片。"},
+                {"tileName", "瓦片名称:"},
+                {"spriteName", "精灵名称:"},
+                {"sprite", "精灵: 无"},
+                {"replaceWith", "替换为:"},
+                {"replacementTile", "替换用瓦片"},
+                {"replaceSelectedTiles", "替换选中的瓦片"},
+                {"replaceAllSimilarTiles", "替换所有相似瓦片"},
+                {"recordingTitle", "动作录制"},
+                {"recordingName", "录制名称"},
+                {"startRecording", "开始录制"},
+                {"stopRecording", "停止录制"},
+                {"recordingInProgress", "正在录制... 已记录 {0} 个操作"},
+                {"savedRecordings", "已保存的录制"},
+                {"noSavedRecordings", "没有已保存的录制"},
+                {"operations", "个操作"},
+                {"playRecording", "播放录制"},
+                {"stopPlaying", "停止播放"},
+                {"operationsCompleted", "操作已完成"},
+                {"newRecording", "新录制"},
+                {"Recording started with source tilemap: {0}", "录制已开始，源瓦片地图: {0}"},
+                {"Target tilemap: {0}", "目标瓦片地图: {0}"}
+            };
+            localizedTexts["zh-CN"] = zhTexts;
         }
 
         private void OnEnable()
@@ -139,9 +548,24 @@ namespace TilemapTools
             // 加载上次使用的Tilemap设置
             LoadTilemapPreferences();
 
+            // 初始化本地化文本
+            InitializeLocalization();
+
+            // 加载保存的录制
+            LoadSavedRecordings();
+
+            // 获取当前语言
+            languageCode = TilemapLanguageManager.GetCurrentLanguageCode();
+
             // 确保在启用窗口时不会自动进入选择模式
             isSelecting = false;
+            isRecording = false;
+            isPlayingRecording = false;
             SceneView.duringSceneGui -= OnSceneGUI;
+
+            // 添加更新回调，用于播放录制
+            EditorApplication.update -= OnEditorUpdate;
+            EditorApplication.update += OnEditorUpdate;
         }
 
         private void OnDisable()
@@ -149,23 +573,30 @@ namespace TilemapTools
             // 确保在禁用窗口时清除场景GUI回调
             isSelecting = false;
             SceneView.duringSceneGui -= OnSceneGUI;
-        }
+            // 移除更新回调
+            EditorApplication.update -= OnEditorUpdate;
 
+            // 确保在禁用窗口时清除录制状态
+            isRecording = false;
+            isPlayingRecording = false;
+        }
+#region ONGUI
         private void OnGUI()
         {
-            GUILayout.Label("Tilemap Layer Tool", EditorStyles.boldLabel);
+            // 使用本地化文本
+            GUILayout.Label(GetLocalizedText("tilemapLayerTool"), EditorStyles.boldLabel);
 
             // Tilemap 选择
             EditorGUILayout.Space();
-            GUILayout.Label("Tilemap Selection", EditorStyles.boldLabel);
-            Tilemap newSourceTilemap = EditorGUILayout.ObjectField("Source Tilemap", sourceTilemap, typeof(Tilemap), true) as Tilemap;
+            GUILayout.Label(GetLocalizedText("tilemapSelection"), EditorStyles.boldLabel);
+            Tilemap newSourceTilemap = EditorGUILayout.ObjectField(GetLocalizedText("sourceTilemap"), sourceTilemap, typeof(Tilemap), true) as Tilemap;
             if (newSourceTilemap != sourceTilemap)
             {
                 sourceTilemap = newSourceTilemap;
                 SaveTilemapPreferences();
             }
 
-            Tilemap newTargetTilemap = EditorGUILayout.ObjectField("Target Tilemap", targetTilemap, typeof(Tilemap), true) as Tilemap;
+            Tilemap newTargetTilemap = EditorGUILayout.ObjectField(GetLocalizedText("targetTilemap"), targetTilemap, typeof(Tilemap), true) as Tilemap;
             if (newTargetTilemap != targetTilemap)
             {
                 targetTilemap = newTargetTilemap;
@@ -173,37 +604,37 @@ namespace TilemapTools
             }
 
             // 清空目标选项
-            clearTargetBeforeMove = EditorGUILayout.Toggle("Clear Target Before Move", clearTargetBeforeMove);
+            clearTargetBeforeMove = EditorGUILayout.Toggle(GetLocalizedText("clearTargetBeforeMove"), clearTargetBeforeMove);
 
             // 选区操作
             EditorGUILayout.Space();
-            GUILayout.Label("Selection Tools", EditorStyles.boldLabel);
+            GUILayout.Label(GetLocalizedText("selectionTools"), EditorStyles.boldLabel);
 
             // 新增：是否使用修饰键覆盖模式
-            useModifierKeysForMode = EditorGUILayout.Toggle("Use Modifier Keys (Shift/Alt)", useModifierKeysForMode);
+            useModifierKeysForMode = EditorGUILayout.Toggle(GetLocalizedText("useModifierKeys"), useModifierKeysForMode);
 
             // 选择模式工具栏
             EditorGUILayout.BeginHorizontal();
             GUI.backgroundColor = currentSelectionMode == SelectionMode.New ? Color.cyan : Color.white;
-            if (GUILayout.Button(new GUIContent("New", "Create a new selection (N)")))
+            if (GUILayout.Button(new GUIContent(GetLocalizedText("new"), "Create a new selection (N)")))
             {
                 currentSelectionMode = SelectionMode.New;
             }
 
             GUI.backgroundColor = currentSelectionMode == SelectionMode.Add ? Color.cyan : Color.white;
-            if (GUILayout.Button(new GUIContent("Add", "Add to selection (Shift+Drag)")))
+            if (GUILayout.Button(new GUIContent(GetLocalizedText("add"), "Add to selection (Shift+Drag)")))
             {
                 currentSelectionMode = SelectionMode.Add;
             }
 
             GUI.backgroundColor = currentSelectionMode == SelectionMode.Subtract ? Color.cyan : Color.white;
-            if (GUILayout.Button(new GUIContent("Subtract", "Subtract from selection (Alt+Drag)")))
+            if (GUILayout.Button(new GUIContent(GetLocalizedText("subtract"), "Subtract from selection (Alt+Drag)")))
             {
                 currentSelectionMode = SelectionMode.Subtract;
             }
 
             GUI.backgroundColor = currentSelectionMode == SelectionMode.Intersect ? Color.cyan : Color.white;
-            if (GUILayout.Button(new GUIContent("Intersect", "Intersect with selection")))
+            if (GUILayout.Button(new GUIContent(GetLocalizedText("intersect"), "Intersect with selection")))
             {
                 currentSelectionMode = SelectionMode.Intersect;
             }
@@ -212,7 +643,7 @@ namespace TilemapTools
 
             if (!isSelecting)
             {
-                if (GUILayout.Button("Start Selection Mode"))
+                if (GUILayout.Button(GetLocalizedText("startSelectionMode")))
                 {
                     isSelecting = true;
                     SceneView.duringSceneGui -= OnSceneGUI; // 移除以防重复添加
@@ -224,7 +655,7 @@ namespace TilemapTools
             {
                 // 使用红色按钮表示可以退出选择模式
                 GUI.backgroundColor = Color.red;
-                if (GUILayout.Button("Exit Selection Mode"))
+                if (GUILayout.Button(GetLocalizedText("exitSelectionMode")))
                 {
                     isSelecting = false;
                     SceneView.duringSceneGui -= OnSceneGUI;
@@ -233,7 +664,7 @@ namespace TilemapTools
                 GUI.backgroundColor = Color.white;
             }
 
-            if (GUILayout.Button("Clear Selection"))
+            if (GUILayout.Button(GetLocalizedText("clearSelection")))
             {
                 selectedCells.Clear();
                 isSelecting = false;
@@ -242,7 +673,7 @@ namespace TilemapTools
             }
 
             EditorGUI.BeginDisabledGroup(sourceTilemap == null || selectedCells.Count == 0);
-            if (GUILayout.Button(new GUIContent("Select Similar Tiles", "Select all tiles of the same type as currently selected")))
+            if (GUILayout.Button(new GUIContent(GetLocalizedText("selectSimilarTiles"), "Select all tiles of the same type as currently selected")))
             {
                 SelectSimilarTiles();
             }
@@ -250,10 +681,10 @@ namespace TilemapTools
 
             if (isSelecting)
             {
-                EditorGUILayout.HelpBox("Click and drag in Scene View to select tiles\nShift+Drag: Add to selection\nAlt+Drag: Subtract from selection", MessageType.Info);
-                EditorGUILayout.LabelField($"Current selection: {selectedCells.Count} cells");
+                EditorGUILayout.HelpBox(GetLocalizedText("selectionHelp"), MessageType.Info);
+                EditorGUILayout.LabelField(GetLocalizedText("currentSelection", selectedCells.Count));
 
-                if (GUILayout.Button("Finish Selection"))
+                if (GUILayout.Button(GetLocalizedText("finishSelection")))
                 {
                     isSelecting = false;
                     SceneView.duringSceneGui -= OnSceneGUI;
@@ -262,7 +693,7 @@ namespace TilemapTools
 
             // 移动按钮
             EditorGUI.BeginDisabledGroup(sourceTilemap == null || targetTilemap == null || (!isSelecting && selectedSavedSelectionIndex < 0));
-            if (GUILayout.Button("Move Selected Tiles"))
+            if (GUILayout.Button(GetLocalizedText("moveSelectedTiles")))
             {
                 // 如果有保存的选区被选中且当前没有活动选择
                 if (selectedCells.Count == 0 && selectedSavedSelectionIndex >= 0 && selectedSavedSelectionIndex < savedSelections.Count)
@@ -288,13 +719,13 @@ namespace TilemapTools
 
             // 保存/加载选区
             EditorGUILayout.Space();
-            GUILayout.Label("Save/Load Selections", EditorStyles.boldLabel);
+            GUILayout.Label(GetLocalizedText("saveLoadSelections"), EditorStyles.boldLabel);
 
             // 保存当前选区
             EditorGUI.BeginDisabledGroup(selectedCells.Count == 0);
             EditorGUILayout.BeginHorizontal();
             newSelectionName = EditorGUILayout.TextField(newSelectionName);
-            if (GUILayout.Button("Save Selection", GUILayout.Width(120)))
+            if (GUILayout.Button(GetLocalizedText("saveSelection"), GUILayout.Width(120)))
             {
                 SaveCurrentSelection();
             }
@@ -303,11 +734,11 @@ namespace TilemapTools
 
             // 显示保存的选区列表
             EditorGUILayout.Space();
-            GUILayout.Label("Saved Selections", EditorStyles.boldLabel);
+            GUILayout.Label(GetLocalizedText("savedSelections"), EditorStyles.boldLabel);
 
             if (savedSelections.Count == 0)
             {
-                EditorGUILayout.HelpBox("No saved selections", MessageType.Info);
+                EditorGUILayout.HelpBox(GetLocalizedText("noSavedSelections"), MessageType.Info);
             }
             else
             {
@@ -347,7 +778,7 @@ namespace TilemapTools
 
             // 加载选区按钮
             EditorGUI.BeginDisabledGroup(selectedSavedSelectionIndex < 0);
-            if (GUILayout.Button("Load Selected Area"))
+            if (GUILayout.Button(GetLocalizedText("loadSelectedArea")))
             {
                 LoadSelectedArea();
             }
@@ -355,17 +786,17 @@ namespace TilemapTools
 
             //Tile Replacement
             EditorGUILayout.Space();
-            GUILayout.Label("Tile Replacement", EditorStyles.boldLabel);
+            GUILayout.Label(GetLocalizedText("tileReplacement"), EditorStyles.boldLabel);
 
             // 显示/隐藏Tile替换选项
-            showTileReplaceOptions = EditorGUILayout.Foldout(showTileReplaceOptions, "Tile Replacement Options");
+            showTileReplaceOptions = EditorGUILayout.Foldout(showTileReplaceOptions, GetLocalizedText("tileReplacementOptions"));
             if (showTileReplaceOptions)
             {
                 EditorGUI.BeginDisabledGroup(sourceTilemap == null);
 
                 // 显示选中的Tile信息
                 EditorGUILayout.BeginVertical(GUI.skin.box);
-                GUILayout.Label("Selected Tile Info:", EditorStyles.boldLabel);
+                GUILayout.Label(GetLocalizedText("selectedTileInfo"), EditorStyles.boldLabel);
 
                 // 从当前选择中获取Tile
                 if (selectedCells.Count > 0 && sourceTilemap != null)
@@ -385,13 +816,13 @@ namespace TilemapTools
                 if (selectedTile != null)
                 {
                     tileInfoScrollPosition = EditorGUILayout.BeginScrollView(tileInfoScrollPosition, GUILayout.Height(100));
-                    EditorGUILayout.LabelField("Tile Name:", selectedTile.name);
+                    EditorGUILayout.LabelField(GetLocalizedText("tileName"), selectedTile.name);
 
                     // 获取并显示Tile对应的Sprite
                     Sprite tileSprite = GetSpriteFromTile(selectedTile);
                     if (tileSprite != null)
                     {
-                        EditorGUILayout.LabelField("Sprite Name:", tileSprite.name);
+                        EditorGUILayout.LabelField(GetLocalizedText("spriteName"), tileSprite.name);
 
                         // 显示Sprite预览
                         Rect previewRect = EditorGUILayout.GetControlRect(false, 64);
@@ -399,23 +830,23 @@ namespace TilemapTools
                     }
                     else
                     {
-                        EditorGUILayout.LabelField("Sprite: None");
+                        EditorGUILayout.LabelField(GetLocalizedText("sprite"));
                     }
 
                     EditorGUILayout.EndScrollView();
                 }
                 else
                 {
-                    EditorGUILayout.HelpBox("No tile selected. Use the selection tools above to select tiles first.", MessageType.Info);
+                    EditorGUILayout.HelpBox(GetLocalizedText("noTileSelected"), MessageType.Info);
                 }
                 EditorGUILayout.EndVertical();
 
                 // 替换Tile选项
                 EditorGUILayout.BeginVertical(GUI.skin.box);
-                GUILayout.Label("Replace With:", EditorStyles.boldLabel);
+                GUILayout.Label(GetLocalizedText("replaceWith"), EditorStyles.boldLabel);
 
                 // 选择替换用的Tile
-                replacementTile = (TileBase)EditorGUILayout.ObjectField("Replacement Tile", replacementTile, typeof(TileBase), false);
+                replacementTile = (TileBase)EditorGUILayout.ObjectField(GetLocalizedText("replacementTile"), replacementTile, typeof(TileBase), false);
 
                 // 显示替换Tile的预览
                 if (replacementTile != null)
@@ -430,7 +861,7 @@ namespace TilemapTools
 
                 // 替换按钮
                 EditorGUI.BeginDisabledGroup(selectedTile == null || replacementTile == null || selectedCells.Count == 0);
-                if (GUILayout.Button("Replace Selected Tiles"))
+                if (GUILayout.Button(GetLocalizedText("replaceSelectedTiles")))
                 {
                     ReplaceTiles();
                 }
@@ -438,7 +869,7 @@ namespace TilemapTools
 
                 // 替换所有相同类型的Tile按钮
                 EditorGUI.BeginDisabledGroup(selectedTile == null || replacementTile == null);
-                if (GUILayout.Button("Replace All Similar Tiles"))
+                if (GUILayout.Button(GetLocalizedText("replaceAllSimilarTiles")))
                 {
                     ReplaceAllSimilarTiles();
                 }
@@ -448,8 +879,130 @@ namespace TilemapTools
 
                 EditorGUI.EndDisabledGroup();
             }
+
+            // 添加录制UI
+            AddRecordingUI();
         }
 
+        private void AddRecordingUI()
+        {
+            EditorGUILayout.Space();
+            GUILayout.Label(GetLocalizedText("recordingTitle"), EditorStyles.boldLabel);
+
+            // 修复这里的错误 - 删除多余的EndHorizontal调用
+            // EditorGUILayout.EndHorizontal(); // 这行是多余的，应该删除
+
+            // 录制控制
+            EditorGUILayout.BeginHorizontal();
+            if (!isRecording)
+            {
+                // 录制名称输入
+                newRecordingName = EditorGUILayout.TextField(GetLocalizedText("recordingName"), newRecordingName);
+
+                // 开始录制按钮
+                if (GUILayout.Button(GetLocalizedText("startRecording"), GUILayout.Width(120)))
+                {
+                    StartRecording();
+                }
+            }
+            else
+            {
+                // 停止录制按钮
+                GUI.backgroundColor = Color.red;
+                if (GUILayout.Button(GetLocalizedText("stopRecording")))
+                {
+                    StopRecording();
+                }
+                GUI.backgroundColor = Color.white;
+            }
+            EditorGUILayout.EndHorizontal();
+
+            // 如果正在录制，显示当前录制状态
+            if (isRecording)
+            {
+                EditorGUILayout.HelpBox(GetLocalizedText("recordingInProgress", recordedOperations.Count), MessageType.Info);
+            }
+
+            // 显示保存的录制列表
+            EditorGUILayout.Space();
+            GUILayout.Label(GetLocalizedText("savedRecordings"), EditorStyles.boldLabel);
+
+            if (savedRecordings.Count == 0)
+            {
+                EditorGUILayout.HelpBox(GetLocalizedText("noSavedRecordings"), MessageType.Info);
+            }
+            else
+            {
+                // 显示保存的录制
+                scrollPositionRecordings = EditorGUILayout.BeginScrollView(scrollPositionRecordings, GUILayout.Height(150));
+                for (int i = 0; i < savedRecordings.Count; i++)
+                {
+                    SavedRecording recording = savedRecordings[i];
+                    EditorGUILayout.BeginHorizontal();
+
+                    // 选择按钮
+                    bool isSelected = (i == selectedRecordingIndex);
+                    bool newIsSelected = GUILayout.Toggle(isSelected, "", GUILayout.Width(20));
+                    if (newIsSelected != isSelected)
+                    {
+                        selectedRecordingIndex = newIsSelected ? i : -1;
+                    }
+
+                    // 录制信息
+                    EditorGUILayout.LabelField($"{recording.name} ({recording.operations.Count} {GetLocalizedText("operations")})");
+
+                    // 删除按钮
+                    if (GUILayout.Button("X", GUILayout.Width(25)))
+                    {
+                        if (isPlayingRecording && selectedRecordingIndex == i)
+                        {
+                            isPlayingRecording = false;
+                        }
+
+                        savedRecordings.RemoveAt(i);
+                        SaveSavedRecordings();
+                        i--; // 调整索引
+                        if (selectedRecordingIndex >= savedRecordings.Count)
+                        {
+                            selectedRecordingIndex = savedRecordings.Count - 1;
+                        }
+                    }
+
+                    EditorGUILayout.EndHorizontal();
+                }
+                EditorGUILayout.EndScrollView();
+
+                // 播放按钮
+                EditorGUI.BeginDisabledGroup(selectedRecordingIndex < 0 || isRecording || isPlayingRecording);
+                if (GUILayout.Button(GetLocalizedText("playRecording")))
+                {
+                    PlayRecording(selectedRecordingIndex);
+                }
+                EditorGUI.EndDisabledGroup();
+
+                // 如果正在播放，显示停止按钮
+                if (isPlayingRecording)
+                {
+                    GUI.backgroundColor = Color.red;
+                    if (GUILayout.Button(GetLocalizedText("stopPlaying")))
+                    {
+                        isPlayingRecording = false;
+                    }
+                    GUI.backgroundColor = Color.white;
+
+                    // 显示播放进度
+                    if (selectedRecordingIndex >= 0 && selectedRecordingIndex < savedRecordings.Count)
+                    {
+                        SavedRecording recording = savedRecordings[selectedRecordingIndex];
+                        float progress = (float)currentOperationIndex / recording.operations.Count;
+                        EditorGUI.ProgressBar(EditorGUILayout.GetControlRect(false, 20), progress,
+                            $"{currentOperationIndex}/{recording.operations.Count} {GetLocalizedText("operationsCompleted")}");
+                    }
+                }
+            }
+        }
+
+#endregion
         private void SelectSimilarTiles()
         {
             if (sourceTilemap == null || selectedCells.Count == 0)
@@ -646,11 +1199,11 @@ namespace TilemapTools
             {
                 // 鼠标释放时应用选区
                 ApplyCurrentSelection();
-                
+
                 // 重置选择框起点和终点，确保黄色选框消失
                 selectionStart = Vector2Int.zero;
                 selectionEnd = Vector2Int.zero;
-                
+
                 e.Use();
                 sceneView.Repaint(); // 强制重绘，确保黄色选框消失
             }
@@ -659,7 +1212,7 @@ namespace TilemapTools
             if (sourceTilemap != null)
             {
                 // 只有在鼠标按下并拖拽时才绘制临时选区（黄色框）
-                if (isSelecting && e.type != EventType.MouseUp && 
+                if (isSelecting && e.type != EventType.MouseUp &&
                     (selectionStart != Vector2Int.zero || selectionEnd != Vector2Int.zero))
                 {
                     DrawSelectionArea(selectionStart, selectionEnd, new Color(1, 1, 0, 0.3f), Color.yellow);
@@ -775,6 +1328,11 @@ namespace TilemapTools
                 currentSelectionMode = SelectionMode.New;
             }
             // 如果不使用修饰键覆盖，则保持当前选择模式不变
+            // 如果正在录制，记录此选择操作
+            if (isRecording)
+            {
+                recordedOperations.Add(new SelectAreaOperation(selectionStart, selectionEnd, currentSelectionMode));
+            }
         }
 
         // 替换DrawSelectedCells方法，使用GPU渲染高亮区域
@@ -848,7 +1406,7 @@ namespace TilemapTools
             // 如果起点和终点都是零，则不绘制（避免绘制无效选区）
             if (start == Vector2Int.zero && end == Vector2Int.zero)
                 return;
-                
+
             if (fillColor == default) fillColor = new Color(0, 1, 0, 0.3f);
             if (outlineColor == default) outlineColor = Color.green;
 
@@ -883,6 +1441,12 @@ namespace TilemapTools
         {
             if (sourceTilemap == null || targetTilemap == null)
                 return;
+
+            // 如果正在录制，记录此操作
+            if (isRecording && selectedCells.Count > 0)
+            {
+                recordedOperations.Add(new MoveTileOperation(selectedCells, clearTargetBeforeMove));
+            }
 
             // 如果有保存的选区被选中且没有活动选择
             if (selectedCells.Count == 0 && selectedSavedSelectionIndex >= 0 && selectedSavedSelectionIndex < savedSelections.Count)
@@ -1090,6 +1654,12 @@ namespace TilemapTools
             if (sourceTilemap == null || selectedTile == null || replacementTile == null || selectedCells.Count == 0)
                 return;
 
+            // 如果正在录制，记录此操作
+            if (isRecording)
+            {
+                recordedOperations.Add(new ReplaceTileOperation(selectedCells, selectedTile, replacementTile, false));
+            }
+
             // 注册撤销
             Undo.RegisterCompleteObjectUndo(sourceTilemap, "Replace Tiles");
 
@@ -1116,6 +1686,12 @@ namespace TilemapTools
         {
             if (sourceTilemap == null || selectedTile == null || replacementTile == null)
                 return;
+
+            // 如果正在录制，记录此操作
+            if (isRecording)
+            {
+                recordedOperations.Add(new ReplaceTileOperation(selectedCells, selectedTile, replacementTile, true));
+            }
 
             // 注册撤销
             Undo.RegisterCompleteObjectUndo(sourceTilemap, "Replace All Similar Tiles");
@@ -1146,6 +1722,202 @@ namespace TilemapTools
             Debug.Log($"Replaced {replacedCount} tiles.");
             SceneView.RepaintAll();
         }
+
+
+        #region Recorder
+        private void StartRecording()
+        {
+            if (isRecording || isPlayingRecording)
+                return;
+
+            if (string.IsNullOrEmpty(newRecordingName))
+            {
+                newRecordingName = GetLocalizedText("newRecording");
+            }
+
+            isRecording = true;
+            recordedOperations.Clear();
+
+            // 记录初始状态
+            if (sourceTilemap != null)
+            {
+                Debug.LogFormat(GetLocalizedText("Recording started with source tilemap: {0}"), GetGameObjectPath(sourceTilemap.gameObject));
+            }
+
+            if (targetTilemap != null)
+            {
+                Debug.LogFormat(GetLocalizedText("Target tilemap: {0}"), GetGameObjectPath(targetTilemap.gameObject));
+            }
+        }
+
+        // 停止录制
+        private void StopRecording()
+        {
+            if (!isRecording)
+                return;
+
+            isRecording = false;
+
+            // 保存录制
+            if (recordedOperations.Count > 0)
+            {
+                string sourcePath = sourceTilemap != null ? GetGameObjectPath(sourceTilemap.gameObject) : "";
+                string targetPath = targetTilemap != null ? GetGameObjectPath(targetTilemap.gameObject) : "";
+
+                SavedRecording recording = new SavedRecording(
+                    newRecordingName,
+                    sourcePath,
+                    targetPath,
+                    recordedOperations
+                );
+
+                // 检查是否已存在同名录制
+                bool exists = false;
+                for (int i = 0; i < savedRecordings.Count; i++)
+                {
+                    if (savedRecordings[i].name == newRecordingName)
+                    {
+                        savedRecordings[i] = recording;
+                        exists = true;
+                        break;
+                    }
+                }
+
+                if (!exists)
+                {
+                    savedRecordings.Add(recording);
+                }
+
+                SaveSavedRecordings();
+
+                // 重置名称
+                newRecordingName = GetLocalizedText("newRecording");
+            }
+        }
+
+        // 播放录制
+        private void PlayRecording(int index)
+        {
+            if (isRecording || isPlayingRecording || index < 0 || index >= savedRecordings.Count)
+                return;
+
+            SavedRecording recording = savedRecordings[index];
+
+            // 尝试查找源和目标Tilemap
+            GameObject sourceObj = FindGameObjectByPath(recording.sourceMapPath);
+            GameObject targetObj = FindGameObjectByPath(recording.targetMapPath);
+
+            if (sourceObj != null)
+            {
+                sourceTilemap = sourceObj.GetComponent<Tilemap>();
+            }
+
+            if (targetObj != null)
+            {
+                targetTilemap = targetObj.GetComponent<Tilemap>();
+            }
+
+            if (sourceTilemap == null)
+            {
+                Debug.LogError("Cannot find source tilemap: " + recording.sourceMapPath);
+                return;
+            }
+
+            // 开始播放
+            isPlayingRecording = true;
+            currentOperationIndex = 0;
+            lastOperationTime = EditorApplication.timeSinceStartup;
+
+            Debug.Log("Playing recording: " + recording.name);
+        }
+
+        // 编辑器更新回调，用于播放录制
+        private void OnEditorUpdate()
+        {
+            if (!isPlayingRecording || selectedRecordingIndex < 0 || selectedRecordingIndex >= savedRecordings.Count)
+                return;
+
+            SavedRecording recording = savedRecordings[selectedRecordingIndex];
+
+            if (currentOperationIndex >= recording.operations.Count)
+            {
+                // 播放完成
+                isPlayingRecording = false;
+                Repaint();
+                return;
+            }
+
+            // 获取当前操作
+            TilemapOperation operation = recording.operations[currentOperationIndex];
+
+            // 计算操作间隔
+            float delay = 0.2f; // 默认延迟
+            if (currentOperationIndex > 0)
+            {
+                TilemapOperation prevOp = recording.operations[currentOperationIndex - 1];
+                delay = operation.timeStamp - prevOp.timeStamp;
+                delay = Mathf.Clamp(delay, 0.1f, 2.0f); // 限制延迟范围
+            }
+
+            // 检查是否应该执行下一个操作
+            if (EditorApplication.timeSinceStartup - lastOperationTime >= delay)
+            {
+                // 执行操作
+                operation.Execute(this);
+
+                // 更新索引和时间
+                currentOperationIndex++;
+                lastOperationTime = EditorApplication.timeSinceStartup;
+
+                // 刷新UI
+                Repaint();
+            }
+        }
+
+        // 保存录制到文件
+        private void SaveSavedRecordings()
+        {
+            try
+            {
+                // 确保目录存在
+                string directory = Path.GetDirectoryName(RecordingsFilePath);
+                if (!Directory.Exists(directory))
+                {
+                    Directory.CreateDirectory(directory);
+                }
+
+                // 序列化录制列表
+                string json = JsonUtility.ToJson(new SavedRecordingList { recordings = savedRecordings });
+                File.WriteAllText(RecordingsFilePath, json);
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogError($"Error saving recordings: {e.Message}");
+            }
+        }
+
+        // 从文件加载录制
+        private void LoadSavedRecordings()
+        {
+            try
+            {
+                if (File.Exists(RecordingsFilePath))
+                {
+                    string json = File.ReadAllText(RecordingsFilePath);
+                    SavedRecordingList loadedList = JsonUtility.FromJson<SavedRecordingList>(json);
+                    if (loadedList != null && loadedList.recordings != null)
+                    {
+                        savedRecordings = loadedList.recordings;
+                    }
+                }
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogError($"Error loading recordings: {e.Message}");
+                savedRecordings = new List<SavedRecording>();
+            }
+        }
+        #endregion
     }
 }
 #endif
