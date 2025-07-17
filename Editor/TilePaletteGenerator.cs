@@ -1801,8 +1801,6 @@ namespace TilemapTools
                 int endX = startX + (int)rect.width;
                 int endY = startY + (int)rect.height;
 
-                Debug.Log($"Sprite rect: ({startX},{startY}) to ({endX},{endY})");
-
                 for (int x = startX; x < endX; x++)
                 {
                     for (int y = startY; y < endY; y++)
