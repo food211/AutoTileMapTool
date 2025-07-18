@@ -16,6 +16,13 @@ public class RopeSystem : MonoBehaviour
     [SerializeField] private float minRopeLength = 1f;
     [SerializeField] private float maxRopeLength = 100f;
     [SerializeField] private float ropeShootSpeed = 50f; // 发射速度
+    // 添加约束相关参数
+    [Header("绳索物理约束")]
+    [SerializeField] private float maxAngleForRemoval = 178f;     // 移除锚点的最大角度
+    [SerializeField] private float minAngleForStability = 4f;    // 稳定性的最小角度
+    [SerializeField] private float lengthConstraintTolerance = 0.1f; // 长度约束容差
+    [SerializeField] private float lengthConstraintStrength = 0.5f;  // 长度约束强度
+
     [Header("绳索延迟断开")]
     [SerializeField] private float maxLengthHoldTime = 0.5f; // 绳索达到最大长度后保持的时间
     private float maxLengthTimer = 0f; // 计时器
@@ -64,12 +71,54 @@ public class RopeSystem : MonoBehaviour
     
     // 当前钩中的物体标签
     private string currentHookTag = "";
+    // 移动物体相关
+    private GameObject hookedObject; // 钩中的物体引用
+    private MovingObject hookedMovingObject; // 钩中的MovingObject组件
+    private Vector2 lastHookedObjectPosition; // 上一帧钩中物体的位置
+    private Vector3 hookedLocalPosition; // 钩点在钩中物体上的本地坐标
+    private Quaternion lastHookedObjectRotation; // 上一帧钩中物体的旋转
+    private Vector3 lastHookedObjectScale; // 上一帧钩中物体的缩放
     // 特效协程引用
 
     // 绳索弯曲相关
-    private List<Vector2> anchors = new List<Vector2>();
+    private List<AnchorInfo> anchorInfos = new List<AnchorInfo>();
     private float combinedAnchorLen = 0f;
     private DistanceJoint2D distanceJoint;
+
+    [System.Serializable]
+    private class AnchorInfo
+    {
+        public Vector2 position;                // 锚点世界坐标位置
+        public GameObject attachedObject;       // 锚点附着的物体
+        public Vector3 localPosition;           // 锚点在附着物体上的本地坐标
+        public float initialDistance;           // 与下一个锚点的初始距离
+        public bool isMovable;                  // 是否随物体移动
+
+        // 构造函数
+        public AnchorInfo(Vector2 pos)
+        {
+            position = pos;
+            attachedObject = null;
+            localPosition = Vector3.zero;
+            initialDistance = 0f;
+            isMovable = false;
+        }
+
+        // 带附着物体的构造函数
+        public AnchorInfo(Vector2 pos, GameObject obj, Vector3 localPos)
+        {
+            position = pos;
+            attachedObject = obj;
+            localPosition = localPos;
+            initialDistance = 0f;
+            isMovable = obj != null;
+        }
+        // 隐式转换运算符，允许将AnchorInfo直接用作Vector2
+        public static implicit operator Vector2(AnchorInfo info)
+        {
+            return info.position;
+        }
+    }
 
 
     private void Awake()
@@ -119,11 +168,11 @@ public class RopeSystem : MonoBehaviour
         hookableFilter = new ContactFilter2D();
         hookableFilter.useTriggers = false;
         hookableFilter.SetLayerMask(hookableLayers);
-        
+
         collisionFilter = new ContactFilter2D();
         collisionFilter.useTriggers = false;
         collisionFilter.SetLayerMask(collisionOnlyLayers);
-        
+
         combinedFilter = new ContactFilter2D();
         combinedFilter.useTriggers = false;
         combinedFilter.SetLayerMask(hookableLayers | collisionOnlyLayers);
@@ -185,7 +234,7 @@ public class RopeSystem : MonoBehaviour
     
    private void FixedUpdate()
 {
-    if (isHooked && anchors.Count > 0)
+    if (isHooked && anchorInfos.Count > 0)
     {
         // 只有当速度超过阈值时才进行预测性检测
         if (playerRigidbody.velocity.magnitude > 5f)
@@ -201,7 +250,7 @@ public class RopeSystem : MonoBehaviour
     // 预测性碰撞检测方法
     private void PredictiveCollisionCheck(Vector2 fromPos, Vector2 toPos)
     {
-        if (anchors.Count == 0) return;
+        if (anchorInfos.Count == 0) return;
 
         Vector2 movementVector = toPos - fromPos;
         float movementDistance = movementVector.magnitude;
@@ -234,12 +283,17 @@ public class RopeSystem : MonoBehaviour
         RaycastHit2D[] hits = new RaycastHit2D[1];
 
         // 检查到第一个锚点
-        int hitCount = Physics2D.Linecast(checkPoint, anchors[0], combinedFilter, hits);
+        int hitCount = Physics2D.Linecast(checkPoint, anchorInfos[0].position, combinedFilter, hits);
 
         if (hitCount > 0)
         {
             RaycastHit2D hit = hits[0];
-            if (Vector2.Distance(hit.point, anchors[0]) > anchorSafetyCheck)
+
+            // 检查是否碰撞到的是MovingObject
+            MovingObject movingObj = hit.collider.GetComponent<MovingObject>();
+
+            // 只有当不是MovingObject时，才考虑添加新的锚点
+            if (movingObj == null && Vector2.Distance(hit.point, anchorInfos[0].position) > anchorSafetyCheck)
             {
                 // 获取碰撞物体的标签
                 string hitTag = hit.collider.tag;
@@ -251,7 +305,7 @@ public class RopeSystem : MonoBehaviour
                 Vector2 safeAnchorPoint = hit.point + (hit.normal.normalized * linecastOffset);
 
                 // 检查新锚点是否与现有锚点距离足够远
-                if (Vector2.Distance(safeAnchorPoint, anchors[0]) > anchorSafetyCheck)
+                if (Vector2.Distance(safeAnchorPoint, anchorInfos[0].position) > anchorSafetyCheck)
                 {
                     // 确保从检测点到新锚点的路径是通畅的
                     Vector2 dirToAnchor = (safeAnchorPoint - checkPoint).normalized;
@@ -291,7 +345,7 @@ public class RopeSystem : MonoBehaviour
         maxLengthTimer = 0f;
         
         // 清空锚点列表
-        anchors.Clear();
+        anchorInfos.Clear();
         combinedAnchorLen = 0f;
 
         // 重置线渲染器的颜色和宽度到原始状态
@@ -448,6 +502,56 @@ public class RopeSystem : MonoBehaviour
             // 计算更安全的锚点位置，沿法线方向偏移
             Vector2 safeAnchorPoint = hookHit.point + (hookHit.normal.normalized * linecastOffset);
 
+            // 修改这里，添加以下代码：
+            
+            // 获取钩中的物体
+            hookedObject = hookHit.collider.gameObject;
+            
+            // 尝试获取MovingObject组件
+            hookedMovingObject = hookedObject.GetComponent<MovingObject>();
+            
+            // 如果是MovingObject，则进行特殊处理
+            if (hookedMovingObject != null)
+            {
+                // 获取碰撞体
+                Collider2D collider = hookHit.collider;
+                
+                // 直接使用物体的中心点作为钩点
+                if (collider != null)
+                {
+                    // 获取碰撞体的中心点（世界坐标）
+                    safeAnchorPoint = collider.bounds.center;
+                    
+                    // 如果是复合碰撞体或形状不规则，可以尝试使用transform.position
+                    // 但这可能不准确，具体取决于物体的碰撞体设置
+                    if (Vector2.Distance(safeAnchorPoint, hookedObject.transform.position) > collider.bounds.extents.magnitude)
+                    {
+                        safeAnchorPoint = hookedObject.transform.position;
+                    }
+                    
+                    // 确保点在碰撞体内部
+                    if (!collider.OverlapPoint(safeAnchorPoint))
+                    {
+                        // 如果不在内部（可能是因为碰撞体形状不规则），
+                        // 则使用原始碰撞点沿法线向内偏移较大距离
+                        Vector2 inwardDirection = -hookHit.normal.normalized;
+                        float offsetDistance = collider.bounds.extents.magnitude * 0.8f; // 使用碰撞体尺寸的80%
+                        safeAnchorPoint = hookHit.point + (inwardDirection * offsetDistance);
+                        
+                        // 再次检查是否在内部，如果不在则使用transform.position
+                        if (!collider.OverlapPoint(safeAnchorPoint))
+                        {
+                            safeAnchorPoint = hookedObject.transform.position;
+                        }
+                    }
+                }
+                else
+                {
+                    // 如果没有碰撞体，直接使用物体的位置
+                    safeAnchorPoint = hookedObject.transform.position;
+                }
+            }
+            
             // 绳索已钩住物体
             hookPosition = safeAnchorPoint;
             isHooked = true;
@@ -456,8 +560,25 @@ public class RopeSystem : MonoBehaviour
             // 保存当前钩中的物体标签
             currentHookTag = hitTag;
 
-            // 添加第一个锚点
-            AddAnchor(safeAnchorPoint);
+            // 添加第一个锚点，如果是移动物体则传入相关信息
+            if (hookedMovingObject != null)
+            {
+                // 记录钩中物体的初始位置、旋转和缩放
+                lastHookedObjectPosition = hookedObject.transform.position;
+                lastHookedObjectRotation = hookedObject.transform.rotation;
+                lastHookedObjectScale = hookedObject.transform.localScale;
+
+                // 计算钩点在物体上的本地坐标
+                Vector3 localPos = hookedObject.transform.InverseTransformPoint(safeAnchorPoint);
+
+                // 添加锚点，并标记为附着在移动物体上
+                AddAnchor(safeAnchorPoint, hookedObject, localPos);
+            }
+            else
+            {
+                // 普通锚点
+                AddAnchor(safeAnchorPoint);
+            }
 
             // 钩中目标后隐藏箭头
             if (arrowObject != null)
@@ -478,10 +599,10 @@ public class RopeSystem : MonoBehaviour
         // 保存当前钩中的物体标签
         currentHookTag = tag;
         // 只有当标签为"Fire"且当前没有燃烧锚点时，才设置燃烧锚点
-        if (tag == "Fire" && burningAnchorIndex < 0 && anchors.Count > 0)
+        if (tag == "Fire" && burningAnchorIndex < 0 && anchorInfos.Count > 0)
         {
             // 如果还没有燃烧锚点，设置当前锚点为燃烧锚点
-            SetBurningAnchorIndex(anchors.Count - 1);
+            SetBurningAnchorIndex(anchorInfos.Count - 1);
         }
 
         // 调用StatusManager中的方法处理效果
@@ -503,25 +624,206 @@ public class RopeSystem : MonoBehaviour
             ReleaseRope();
             return;
         }
-        
+        //更新钩点位置
+        UpdateHookedPoint();
+
         // 管理绳索弯曲
         RopeJointManager();
-        
+
         // 更新线渲染器
         UpdateLineRenderer();
+    }
+
+    private void UpdateHookedPoint()
+    {
+        // 遍历所有锚点，更新附着在移动物体上的锚点位置
+        for (int i = 0; i < anchorInfos.Count; i++)
+        {
+            AnchorInfo anchor = anchorInfos[i];
+
+            // 如果锚点附着在物体上且是可移动的
+            if (anchor.isMovable && anchor.attachedObject != null)
+            {
+                // 获取移动物体组件
+                MovingObject movingObj = anchor.attachedObject.GetComponent<MovingObject>();
+
+                if (movingObj != null)
+                {
+                    // 计算新的世界坐标位置
+                    Vector2 newPosition = anchor.attachedObject.transform.TransformPoint(anchor.localPosition);
+
+                    // 更新锚点位置
+                    anchor.position = newPosition;
+
+                    // 如果是第一个锚点（连接到钩子的锚点），更新钩子位置和关节
+                    if (i == anchorInfos.Count - 1)
+                    {
+                        hookPosition = newPosition;
+
+                        // 更新关节连接点
+                        if (distanceJoint != null && distanceJoint.enabled)
+                        {
+                            distanceJoint.connectedAnchor = newPosition;
+                        }
+                    }
+                }
+            }
+        }
+
+        // 应用长度约束
+        ApplyLengthConstraints();
+
+        // 检查角度约束，可能移除不必要的锚点
+        CheckAngleConstraints();
+    }
+
+
+    // 应用长度约束
+    private void ApplyLengthConstraints()
+    {
+        // 如果只有一个或没有锚点，不需要约束
+        if (anchorInfos.Count <= 1) return;
+
+        for (int i = 0; i < anchorInfos.Count - 1; i++)
+        {
+            // 获取当前锚点和下一个锚点
+            AnchorInfo current = anchorInfos[i];
+            AnchorInfo next = anchorInfos[i + 1];
+
+            // 如果初始距离为0，设置初始距离
+            if (current.initialDistance <= 0)
+            {
+                current.initialDistance = Vector2.Distance(current.position, next.position);
+                continue;
+            }
+
+            // 计算当前距离
+            float currentDistance = Vector2.Distance(current.position, next.position);
+
+            // 如果距离差异超过容差
+            if (Mathf.Abs(currentDistance - current.initialDistance) > lengthConstraintTolerance)
+            {
+                // 计算方向向量
+                Vector2 direction = (next.position - current.position).normalized;
+
+                // 计算理想位置
+                Vector2 idealPosition = current.position + direction * current.initialDistance;
+
+                // 如果下一个锚点不是附着在移动物体上，应用约束
+                if (!next.isMovable)
+                {
+                    // 向理想位置移动，使用约束强度作为插值因子
+                    next.position = Vector2.Lerp(next.position, idealPosition, lengthConstraintStrength);
+                }
+                // 如果当前锚点不是附着在移动物体上，也应用约束
+                else if (!current.isMovable)
+                {
+                    // 向相反方向移动当前锚点
+                    Vector2 reverseIdealPosition = next.position - direction * current.initialDistance;
+                    current.position = Vector2.Lerp(current.position, reverseIdealPosition, lengthConstraintStrength);
+                }
+                // 如果两个锚点都是移动的，分配约束力
+                else if (current.isMovable && next.isMovable)
+                {
+                    // 两个点都移动一半距离
+                    Vector2 midPoint = (current.position + next.position) * 0.5f;
+                    Vector2 adjustedDirection = direction * (current.initialDistance * 0.5f);
+
+                    current.position = Vector2.Lerp(current.position, midPoint - adjustedDirection, lengthConstraintStrength * 0.5f);
+                    next.position = Vector2.Lerp(next.position, midPoint + adjustedDirection, lengthConstraintStrength * 0.5f);
+                }
+            }
+        }
+    }
+
+    // 检查角度约束
+    private void CheckAngleConstraints()
+    {
+        // 需要至少3个点才能形成角度
+        if (anchorInfos.Count < 3) return;
+
+        // 从第二个锚点开始检查（索引1），因为我们需要检查前后锚点形成的角度
+        for (int i = 1; i < anchorInfos.Count - 1; i++)
+        {
+            // 获取前一个、当前和后一个锚点
+            Vector2 prevPos = anchorInfos[i - 1].position;
+            Vector2 currentPos = anchorInfos[i].position;
+            Vector2 nextPos = anchorInfos[i + 1].position;
+
+            // 计算向量
+            Vector2 toPrev = prevPos - currentPos;
+            Vector2 toNext = nextPos - currentPos;
+
+            // 计算角度（0-180度）
+            float angle = Vector2.Angle(toPrev, toNext);
+
+            // 如果角度接近180度，考虑移除当前锚点
+            if (angle > maxAngleForRemoval)
+            {
+                // 但不移除附着在移动物体上的锚点
+                if (!anchorInfos[i].isMovable && i != burningAnchorIndex)
+                {
+                    // 移除前更新距离
+                    if (i > 0 && i < anchorInfos.Count - 1)
+                    {
+                        float removedDistance = Vector2.Distance(anchorInfos[i - 1].position, anchorInfos[i].position) +
+                                               Vector2.Distance(anchorInfos[i].position, anchorInfos[i + 1].position) -
+                                               Vector2.Distance(anchorInfos[i - 1].position, anchorInfos[i + 1].position);
+
+                        combinedAnchorLen -= removedDistance;
+                    }
+
+                    // 移除锚点
+                    anchorInfos.RemoveAt(i);
+
+                    // 更新燃烧锚点索引
+                    if (burningAnchorIndex > i)
+                    {
+                        burningAnchorIndex--;
+                    }
+
+                    // 重新计算锚点间距离
+                    RecalculateAnchorLength();
+
+                    // 由于移除了一个元素，需要调整索引
+                    i--;
+                    continue;
+                }
+            }
+
+            // 如果角度太小，可能会导致LineRenderer问题，添加中间点
+            if (angle < minAngleForStability && !anchorInfos[i].isMovable)
+            {
+                // 计算中间点
+                Vector2 midPoint = (prevPos + nextPos) * 0.5f;
+
+                // 向外偏移一点，避免共线
+                Vector2 normal = new Vector2(-(nextPos.y - prevPos.y), nextPos.x - prevPos.x).normalized;
+                midPoint += normal * 0.1f;
+
+                // 创建新锚点
+                AnchorInfo newAnchor = new AnchorInfo(midPoint);
+
+                // 插入到当前位置
+                anchorInfos[i] = newAnchor;
+
+                // 重新计算锚点间距离
+                RecalculateAnchorLength();
+            }
+        }
     }
 
     private void RopeJointManager()
     {
         // 检查从玩家到最近锚点的线检测
-        if (anchors.Count > 0)
+        if (anchorInfos.Count > 0)
         {
             // 获取玩家位置
             Vector2 playerPos = playerController.transform.position;
 
             // 使用combinedFilter进行线检测，而不是直接使用Layer
             RaycastHit2D[] hits = new RaycastHit2D[1];
-            int hitCount = Physics2D.Linecast(playerPos, anchors[0], combinedFilter, hits);
+            int hitCount = Physics2D.Linecast(playerPos, anchorInfos[0].position, combinedFilter, hits);
 
             if (hitCount > 0)
             {
@@ -532,38 +834,45 @@ public class RopeSystem : MonoBehaviour
                 // 处理特殊物体标签效果
                 HandleHookTagEffect(hitTag);
 
-                // 计算更安全的锚点位置
-                Vector2 safeAnchorPoint = hit.point + (hit.normal.normalized * linecastOffset);
-
-                // 检查新锚点是否与现有锚点距离足够远，避免重复添加
-                if (Vector2.Distance(safeAnchorPoint, anchors[0]) > anchorSafetyCheck)
+                // 检查是否碰撞到的是MovingObject
+                MovingObject movingObj = hit.collider.GetComponent<MovingObject>();
+                
+                // 只有当不是MovingObject时，才添加新的锚点
+                if (movingObj == null)
                 {
-                    // 确保从玩家到新锚点的路径是通畅的
-                    Vector2 dirToAnchor = (safeAnchorPoint - playerPos).normalized;
-                    float distToAnchor = Vector2.Distance(playerPos, safeAnchorPoint);
+                    // 计算更安全的锚点位置
+                    Vector2 safeAnchorPoint = hit.point + (hit.normal.normalized * linecastOffset);
 
-                    // 从玩家位置向新锚点方向稍微偏移一点，避免自身碰撞检测
-                    Vector2 offsetStart = playerPos + dirToAnchor * 0.2f;
-
-                    // 再次检查从偏移起点到新锚点是否有障碍物，使用combinedFilter
-                    RaycastHit2D[] safetyHits = new RaycastHit2D[1];
-                    int safetyHitCount = Physics2D.Linecast(offsetStart, safeAnchorPoint, combinedFilter, safetyHits);
-
-                    // 如果没有障碍物或障碍物就是目标点，则添加锚点
-                    if (safetyHitCount == 0 || Vector2.Distance(safetyHits[0].point, safeAnchorPoint) < 0.1f)
+                    // 检查新锚点是否与现有锚点距离足够远，避免重复添加
+                    if (Vector2.Distance(safeAnchorPoint, anchorInfos[0].position) > anchorSafetyCheck)
                     {
-                        AddAnchor(safeAnchorPoint);
+                        // 确保从玩家到新锚点的路径是通畅的
+                        Vector2 dirToAnchor = (safeAnchorPoint - playerPos).normalized;
+                        float distToAnchor = Vector2.Distance(playerPos, safeAnchorPoint);
+
+                        // 从玩家位置向新锚点方向稍微偏移一点，避免自身碰撞检测
+                        Vector2 offsetStart = playerPos + dirToAnchor * 0.2f;
+
+                        // 再次检查从偏移起点到新锚点是否有障碍物，使用combinedFilter
+                        RaycastHit2D[] safetyHits = new RaycastHit2D[1];
+                        int safetyHitCount = Physics2D.Linecast(offsetStart, safeAnchorPoint, combinedFilter, safetyHits);
+
+                        // 如果没有障碍物或障碍物就是目标点，则添加锚点
+                        if (safetyHitCount == 0 || Vector2.Distance(safetyHits[0].point, safeAnchorPoint) < 0.1f)
+                        {
+                            AddAnchor(safeAnchorPoint);
+                        }
                     }
                 }
             }
 
             // 检查是否可以移除锚点
-            if (anchors.Count > 1)
+            if (anchorInfos.Count > 1)
             {
                 // 计算玩家到第一个锚点的向量
-                Vector2 playerToFirstAnchor = (anchors[0] - playerPos).normalized;
+                Vector2 playerToFirstAnchor = (anchorInfos[0].position - playerPos).normalized;
                 // 计算第一个锚点到第二个锚点的向量
-                Vector2 firstToSecondAnchor = (anchors[1] - anchors[0]).normalized;
+                Vector2 firstToSecondAnchor = (anchorInfos[1].position - anchorInfos[0].position).normalized;
 
                 // 计算两个向量的点积，用于判断夹角
                 float dotProduct = Vector2.Dot(playerToFirstAnchor, firstToSecondAnchor);
@@ -581,12 +890,12 @@ public class RopeSystem : MonoBehaviour
                 else
                 {
                     // 保留原有的检测逻辑作为备选
-                    Vector2 ABVector = (anchors[0] - playerPos).normalized;
-                    Vector2 shortLCStart = anchors[0] - (0.2f * ABVector);
+                    Vector2 ABVector = (anchorInfos[0].position - playerPos).normalized;
+                    Vector2 shortLCStart = anchorInfos[0].position - (0.2f * ABVector);
 
                     // 使用combinedFilter进行线检测
                     RaycastHit2D[] returnHits = new RaycastHit2D[1];
-                    int returnHitCount = Physics2D.Linecast(shortLCStart, anchors[1], combinedFilter, returnHits);
+                    int returnHitCount = Physics2D.Linecast(shortLCStart, anchorInfos[1].position, combinedFilter, returnHits);
 
                     if (returnHitCount == 0)
                     {
@@ -603,21 +912,32 @@ public class RopeSystem : MonoBehaviour
     }
 
     // 添加锚点
-    private void AddAnchor(Vector2 pos)
+    private void AddAnchor(Vector2 pos, GameObject attachedObj = null, Vector3 localPos = default)
     {
         // 避免添加太接近的锚点
-        if (anchors.Count > 0 && Vector2.Distance(pos, anchors[0]) < anchorSafetyCheck)
+        if (anchorInfos.Count > 0 && Vector2.Distance(pos, anchorInfos[0].position) < anchorSafetyCheck)
             return;
 
         // 记住燃烧点的实际位置（如果有）
         Vector2? burningPointPosition = null;
-        if (burningAnchorIndex >= 0 && burningAnchorIndex < anchors.Count)
+        if (burningAnchorIndex >= 0 && burningAnchorIndex < anchorInfos.Count)
         {
-            burningPointPosition = anchors[burningAnchorIndex];
+            burningPointPosition = anchorInfos[burningAnchorIndex].position;
+        }
+
+        // 创建新的锚点信息
+        AnchorInfo newAnchor;
+        if (attachedObj != null)
+        {
+            newAnchor = new AnchorInfo(pos, attachedObj, localPos);
+        }
+        else
+        {
+            newAnchor = new AnchorInfo(pos);
         }
 
         // 始终在列表开头插入新锚点
-        anchors.Insert(0, pos);
+        anchorInfos.Insert(0, newAnchor);
 
         // 如果有燃烧点，更新燃烧点索引
         if (burningAnchorIndex >= 0)
@@ -627,9 +947,11 @@ public class RopeSystem : MonoBehaviour
         }
 
         // 如果有多个锚点，计算锚点间距离
-        if (anchors.Count > 1)
+        if (anchorInfos.Count > 1)
         {
-            combinedAnchorLen += Vector2.Distance(anchors[0], anchors[1]);
+            float distance = Vector2.Distance(anchorInfos[0].position, anchorInfos[1].position);
+            anchorInfos[0].initialDistance = distance;
+            combinedAnchorLen += distance;
             combinedAnchorLen = Mathf.Round(combinedAnchorLen * 100f) / 100f;
         }
 
@@ -639,29 +961,22 @@ public class RopeSystem : MonoBehaviour
 
     private void RemoveAnchor()
     {
-        if (anchors.Count <= 1)
+        if (anchorInfos.Count <= 1)
             return;
 
         // 如果第一个锚点是燃烧锚点，则不允许删除
         if (burningAnchorIndex == 0)
             return;
         // 如果删除后只剩下燃烧锚点，则不允许删除
-        if (anchors.Count == 2 && burningAnchorIndex == 1)
+        if (anchorInfos.Count == 2 && burningAnchorIndex == 1)
             return;
 
-        // 记住燃烧点的实际位置（如果有）
-        Vector2? burningPointPosition = null;
-        if (burningAnchorIndex >= 0 && burningAnchorIndex < anchors.Count)
-        {
-            burningPointPosition = anchors[burningAnchorIndex];
-        }
-
         // 计算要减去的距离
-        combinedAnchorLen -= Vector2.Distance(anchors[0], anchors[1]);
+        combinedAnchorLen -= Vector2.Distance(anchorInfos[0].position, anchorInfos[1].position);
         combinedAnchorLen = Mathf.Round(combinedAnchorLen * 100f) / 100f;
 
         // 移除第一个锚点
-        anchors.RemoveAt(0);
+        anchorInfos.RemoveAt(0);
 
         // 更新燃烧锚点索引
         if (burningAnchorIndex > 0)
@@ -673,25 +988,26 @@ public class RopeSystem : MonoBehaviour
         // 更新关节
         SetJoint();
     }
-    
+
+
     // 设置关节
     private void SetJoint()
     {
-        if (distanceJoint == null || anchors.Count == 0)
+        if (distanceJoint == null || anchorInfos.Count == 0)
             return;
-            
+
         // 计算距离
-        float dist = Vector2.Distance(playerController.transform.position, anchors[0]);
-        
+        float dist = Vector2.Distance(playerController.transform.position, anchorInfos[0].position);
+
         // 确保总长度不超过最大长度
         float allowedDistance = maxRopeLength - combinedAnchorLen;
         dist = Mathf.Min(dist, allowedDistance);
-        
+
         // 配置关节
-        distanceJoint.connectedAnchor = anchors[0];
+        distanceJoint.connectedAnchor = anchorInfos[0].position;
         distanceJoint.distance = dist;
         distanceJoint.enabled = true;
-        
+
         // 更新当前绳索长度
         currentRopeLength = dist;
     }
@@ -703,7 +1019,7 @@ public class RopeSystem : MonoBehaviour
             return;
 
         // 设置顶点数量：玩家位置 + 所有锚点
-        int totalPoints = anchors.Count + 1;
+        int totalPoints = anchorInfos.Count + 1;
         lineRenderer.positionCount = totalPoints;
 
         // 创建一个包含所有点的数组
@@ -713,9 +1029,9 @@ public class RopeSystem : MonoBehaviour
         positions[0] = playerController.transform.position;
 
         // 设置所有锚点
-        for (int i = 0; i < anchors.Count; i++)
+        for (int i = 0; i < anchorInfos.Count; i++)
         {
-            positions[i + 1] = anchors[i];
+            positions[i + 1] = anchorInfos[i].position;
         }
 
         // 一次性设置所有点的位置
@@ -779,13 +1095,13 @@ public class RopeSystem : MonoBehaviour
         lineRenderer.widthCurve = newWidthCurve;
 
         // 如果有燃烧锚点，更新燃烧效果的可视化
-        if (burningAnchorIndex >= 0 && burningAnchorIndex < anchors.Count)
+        if (burningAnchorIndex >= 0 && burningAnchorIndex < anchorInfos.Count)
         {
             // 这里可以添加代码来更新燃烧效果的可视化
             // 例如，更新火焰粒子的位置
             if (fireParticleInstance != null)
             {
-                fireParticleInstance.transform.position = anchors[burningAnchorIndex];
+                fireParticleInstance.transform.position = anchorInfos[burningAnchorIndex].position;
             }
         }
     }
@@ -801,6 +1117,13 @@ public class RopeSystem : MonoBehaviour
         // 原有的代码
         isShooting = false;
         isHooked = false;
+
+        // 重置移动物体相关变量
+        hookedObject = null;
+        hookedMovingObject = null;
+        lastHookedObjectPosition = Vector2.zero;
+        lastHookedObjectRotation = Quaternion.identity;
+        lastHookedObjectScale = Vector3.one;
 
         // 重置线渲染器的颜色和宽度到原始状态
         if (lineRenderer != null)
@@ -819,7 +1142,7 @@ public class RopeSystem : MonoBehaviour
         lineRenderer.enabled = false;
 
         // 清空锚点
-        anchors.Clear();
+        anchorInfos.Clear();
         combinedAnchorLen = 0f;
 
         // 重置线渲染器
@@ -853,7 +1176,7 @@ public class RopeSystem : MonoBehaviour
     #endregion
     public void AdjustRopeLength(float direction)
     {
-        if (!isHooked || distanceJoint == null || !distanceJoint.enabled || anchors.Count == 0)
+        if (!isHooked || distanceJoint == null || !distanceJoint.enabled || anchorInfos.Count == 0)
             return;
 
         // 如果是伸长绳索 (direction > 0)
@@ -864,10 +1187,10 @@ public class RopeSystem : MonoBehaviour
             Vector2 prevPoint = playerController.transform.position;
 
             // 计算玩家到所有锚点的路径总长度
-            for (int i = 0; i < anchors.Count; i++)
+            for (int i = 0; i < anchorInfos.Count; i++)
             {
-                actualRopePathLength += Vector2.Distance(prevPoint, anchors[i]);
-                prevPoint = anchors[i];
+                actualRopePathLength += Vector2.Distance(prevPoint, anchorInfos[i]);
+                prevPoint = anchorInfos[i];
             }
 
             // 检查如果增加长度后是否会超过最大长度
@@ -914,9 +1237,9 @@ public class RopeSystem : MonoBehaviour
         // 计算垂直于绳索的方向
         Vector2 ropeDirection = Vector2.zero;
         
-        if (anchors.Count > 0)
+        if (anchorInfos.Count > 0)
         {
-            ropeDirection = (anchors[0] - (Vector2)playerController.transform.position).normalized;
+            ropeDirection = (anchorInfos[0] - (Vector2)playerController.transform.position).normalized;
         }
         else
         {
@@ -933,7 +1256,7 @@ public class RopeSystem : MonoBehaviour
     public bool CutRope(Vector2 cutPosition, float cutRadius = 0.5f)
     {
         // 如果没有钩住或者没有锚点，则无法切断
-        if (!isHooked || anchors.Count == 0)
+        if (!isHooked || anchorInfos.Count == 0)
             return false;
 
         // 检查玩家位置和所有锚点之间的线段是否与切割点相交
@@ -941,11 +1264,11 @@ public class RopeSystem : MonoBehaviour
         Vector2 prevPoint = playerPos;
 
         // 创建一个新的锚点列表，用于存储切割后保留的锚点
-        List<Vector2> remainingAnchors = new List<Vector2>();
+        List<AnchorInfo> remainingAnchors = new List<AnchorInfo>();
         bool ropeCut = false;
 
         // 检查玩家到第一个锚点的线段
-        if (IsPointNearLineSegment(playerPos, anchors[0], cutPosition, cutRadius))
+        if (IsPointNearLineSegment(playerPos, anchorInfos[0].position, cutPosition, cutRadius))
         {
             // 如果切割点靠近玩家和第一个锚点之间的线段，直接释放绳索
             ReleaseRope();
@@ -953,9 +1276,9 @@ public class RopeSystem : MonoBehaviour
         }
 
         // 检查锚点之间的线段
-        for (int i = 0; i < anchors.Count - 1; i++)
+        for (int i = 0; i < anchorInfos.Count - 1; i++)
         {
-            if (IsPointNearLineSegment(anchors[i], anchors[i + 1], cutPosition, cutRadius))
+            if (IsPointNearLineSegment(anchorInfos[i].position, anchorInfos[i + 1].position, cutPosition, cutRadius))
             {
                 // 如果切割点靠近当前锚点和下一个锚点之间的线段
                 ropeCut = true;
@@ -968,7 +1291,7 @@ public class RopeSystem : MonoBehaviour
                 }
 
                 // 保留切割点之前的锚点
-                remainingAnchors = new List<Vector2>(anchors.GetRange(0, i + 1));
+                remainingAnchors = new List<AnchorInfo>(anchorInfos.GetRange(0, i + 1));
                 break;
             }
         }
@@ -977,7 +1300,7 @@ public class RopeSystem : MonoBehaviour
         if (ropeCut)
         {
             // 更新锚点列表
-            anchors = remainingAnchors;
+            anchorInfos = remainingAnchors;
 
             // 重新计算锚点间距离
             RecalculateAnchorLength();
@@ -1045,18 +1368,18 @@ public class RopeSystem : MonoBehaviour
     {
         return hookPosition;
     }
-    
+
 
     public Vector2 GetCurrentAnchorPosition()
     {
-        if (anchors.Count > 0)
-            return anchors[0];
+        if (anchorInfos.Count > 0)
+            return anchorInfos[0].position;
         return Vector2.zero;
     }
 
     public bool HasAnchors()
     {
-        return anchors.Count > 0;
+        return anchorInfos.Count > 0;
     }
     
     // 获取当前钩中的物体标签
@@ -1090,7 +1413,12 @@ public class RopeSystem : MonoBehaviour
     // 获取锚点列表
     public List<Vector2> GetAnchors()
     {
-        return new List<Vector2>(anchors);
+        List<Vector2> result = new List<Vector2>();
+        foreach (AnchorInfo info in anchorInfos)
+        {
+            result.Add(info.position);
+        }
+        return result;
     }
 
 
@@ -1108,7 +1436,7 @@ public class RopeSystem : MonoBehaviour
     public void SetBurningAnchorIndex(int anchorIndex)
     {
         // 检查索引是否有效
-        if (anchorIndex >= 0 && anchorIndex < anchors.Count)
+        if (anchorIndex >= 0 && anchorIndex < anchorInfos.Count)
         {
             burningAnchorIndex = anchorIndex;
         }
@@ -1128,13 +1456,13 @@ public class RopeSystem : MonoBehaviour
         {
             // 确定火焰位置
             Vector3 firePosition = Vector3.zero;
-            if (anchors.Count > burningAnchorIndex && burningAnchorIndex >= 0)
+            if (anchorInfos.Count > burningAnchorIndex && burningAnchorIndex >= 0)
             {
-                firePosition = anchors[burningAnchorIndex];
+                firePosition = anchorInfos[burningAnchorIndex].position;
             }
-            else if (anchors.Count > 0)
+            else if (anchorInfos.Count > 0)
             {
-                firePosition = anchors[0];
+                firePosition = anchorInfos[0].position;
             }
             else
             {
@@ -1232,20 +1560,20 @@ public class RopeSystem : MonoBehaviour
             StopFireParticle(fireParticleInstance);
             fireParticleInstance = null;
         }
-        
-        if (burningAnchorIndex < 0 || burningAnchorIndex >= anchors.Count)
+
+        if (burningAnchorIndex < 0 || burningAnchorIndex >= anchorInfos.Count)
             return;
-        
+
         // 保留从玩家到燃烧点的部分，移除燃烧点之后的部分
         if (burningAnchorIndex > 0)
         {
             // 移除从燃烧点开始的所有锚点
-            int countToRemove = anchors.Count - burningAnchorIndex;
-            anchors.RemoveRange(burningAnchorIndex, countToRemove);
-            
+            int countToRemove = anchorInfos.Count - burningAnchorIndex;
+            anchorInfos.RemoveRange(burningAnchorIndex, countToRemove);
+
             // 重新计算锚点间距离
             RecalculateAnchorLength();
-            
+
             // 更新关节
             SetJoint();
         }
@@ -1256,18 +1584,23 @@ public class RopeSystem : MonoBehaviour
         }
     }
 
-// 重新计算锚点间总距离
-private void RecalculateAnchorLength()
-{
-    combinedAnchorLen = 0f;
-    
-    for (int i = 0; i < anchors.Count - 1; i++)
+    // 重新计算锚点间总距离
+    private void RecalculateAnchorLength()
     {
-        combinedAnchorLen += Vector2.Distance(anchors[i], anchors[i + 1]);
+        combinedAnchorLen = 0f;
+
+        for (int i = 0; i < anchorInfos.Count - 1; i++)
+        {
+            float distance = Vector2.Distance(anchorInfos[i].position, anchorInfos[i + 1].position);
+            anchorInfos[i].initialDistance = distance;
+            combinedAnchorLen += distance;
+        }
+
+        combinedAnchorLen = Mathf.Round(combinedAnchorLen * 100f) / 100f;
     }
+
     
-    combinedAnchorLen = Mathf.Round(combinedAnchorLen * 100f) / 100f;
-}
+
 #endregion
 #region OnGizmos    
     // 在编辑器中可视化锚点和绳索
@@ -1275,17 +1608,17 @@ private void RecalculateAnchorLength()
     {
         // 绘制锚点
         Gizmos.color = Color.red;
-        foreach (Vector2 anchor in anchors)
+        foreach (Vector2 anchor in anchorInfos)
         {
             Gizmos.DrawWireSphere(anchor, 0.25f);
         }
         
         // 绘制偏移距离
         Gizmos.color = Color.green;
-        if (anchors.Count > 0)
+        if (anchorInfos.Count > 0)
         {
             // 显示第一个锚点的偏移距离
-            Gizmos.DrawWireSphere(anchors[0], linecastOffset);
+            Gizmos.DrawWireSphere(anchorInfos[0].position, linecastOffset);
         }
 
         // 绘制预测路径

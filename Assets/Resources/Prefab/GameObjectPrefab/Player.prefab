@@ -137,9 +137,9 @@ LineRenderer:
   m_AutoUVMaxDistance: 0.5
   m_AutoUVMaxAngle: 89
   m_LightmapParameters: {fileID: 0}
-  m_SortingLayerID: 2062428235
-  m_SortingLayer: 2
-  m_SortingOrder: 100
+  m_SortingLayerID: -502544557
+  m_SortingLayer: 1
+  m_SortingOrder: 11
   m_Positions:
   - {x: 0, y: 0, z: 0}
   - {x: 0, y: 0, z: 1}
@@ -232,6 +232,10 @@ MonoBehaviour:
   minRopeLength: 1
   maxRopeLength: 20
   ropeShootSpeed: 45
+  maxAngleForRemoval: 178
+  minAngleForStability: 4
+  lengthConstraintTolerance: 0.1
+  lengthConstraintStrength: 0.5
   maxLengthHoldTime: 0.05
   hookableLayers:
     serializedVersion: 2
