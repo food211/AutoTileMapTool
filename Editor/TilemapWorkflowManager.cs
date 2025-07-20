@@ -5,6 +5,7 @@ using UnityEngine.Tilemaps;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using UnityEditor.SceneManagement;
 
 namespace TilemapTools
 {
@@ -333,7 +334,7 @@ namespace TilemapTools
                 {"applyRules", "Apply Rules"},
                 {"preserveGuids", "Preserve GUIDs"},
                 {"executeAutomation", "Execute Automated Workflow"},
-                {"automatedWorkflowSteps", "This workflow will:\n1. Generate a tile palette from the source texture\n2. Create rule assets for terrain generation\n3. Apply rules to create final tilemaps\n4. Enable/disable individual steps, adjust step order\n5. Suitable for complex terrain generation, like base terrain, detail addition, edge processing, etc."},
+                {"automatedWorkflowSteps", "This workflow will:\n1. Generate tile palette from source texture\n2. Create rule assets for terrain generation\n3. Apply rules to create final tilemap\n4. Enable/disable individual steps, adjust step order\n5. Suitable for complex terrain generation like base terrain, detail addition, edge handling, etc.\n6. Please use forward slashes \"/\" in path fields, backslashes are not supported"},
                 {"error", "Error"},
                 {"success", "Success"},
                 {"invalidSourceTexture", "Please select a valid source texture."},
@@ -384,6 +385,8 @@ namespace TilemapTools
                 {"applyAllEnabled", "Apply All Enabled Operations"},
                 {"terrainRules", "Terrain Rules"},
                 {"step3Help", "Use this step to apply terrain rules to your tilemaps. You can save common operations for quick access."},
+                {"successfullyApplied","successfullyApplied"},
+                {"terrainOperations","terrainOperations"}
             };
             localizedTexts["en"] = enTexts;
 
@@ -446,7 +449,7 @@ namespace TilemapTools
                 {"applyRules", "应用规则"},
                 {"preserveGuids", "保留GUID"},
                 {"executeAutomation", "执行自动化工作流"},
-                {"automatedWorkflowSteps", "此工作流将：\n1. 从源纹理生成瓦片调色板\n2. 创建地形生成的规则资产\n3. 应用规则创建最终瓦片地图\n4. 启用/禁用单个步骤，调整步骤顺序\n5. 适用于复杂地形生成，如基础地形、细节添加、边缘处理等"},
+                {"automatedWorkflowSteps", "此工作流将：\n1. 从源纹理生成瓦片调色板\n2. 创建地形生成的规则资产\n3. 应用规则创建最终瓦片地图\n4. 启用/禁用单个步骤，调整步骤顺序\n5. 适用于复杂地形生成，如基础地形、细节添加、边缘处理等\n6. 路径栏请使用\"/\"斜杠，不支持反斜杠"},
                 {"error", "错误"},
                 {"success", "成功"},
                 {"invalidSourceTexture", "请选择有效的源纹理。"},
@@ -497,6 +500,8 @@ namespace TilemapTools
                 {"applyAllEnabled", "应用所有已启用的操作"},
                 {"terrainRules", "地形规则"},
                 {"step3Help", "使用此步骤将地形规则应用到您的瓦片地图。您可以保存常用操作以便快速访问。"},
+                {"successfullyApplied","成功应用"},
+                {"terrainOperations","个地形规则"},
             };
             localizedTexts["zh-CN"] = zhTexts;
         }
@@ -808,6 +813,8 @@ namespace TilemapTools
             EditorGUILayout.HelpBox(GetLocalizedText("automatedWorkflowSteps"), MessageType.Info);
         }
 
+        // 在 ExecuteAutomatedWorkflow 方法中，修改生成调色板后的代码部分
+        // 在 ExecuteAutomatedWorkflow 方法中，修改生成调色板后的代码部分
         private void ExecuteAutomatedWorkflow(
             bool preserveGuids,
             Texture2D sourceTexture,
@@ -872,6 +879,36 @@ namespace TilemapTools
                     // 设置最后生成的调色板路径
                     SetLastGeneratedPalette(inputPalettePath);
 
+                    // 强制刷新 AssetDatabase 确保调色板资产被正确导入
+                    AssetDatabase.Refresh();
+
+                    // 确保调色板预制体被正确加载和保存
+                    GameObject inputPalette = AssetDatabase.LoadAssetAtPath<GameObject>(inputPalettePath);
+                    if (inputPalette != null)
+                    {
+                        // 关闭当前打开的任何Tile Palette窗口，避免冲突
+                        CloseTilePaletteWindow();
+
+                        // 标记资产为已修改
+                        EditorUtility.SetDirty(inputPalette);
+
+                        // 保存资产前先保存场景，避免冲突
+                        if (EditorSceneManager.GetActiveScene().isDirty)
+                        {
+                            EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo();
+                        }
+
+                        // 保存资产
+                        AssetDatabase.SaveAssets();
+
+                        // 再次刷新确保变更被应用
+                        AssetDatabase.Refresh();
+                    }
+                    else
+                    {
+                        Debug.LogWarning("无法加载输入调色板预制体，可能需要手动刷新。");
+                    }
+
                     // 如果有输出纹理，也为其生成调色板
                     if (outputTexture != null)
                     {
@@ -897,10 +934,32 @@ namespace TilemapTools
                         {
                             Debug.LogWarning(GetLocalizedText("outputTextureWarning"));
                         }
+                        else
+                        {
+                            // 强制刷新 AssetDatabase 确保输出调色板资产被正确导入
+                            AssetDatabase.Refresh();
+
+                            // 确保输出调色板预制体被正确加载和保存
+                            GameObject outputPalette = AssetDatabase.LoadAssetAtPath<GameObject>(outputPalettePath);
+                            if (outputPalette != null)
+                            {
+                                // 标记资产为已修改
+                                EditorUtility.SetDirty(outputPalette);
+
+                                // 保存资产
+                                AssetDatabase.SaveAssets();
+
+                                // 再次刷新确保变更被应用
+                                AssetDatabase.Refresh();
+                            }
+                        }
                     }
+
+                    // 在完成所有调色板生成后等待一小段时间，确保资产完全保存
+                    System.Threading.Thread.Sleep(500);
                 }
 
-                // 步骤2：创建规则
+                // 步骤2：创建规则 - 确保在调色板完全保存后进行
                 if (automatedExtractRules && !string.IsNullOrEmpty(inputPalettePath))
                 {
                     EditorUtility.DisplayProgressBar(
@@ -934,13 +993,16 @@ namespace TilemapTools
                         ruleConfiger.ClearCache();
                     }
 
-                    // 加载调色板
-                    GameObject inputPalette = AssetDatabase.LoadAssetAtPath<GameObject>(inputPalettePath);
+                    // 再次刷新确保调色板资产被正确加载
+                    AssetDatabase.Refresh();
+
+                    // 加载调色板 - 使用 LoadMainAssetAtPath 确保加载完整资产
+                    GameObject inputPalette = AssetDatabase.LoadMainAssetAtPath(inputPalettePath) as GameObject;
                     GameObject outputPalette = null;
 
                     if (!string.IsNullOrEmpty(outputPalettePath))
                     {
-                        outputPalette = AssetDatabase.LoadAssetAtPath<GameObject>(outputPalettePath);
+                        outputPalette = AssetDatabase.LoadMainAssetAtPath(outputPalettePath) as GameObject;
                     }
 
                     if (inputPalette != null)
@@ -1052,11 +1114,38 @@ namespace TilemapTools
                 }
 
                 Debug.LogException(e);
+
+                // 显示错误对话框
+                EditorUtility.DisplayDialog(
+                    GetLocalizedText("error"),
+                    e.Message,
+                    GetLocalizedText("ok"));
             }
             finally
             {
                 EditorUtility.ClearProgressBar();
                 IsAutomatedWorkflow = false;
+            }
+        }
+
+        // 添加一个关闭Tile Palette窗口的方法，避免冲突
+        private void CloseTilePaletteWindow()
+        {
+            // 尝试查找并关闭Tile Palette窗口
+            System.Type gridPaintPaletteWindowType = System.Type.GetType("UnityEditor.GridPaintPaletteWindow,UnityEditor");
+            if (gridPaintPaletteWindowType != null)
+            {
+                // 获取所有打开的窗口
+                UnityEngine.Object[] windows = Resources.FindObjectsOfTypeAll(gridPaintPaletteWindowType);
+                foreach (var window in windows)
+                {
+                    // 调用Close方法关闭窗口
+                    var closeMethod = gridPaintPaletteWindowType.GetMethod("Close");
+                    if (closeMethod != null)
+                    {
+                        closeMethod.Invoke(window, null);
+                    }
+                }
             }
         }
 
