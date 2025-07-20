@@ -386,7 +386,17 @@ namespace TilemapTools
                 {"terrainRules", "Terrain Rules"},
                 {"step3Help", "Use this step to apply terrain rules to your tilemaps. You can save common operations for quick access."},
                 {"successfullyApplied","successfullyApplied"},
-                {"terrainOperations","terrainOperations"}
+                {"terrainOperations","terrainOperations"},
+                {"terrainRule", "Terrain Rule"},
+                {"Rule","Rule"},
+                { "addRule", "Add Rule"},
+                {"delete", "Delete"},
+                {"useSourceInput", "Use Source as Input"},
+                {"usingSourceTilemap", "Using source tilemap as input"},
+                {"usingPreviousResult", "Using previous rule's result as input"},
+                {"clearBeforeApply", "Clear Output Before Apply"},
+                {"operationsFailed", "operations failed"},
+                {"errorDetails", "Error Details"},
             };
             localizedTexts["en"] = enTexts;
 
@@ -502,6 +512,16 @@ namespace TilemapTools
                 {"step3Help", "使用此步骤将地形规则应用到您的瓦片地图。您可以保存常用操作以便快速访问。"},
                 {"successfullyApplied","成功应用"},
                 {"terrainOperations","个地形规则"},
+                {"terrainRule", "地形规则"},
+                {"Rule","规则"},
+                {"addRule", "添加规则"},
+                {"delete", "删除"},
+                {"useSourceInput", "使用源输入"},
+                {"usingSourceTilemap", "使用源瓦片地图作为输入"},
+                {"usingPreviousResult", "使用上一规则的结果作为输入"},
+                {"clearBeforeApply", "应用前清除输出"},
+                {"operationsFailed", "个操作失败"},
+                {"errorDetails", "错误详情"},
             };
             localizedTexts["zh-CN"] = zhTexts;
         }
@@ -813,7 +833,6 @@ namespace TilemapTools
             EditorGUILayout.HelpBox(GetLocalizedText("automatedWorkflowSteps"), MessageType.Info);
         }
 
-        // 在 ExecuteAutomatedWorkflow 方法中，修改生成调色板后的代码部分
         // 在 ExecuteAutomatedWorkflow 方法中，修改生成调色板后的代码部分
         private void ExecuteAutomatedWorkflow(
             bool preserveGuids,
@@ -1303,24 +1322,30 @@ namespace TilemapTools
         {
             EditorGUILayout.HelpBox(GetLocalizedText("step3Help"), MessageType.Info);
             EditorGUILayout.Space();
-            // // 打开完整编辑器按钮（这部分功能不再需要了，下面的功能已经可以完全代替它)
+
+            // // 打开完整编辑器按钮
             // if (GUILayout.Button(GetLocalizedText("openTerrainEditor"), GUILayout.Height(40)))
             // {
             //     AutoTerrainTileEditor.ShowWindow();
             // }
+
             // EditorGUILayout.Space();
             EditorGUILayout.LabelField(GetLocalizedText("savedOperations"), EditorStyles.boldLabel);
+
             // 获取保存的操作列表
             List<TerrainOperation> operations = LoadTerrainOperations();
+
             // 显示保存的操作列表
             EditorGUI.BeginChangeCheck();
             for (int i = 0; i < operations.Count; i++)
             {
                 EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+
                 // 操作名称和启用状态
                 EditorGUILayout.BeginHorizontal();
                 operations[i].enabled = EditorGUILayout.Toggle(operations[i].enabled, GUILayout.Width(20));
                 operations[i].name = EditorGUILayout.TextField(operations[i].name);
+
                 // 删除按钮
                 if (GUILayout.Button(GetLocalizedText("delete"), GUILayout.Width(60)))
                 {
@@ -1332,6 +1357,7 @@ namespace TilemapTools
                     continue;
                 }
                 EditorGUILayout.EndHorizontal();
+
                 // 操作详情
                 EditorGUI.indentLevel++;
                 operations[i].sourceTilemap = (Tilemap)EditorGUILayout.ObjectField(
@@ -1346,34 +1372,75 @@ namespace TilemapTools
                 if (operations[i].terrainRules == null)
                 {
                     operations[i].terrainRules = new List<AutoTerrainTileRuleConfiger>();
+                    operations[i].useSourceAsInput = new List<bool>();
+                }
+
+                // 确保useSourceAsInput列表长度与terrainRules一致
+                while (operations[i].useSourceAsInput.Count < operations[i].terrainRules.Count)
+                {
+                    operations[i].useSourceAsInput.Add(false);
                 }
 
                 // 显示现有规则
                 for (int j = 0; j < operations[i].terrainRules.Count; j++)
                 {
+                    // 将规则选择、输入源选择和删除按钮都放在同一行
                     EditorGUILayout.BeginHorizontal();
+
+                    // 规则序号标签
+                    EditorGUILayout.LabelField(GetLocalizedText("Rule") + $"{j + 1}", GUILayout.Width(60));
+
+                    // 规则对象字段
                     operations[i].terrainRules[j] = (AutoTerrainTileRuleConfiger)EditorGUILayout.ObjectField(
-                        $"{GetLocalizedText("terrainRule")} {j + 1}",
                         operations[i].terrainRules[j],
                         typeof(AutoTerrainTileRuleConfiger),
                         false);
+
+                    // 输入源选择（仅对第二个及以后的规则显示）
+                    if (j > 0)
+                    {
+                        GUIContent toggleContent = new GUIContent(GetLocalizedText("useSourceInput"),
+                            operations[i].useSourceAsInput[j] ?
+                            GetLocalizedText("usingSourceTilemap") :
+                            GetLocalizedText("usingPreviousResult"));
+
+                        operations[i].useSourceAsInput[j] = EditorGUILayout.ToggleLeft(
+                            toggleContent,
+                            operations[i].useSourceAsInput[j],
+                            GUILayout.Width(120));
+                    }
 
                     // 删除规则按钮
                     if (GUILayout.Button(GetLocalizedText("delete"), GUILayout.Width(60)))
                     {
                         operations[i].terrainRules.RemoveAt(j);
+                        if (j < operations[i].useSourceAsInput.Count)
+                        {
+                            operations[i].useSourceAsInput.RemoveAt(j);
+                        }
                         SaveTerrainOperations(operations);
                         j--;
                         EditorGUILayout.EndHorizontal();
                         continue;
                     }
+
                     EditorGUILayout.EndHorizontal();
+
+                    // 添加分隔线，除非是最后一个规则
+                    if (j < operations[i].terrainRules.Count - 1)
+                    {
+                        EditorGUILayout.Space(2);
+                        Rect rect = EditorGUILayout.GetControlRect(false, 1);
+                        EditorGUI.DrawRect(rect, new Color(0.5f, 0.5f, 0.5f, 0.3f));
+                        EditorGUILayout.Space(2);
+                    }
                 }
 
                 // 添加新规则按钮
                 if (GUILayout.Button(GetLocalizedText("addRule")))
                 {
                     operations[i].terrainRules.Add(null);
+                    operations[i].useSourceAsInput.Add(false);
                     SaveTerrainOperations(operations);
                 }
 
@@ -1382,23 +1449,26 @@ namespace TilemapTools
 
                 // 应用单个操作按钮
                 using (new EditorGUI.DisabledScope(operations[i].sourceTilemap == null ||
-                                                   operations[i].outputTilemap == null ||
-                                                   operations[i].terrainRules.Count == 0 ||
-                                                   operations[i].terrainRules.Contains(null)))
+                                                  operations[i].outputTilemap == null ||
+                                                  operations[i].terrainRules.Count == 0 ||
+                                                  operations[i].terrainRules.Contains(null)))
                 {
                     if (GUILayout.Button(GetLocalizedText("applyOperation")))
                     {
                         ApplyTerrainOperation(operations[i]);
                     }
                 }
+
                 EditorGUI.indentLevel--;
                 EditorGUILayout.EndVertical();
             }
+
             // 如果有任何更改，保存操作列表
             if (EditorGUI.EndChangeCheck())
             {
                 SaveTerrainOperations(operations);
             }
+
             // 添加新操作按钮
             EditorGUILayout.Space();
             if (GUILayout.Button(GetLocalizedText("addOperation")))
@@ -1408,23 +1478,27 @@ namespace TilemapTools
                     name = GetLocalizedText("newOperation") + " " + (operations.Count + 1),
                     enabled = true,
                     clearBeforeApply = true,
-                    terrainRules = new List<AutoTerrainTileRuleConfiger>()
+                    terrainRules = new List<AutoTerrainTileRuleConfiger>(),
+                    useSourceAsInput = new List<bool>()
                 };
                 operations.Add(newOperation);
                 SaveTerrainOperations(operations);
             }
+
             // 应用所有已启用操作按钮
             EditorGUILayout.Space();
             if (GUILayout.Button(GetLocalizedText("applyAllEnabled"), GUILayout.Height(30)))
             {
                 ApplyAllEnabledOperations(operations);
             }
+
             EditorGUILayout.Space();
             EditorGUILayout.LabelField(GetLocalizedText("instructions"), EditorStyles.boldLabel);
             EditorGUILayout.LabelField(GetLocalizedText("step3Instr1"));
             EditorGUILayout.LabelField(GetLocalizedText("step3Instr2"));
             EditorGUILayout.LabelField(GetLocalizedText("step3Instr3"));
             EditorGUILayout.LabelField(GetLocalizedText("step3Instr4"));
+
             EditorGUILayout.Space();
             GUILayout.BeginHorizontal();
             if (GUILayout.Button(GetLocalizedText("previous"), GUILayout.Height(25)))
@@ -1446,7 +1520,8 @@ namespace TilemapTools
             public bool enabled = true;
             public Tilemap sourceTilemap;
             public Tilemap outputTilemap;
-             public List<AutoTerrainTileRuleConfiger> terrainRules = new List<AutoTerrainTileRuleConfiger>();
+            public List<AutoTerrainTileRuleConfiger> terrainRules = new List<AutoTerrainTileRuleConfiger>();
+            public List<bool> useSourceAsInput = new List<bool>(); // 每个规则是否使用源输入
             public bool clearBeforeApply = true;
         }
 
@@ -1459,147 +1534,159 @@ namespace TilemapTools
         private const string TerrainOperationOutputTilemapKeyPrefix = "TerrainOperation_OutputTilemap_";
         private const string TerrainOperationRulesCountKeyPrefix = "TerrainOperation_RulesCount_";
         private const string TerrainOperationRulesKeyPrefix = "TerrainOperation_Rules_";
+        private const string TerrainOperationUseSourceInputKeyPrefix = "TerrainOperation_UseSourceInput_";
 
-       // 保存地形操作列表
-private static void SaveTerrainOperations(List<TerrainOperation> operations)
-{
-    // 保存操作数量
-    EditorPrefs.SetInt(TerrainOperationsCountKey, operations.Count);
-    for (int i = 0; i < operations.Count; i++)
-    {
-        // 保存操作名称和启用状态
-        EditorPrefs.SetString(TerrainOperationNameKeyPrefix + i, operations[i].name);
-        EditorPrefs.SetBool(TerrainOperationEnabledKeyPrefix + i, operations[i].enabled);
-        EditorPrefs.SetBool(TerrainOperationClearBeforeApplyKeyPrefix + i, operations[i].clearBeforeApply);
-        
-        // 保存Tilemap引用 - 使用GameObject路径而不是InstanceID
-        if (operations[i].sourceTilemap != null)
+        // 保存地形操作列表
+        private static void SaveTerrainOperations(List<TerrainOperation> operations)
         {
-            string sourcePath = instance.GetGameObjectPath(operations[i].sourceTilemap.gameObject);
-            EditorPrefs.SetString(TerrainOperationSourceTilemapKeyPrefix + i, sourcePath);
-        }
-        else
-        {
-            EditorPrefs.DeleteKey(TerrainOperationSourceTilemapKeyPrefix + i);
-        }
-        
-        if (operations[i].outputTilemap != null)
-        {
-            string outputPath = instance.GetGameObjectPath(operations[i].outputTilemap.gameObject);
-            EditorPrefs.SetString(TerrainOperationOutputTilemapKeyPrefix + i, outputPath);
-        }
-        else
-        {
-            EditorPrefs.DeleteKey(TerrainOperationOutputTilemapKeyPrefix + i);
-        }
-        
-        // 保存规则文件引用列表
-        if (operations[i].terrainRules != null)
-        {
-            EditorPrefs.SetInt(TerrainOperationRulesCountKeyPrefix + i, operations[i].terrainRules.Count);
-            for (int j = 0; j < operations[i].terrainRules.Count; j++)
+            // 保存操作数量
+            EditorPrefs.SetInt(TerrainOperationsCountKey, operations.Count);
+            for (int i = 0; i < operations.Count; i++)
             {
-                if (operations[i].terrainRules[j] != null)
+                // 保存操作名称和启用状态
+                EditorPrefs.SetString(TerrainOperationNameKeyPrefix + i, operations[i].name);
+                EditorPrefs.SetBool(TerrainOperationEnabledKeyPrefix + i, operations[i].enabled);
+                EditorPrefs.SetBool(TerrainOperationClearBeforeApplyKeyPrefix + i, operations[i].clearBeforeApply);
+
+                // 保存Tilemap引用 - 使用GameObject路径而不是InstanceID
+                if (operations[i].sourceTilemap != null)
                 {
-                    string guid = AssetDatabase.AssetPathToGUID(AssetDatabase.GetAssetPath(operations[i].terrainRules[j]));
-                    EditorPrefs.SetString(TerrainOperationRulesKeyPrefix + i + "_" + j, guid);
+                    string sourcePath = instance.GetGameObjectPath(operations[i].sourceTilemap.gameObject);
+                    EditorPrefs.SetString(TerrainOperationSourceTilemapKeyPrefix + i, sourcePath);
                 }
                 else
                 {
-                    EditorPrefs.DeleteKey(TerrainOperationRulesKeyPrefix + i + "_" + j);
+                    EditorPrefs.DeleteKey(TerrainOperationSourceTilemapKeyPrefix + i);
                 }
-            }
-        }
-        else
-        {
-            EditorPrefs.SetInt(TerrainOperationRulesCountKeyPrefix + i, 0);
-        }
-    }
-}
 
-// 加载地形操作列表
-private List<TerrainOperation> LoadTerrainOperations()
-{
-    List<TerrainOperation> operations = new List<TerrainOperation>();
-    int count = EditorPrefs.GetInt(TerrainOperationsCountKey, 0);
-    
-    for (int i = 0; i < count; i++)
-    {
-        TerrainOperation operation = new TerrainOperation();
-        operation.terrainRules = new List<AutoTerrainTileRuleConfiger>();
-        
-        // 加载操作名称和启用状态
-        if (EditorPrefs.HasKey(TerrainOperationNameKeyPrefix + i))
-        {
-            operation.name = EditorPrefs.GetString(TerrainOperationNameKeyPrefix + i);
-        }
-        
-        if (EditorPrefs.HasKey(TerrainOperationEnabledKeyPrefix + i))
-        {
-            operation.enabled = EditorPrefs.GetBool(TerrainOperationEnabledKeyPrefix + i);
-        }
-        
-        if (EditorPrefs.HasKey(TerrainOperationClearBeforeApplyKeyPrefix + i))
-        {
-            operation.clearBeforeApply = EditorPrefs.GetBool(TerrainOperationClearBeforeApplyKeyPrefix + i);
-        }
-        
-        // 加载Tilemap引用 - 使用GameObject路径而不是InstanceID
-        if (EditorPrefs.HasKey(TerrainOperationSourceTilemapKeyPrefix + i))
-        {
-            string sourcePath = EditorPrefs.GetString(TerrainOperationSourceTilemapKeyPrefix + i);
-            GameObject sourceGO = FindGameObjectByPath(sourcePath);
-            if (sourceGO != null)
-            {
-                operation.sourceTilemap = sourceGO.GetComponent<Tilemap>();
-            }
-        }
-        
-        if (EditorPrefs.HasKey(TerrainOperationOutputTilemapKeyPrefix + i))
-        {
-            string outputPath = EditorPrefs.GetString(TerrainOperationOutputTilemapKeyPrefix + i);
-            GameObject outputGO = FindGameObjectByPath(outputPath);
-            if (outputGO != null)
-            {
-                operation.outputTilemap = outputGO.GetComponent<Tilemap>();
-            }
-        }
-        
-        // 加载规则文件引用列表
-        int rulesCount = EditorPrefs.GetInt(TerrainOperationRulesCountKeyPrefix + i, 0);
-        for (int j = 0; j < rulesCount; j++)
-        {
-            if (EditorPrefs.HasKey(TerrainOperationRulesKeyPrefix + i + "_" + j))
-            {
-                string guid = EditorPrefs.GetString(TerrainOperationRulesKeyPrefix + i + "_" + j);
-                string path = AssetDatabase.GUIDToAssetPath(guid);
-                if (!string.IsNullOrEmpty(path))
+                if (operations[i].outputTilemap != null)
                 {
-                    AutoTerrainTileRuleConfiger rule = AssetDatabase.LoadAssetAtPath<AutoTerrainTileRuleConfiger>(path);
-                    operation.terrainRules.Add(rule);
+                    string outputPath = instance.GetGameObjectPath(operations[i].outputTilemap.gameObject);
+                    EditorPrefs.SetString(TerrainOperationOutputTilemapKeyPrefix + i, outputPath);
                 }
                 else
                 {
-                    operation.terrainRules.Add(null);
+                    EditorPrefs.DeleteKey(TerrainOperationOutputTilemapKeyPrefix + i);
+                }
+
+                // 保存规则文件引用列表
+                if (operations[i].terrainRules != null)
+                {
+                    EditorPrefs.SetInt(TerrainOperationRulesCountKeyPrefix + i, operations[i].terrainRules.Count);
+                    for (int j = 0; j < operations[i].terrainRules.Count; j++)
+                    {
+                        if (operations[i].terrainRules[j] != null)
+                        {
+                            string guid = AssetDatabase.AssetPathToGUID(AssetDatabase.GetAssetPath(operations[i].terrainRules[j]));
+                            EditorPrefs.SetString(TerrainOperationRulesKeyPrefix + i + "_" + j, guid);
+                        }
+                        else
+                        {
+                            EditorPrefs.DeleteKey(TerrainOperationRulesKeyPrefix + i + "_" + j);
+                        }
+
+                        // 保存每个规则的输入源设置
+                        if (j < operations[i].useSourceAsInput.Count)
+                        {
+                            EditorPrefs.SetBool(TerrainOperationUseSourceInputKeyPrefix + i + "_" + j,
+                                               operations[i].useSourceAsInput[j]);
+                        }
+                    }
+                }
+                else
+                {
+                    EditorPrefs.SetInt(TerrainOperationRulesCountKeyPrefix + i, 0);
                 }
             }
-            else
-            {
-                operation.terrainRules.Add(null);
-            }
         }
-        
-        operations.Add(operation);
-    }
-    
-    return operations;
-}
 
-// 应用单个地形操作
+        // 加载地形操作列表
+        private List<TerrainOperation> LoadTerrainOperations()
+        {
+            List<TerrainOperation> operations = new List<TerrainOperation>();
+            int count = EditorPrefs.GetInt(TerrainOperationsCountKey, 0);
+
+            for (int i = 0; i < count; i++)
+            {
+                TerrainOperation operation = new TerrainOperation();
+                operation.terrainRules = new List<AutoTerrainTileRuleConfiger>();
+                operation.useSourceAsInput = new List<bool>();
+
+                // 加载操作名称和启用状态
+                if (EditorPrefs.HasKey(TerrainOperationNameKeyPrefix + i))
+                {
+                    operation.name = EditorPrefs.GetString(TerrainOperationNameKeyPrefix + i);
+                }
+
+                if (EditorPrefs.HasKey(TerrainOperationEnabledKeyPrefix + i))
+                {
+                    operation.enabled = EditorPrefs.GetBool(TerrainOperationEnabledKeyPrefix + i);
+                }
+
+                if (EditorPrefs.HasKey(TerrainOperationClearBeforeApplyKeyPrefix + i))
+                {
+                    operation.clearBeforeApply = EditorPrefs.GetBool(TerrainOperationClearBeforeApplyKeyPrefix + i);
+                }
+
+                // 加载Tilemap引用 - 使用GameObject路径而不是InstanceID
+                if (EditorPrefs.HasKey(TerrainOperationSourceTilemapKeyPrefix + i))
+                {
+                    string sourcePath = EditorPrefs.GetString(TerrainOperationSourceTilemapKeyPrefix + i);
+                    GameObject sourceGO = FindGameObjectByPath(sourcePath);
+                    if (sourceGO != null)
+                    {
+                        operation.sourceTilemap = sourceGO.GetComponent<Tilemap>();
+                    }
+                }
+
+                if (EditorPrefs.HasKey(TerrainOperationOutputTilemapKeyPrefix + i))
+                {
+                    string outputPath = EditorPrefs.GetString(TerrainOperationOutputTilemapKeyPrefix + i);
+                    GameObject outputGO = FindGameObjectByPath(outputPath);
+                    if (outputGO != null)
+                    {
+                        operation.outputTilemap = outputGO.GetComponent<Tilemap>();
+                    }
+                }
+
+                // 加载规则文件引用列表
+                int rulesCount = EditorPrefs.GetInt(TerrainOperationRulesCountKeyPrefix + i, 0);
+                for (int j = 0; j < rulesCount; j++)
+                {
+                    if (EditorPrefs.HasKey(TerrainOperationRulesKeyPrefix + i + "_" + j))
+                    {
+                        string guid = EditorPrefs.GetString(TerrainOperationRulesKeyPrefix + i + "_" + j);
+                        string path = AssetDatabase.GUIDToAssetPath(guid);
+                        if (!string.IsNullOrEmpty(path))
+                        {
+                            AutoTerrainTileRuleConfiger rule = AssetDatabase.LoadAssetAtPath<AutoTerrainTileRuleConfiger>(path);
+                            operation.terrainRules.Add(rule);
+                        }
+                        else
+                        {
+                            operation.terrainRules.Add(null);
+                        }
+                    }
+                    else
+                    {
+                        operation.terrainRules.Add(null);
+                    }
+
+                    // 加载每个规则的输入源设置
+                    bool useSourceInput = EditorPrefs.GetBool(TerrainOperationUseSourceInputKeyPrefix + i + "_" + j, false);
+                    operation.useSourceAsInput.Add(useSourceInput);
+                }
+
+                operations.Add(operation);
+            }
+
+            return operations;
+        }
+
 private void ApplyTerrainOperation(TerrainOperation operation)
 {
-    if (operation.sourceTilemap == null || operation.outputTilemap == null || 
-        operation.terrainRules == null || operation.terrainRules.Count == 0 || 
+    if (operation.sourceTilemap == null || operation.outputTilemap == null ||
+        operation.terrainRules == null || operation.terrainRules.Count == 0 ||
         operation.terrainRules.Contains(null))
         return;
 
@@ -1609,67 +1696,124 @@ private void ApplyTerrainOperation(TerrainOperation operation)
         operation.outputTilemap.ClearAllTiles();
     }
 
-    // 创建临时Tilemap用于处理最终结果
-    GameObject tempGO = new GameObject("TempTilemap");
-    Tilemap tempTilemap = tempGO.AddComponent<Tilemap>();
-    tempGO.AddComponent<TilemapRenderer>();
-    
     try
     {
-        // 依次应用每个规则
-        foreach (var rule in operation.terrainRules)
+        // 创建临时Tilemap用于存储源数据
+        GameObject sourceGO = new GameObject("SourceTempTilemap");
+        Tilemap sourceTempTilemap = sourceGO.AddComponent<Tilemap>();
+        sourceGO.AddComponent<TilemapRenderer>();
+
+        // 创建一个累积结果的Tilemap
+        GameObject resultGO = new GameObject("ResultTilemap");
+        Tilemap resultTilemap = resultGO.AddComponent<Tilemap>();
+        resultGO.AddComponent<TilemapRenderer>();
+
+        try
         {
-            // 创建规则临时Tilemap
-            GameObject ruleTempGO = new GameObject("RuleTempTilemap");
-            Tilemap ruleTempTilemap = ruleTempGO.AddComponent<Tilemap>();
-            ruleTempGO.AddComponent<TilemapRenderer>();
+            // 首先将源Tilemap的内容复制到临时Tilemap
+            AutoTerrainTileEditor.MergeTilemapToOutput(operation.sourceTilemap, sourceTempTilemap);
             
-            try
+            // 对于第一个规则，我们需要先将源数据复制到结果Tilemap作为初始状态
+            AutoTerrainTileEditor.MergeTilemapToOutput(sourceTempTilemap, resultTilemap);
+
+            // 依次应用每个规则
+            for (int i = 0; i < operation.terrainRules.Count; i++)
             {
-                // 应用地形规则
-                AutoTerrainTileEditor.ApplyTerrainRules(operation.sourceTilemap, ruleTempTilemap, rule);
-                
-                // 合并结果到主临时Tilemap
-                AutoTerrainTileEditor.MergeTilemapToOutput(ruleTempTilemap, tempTilemap);
+                // 创建临时Tilemap来存储当前规则的结果
+                GameObject ruleTempGO = new GameObject("RuleTempTilemap");
+                Tilemap ruleTempTilemap = ruleTempGO.AddComponent<Tilemap>();
+                ruleTempGO.AddComponent<TilemapRenderer>();
+
+                try
+                {
+                    // 确定输入Tilemap
+                    // 第一个规则总是使用源Tilemap
+                    // 后续规则根据useSourceAsInput设置决定使用源Tilemap还是累积结果
+                    Tilemap inputTilemap;
+                    if (i == 0 || (i < operation.useSourceAsInput.Count && operation.useSourceAsInput[i]))
+                    {
+                        inputTilemap = sourceTempTilemap;
+                    }
+                    else
+                    {
+                        inputTilemap = resultTilemap;
+                    }
+
+                    // 应用当前规则，但不要将未修改的瓦片复制到结果中
+                    ApplyTerrainRulesSelectively(inputTilemap, ruleTempTilemap, resultTilemap, operation.terrainRules[i]);
+                }
+                finally
+                {
+                    // 清理规则临时对象
+                    DestroyImmediate(ruleTempGO);
+                }
             }
-            finally
+
+            // 合并最终累积结果到输出Tilemap
+            AutoTerrainTileEditor.MergeTilemapToOutput(resultTilemap, operation.outputTilemap);
+
+            // 处理所有规则的emptyMarkerTile
+            foreach (var rule in operation.terrainRules)
             {
-                // 清理规则临时对象
-                DestroyImmediate(ruleTempGO);
+                AutoTerrainTileEditor.ProcessEmptyMarkerTiles(operation.outputTilemap, rule);
             }
+
+            Debug.Log(GetLocalizedText("applyOperation") + $": {operation.name}");
+
+            // 添加弹窗通知
+            EditorUtility.DisplayDialog(
+                GetLocalizedText("success"),
+                $"{operation.name} {GetLocalizedText("applyOperation")}成功！",
+                GetLocalizedText("ok"));
         }
-        
-        // 合并最终结果到输出Tilemap
-        AutoTerrainTileEditor.MergeTilemapToOutput(tempTilemap, operation.outputTilemap);
-        
-        // 处理所有规则的emptyMarkerTile
-        foreach (var rule in operation.terrainRules)
+        finally
         {
-            AutoTerrainTileEditor.ProcessEmptyMarkerTiles(operation.outputTilemap, rule);
+            // 清理临时对象
+            DestroyImmediate(sourceGO);
+            DestroyImmediate(resultGO);
         }
-        
-        Debug.Log(GetLocalizedText("applyOperation") + $": {operation.name}");
-        
-        // 添加弹窗通知
-        EditorUtility.DisplayDialog(
-            GetLocalizedText("success"),
-            $"{operation.name} {GetLocalizedText("applyOperation")}成功！",
-            GetLocalizedText("ok"));
     }
     catch (System.Exception e)
     {
         Debug.LogError(GetLocalizedText("applyOperation") + $": {operation.name} Fail: {e.Message}");
-        
+
         // 添加错误弹窗通知
         EditorUtility.DisplayDialog(
             GetLocalizedText("error"),
             $"{operation.name} {GetLocalizedText("applyOperation")}Fail: {e.Message}",
             GetLocalizedText("ok"));
     }
-    finally
+}
+
+// 新增方法：选择性地应用地形规则，只将规则实际修改的瓦片合并到结果中
+private void ApplyTerrainRulesSelectively(Tilemap inputTilemap, Tilemap tempTilemap, Tilemap resultTilemap, AutoTerrainTileRuleConfiger ruleConfiger)
+{
+    // 首先应用规则到临时Tilemap
+    AutoTerrainTileEditor.ApplyTerrainRules(inputTilemap, tempTilemap, ruleConfiger);
+    
+    // 获取临时Tilemap的边界
+    tempTilemap.CompressBounds();
+    BoundsInt bounds = tempTilemap.cellBounds;
+    
+    // 如果临时Tilemap为空，说明规则没有匹配任何位置，直接返回
+    if (bounds.size.x == 0 || bounds.size.y == 0)
+        return;
+    
+    // 遍历临时Tilemap中的每个瓦片
+    for (int y = bounds.min.y; y < bounds.max.y; y++)
     {
-        // 清理临时对象
-        DestroyImmediate(tempGO);
+        for (int x = bounds.min.x; x < bounds.max.x; x++)
+        {
+            Vector3Int pos = new Vector3Int(x, y, 0);
+            TileBase tile = tempTilemap.GetTile(pos);
+            
+            // 只有当瓦片不为空时，才将其合并到结果中
+            // 这样可以确保只有规则实际修改的瓦片才会被合并
+            if (tile != null)
+            {
+                resultTilemap.SetTile(pos, tile);
+            }
+        }
     }
 }
 
@@ -1697,28 +1841,49 @@ private void ApplyTerrainOperation(TerrainOperation operation)
                             operation.outputTilemap.ClearAllTiles();
                         }
 
-                        // 创建临时Tilemap用于处理最终结果
-                        GameObject tempGO = new GameObject("TempTilemap");
-                        Tilemap tempTilemap = tempGO.AddComponent<Tilemap>();
-                        tempGO.AddComponent<TilemapRenderer>();
+                        // 创建临时Tilemap用于存储源数据
+                        GameObject sourceGO = new GameObject("SourceTempTilemap");
+                        Tilemap sourceTempTilemap = sourceGO.AddComponent<Tilemap>();
+                        sourceGO.AddComponent<TilemapRenderer>();
+
+                        // 创建一个累积结果的Tilemap
+                        GameObject resultGO = new GameObject("ResultTilemap");
+                        Tilemap resultTilemap = resultGO.AddComponent<Tilemap>();
+                        resultGO.AddComponent<TilemapRenderer>();
 
                         try
                         {
+                            // 首先将源Tilemap的内容复制到临时Tilemap
+                            AutoTerrainTileEditor.MergeTilemapToOutput(operation.sourceTilemap, sourceTempTilemap);
+
+                            // 对于第一个规则，我们需要先将源数据复制到结果Tilemap作为初始状态
+                            AutoTerrainTileEditor.MergeTilemapToOutput(sourceTempTilemap, resultTilemap);
+
                             // 依次应用每个规则
-                            foreach (var rule in operation.terrainRules)
+                            for (int i = 0; i < operation.terrainRules.Count; i++)
                             {
-                                // 创建规则临时Tilemap
+                                // 创建临时Tilemap来存储当前规则的结果
                                 GameObject ruleTempGO = new GameObject("RuleTempTilemap");
                                 Tilemap ruleTempTilemap = ruleTempGO.AddComponent<Tilemap>();
                                 ruleTempGO.AddComponent<TilemapRenderer>();
 
                                 try
                                 {
-                                    // 应用地形规则
-                                    AutoTerrainTileEditor.ApplyTerrainRules(operation.sourceTilemap, ruleTempTilemap, rule);
+                                    // 确定输入Tilemap
+                                    // 第一个规则总是使用源Tilemap
+                                    // 后续规则根据useSourceAsInput设置决定使用源Tilemap还是累积结果
+                                    Tilemap inputTilemap;
+                                    if (i == 0 || (i < operation.useSourceAsInput.Count && operation.useSourceAsInput[i]))
+                                    {
+                                        inputTilemap = sourceTempTilemap;
+                                    }
+                                    else
+                                    {
+                                        inputTilemap = resultTilemap;
+                                    }
 
-                                    // 合并结果到主临时Tilemap
-                                    AutoTerrainTileEditor.MergeTilemapToOutput(ruleTempTilemap, tempTilemap);
+                                    // 应用当前规则，但不要将未修改的瓦片复制到结果中
+                                    ApplyTerrainRulesSelectively(inputTilemap, ruleTempTilemap, resultTilemap, operation.terrainRules[i]);
                                 }
                                 finally
                                 {
@@ -1727,8 +1892,8 @@ private void ApplyTerrainOperation(TerrainOperation operation)
                                 }
                             }
 
-                            // 合并最终结果到输出Tilemap
-                            AutoTerrainTileEditor.MergeTilemapToOutput(tempTilemap, operation.outputTilemap);
+                            // 合并最终累积结果到输出Tilemap
+                            AutoTerrainTileEditor.MergeTilemapToOutput(resultTilemap, operation.outputTilemap);
 
                             // 处理所有规则的emptyMarkerTile
                             foreach (var rule in operation.terrainRules)
@@ -1742,7 +1907,8 @@ private void ApplyTerrainOperation(TerrainOperation operation)
                         finally
                         {
                             // 清理临时对象
-                            DestroyImmediate(tempGO);
+                            DestroyImmediate(sourceGO);
+                            DestroyImmediate(resultGO);
                         }
                     }
                     catch (System.Exception e)
@@ -1772,30 +1938,31 @@ private void ApplyTerrainOperation(TerrainOperation operation)
             }
         }
 
+
         private void DrawLayerEditingStep()
         {
             EditorGUILayout.HelpBox(GetLocalizedText("step4Help"), MessageType.Info);
-            
+
             EditorGUILayout.Space();
-            
+
             if (GUILayout.Button(GetLocalizedText("openLayerTool"), GUILayout.Height(40)))
             {
                 TilemapLayerTool.ShowWindow();
             }
-            
+
             EditorGUILayout.Space();
             EditorGUILayout.LabelField(GetLocalizedText("instructions"), EditorStyles.boldLabel);
             EditorGUILayout.LabelField(GetLocalizedText("step4Instr1"));
             EditorGUILayout.LabelField(GetLocalizedText("step4Instr2"));
             EditorGUILayout.LabelField(GetLocalizedText("step4Instr3"));
             EditorGUILayout.LabelField(GetLocalizedText("step4Instr4"));
-            
+
             EditorGUILayout.Space();
             if (GUILayout.Button(GetLocalizedText("previous"), GUILayout.Height(25)))
             {
                 currentStep = WorkflowStep.ApplyTerrain;
             }
-            
+
             EditorGUILayout.Space();
             EditorGUILayout.HelpBox(GetLocalizedText("workflowComplete"), MessageType.Info);
         }
