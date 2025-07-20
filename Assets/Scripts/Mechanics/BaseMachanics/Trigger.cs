@@ -13,10 +13,14 @@ public class Trigger : MonoBehaviour, ISaveable
         PlayerStay,       // 玩家停留在触发区域
         ButtonPress,      // 按钮按下（可以是键盘按键或游戏内按钮）
         TimerBased,       // 基于时间的触发
-        ExternalCall      // 由其他脚本调用触发
+        ExternalCall,     // 由其他脚本调用触发
+        PhysicsEnter,     // 玩家踩在物理碰撞器上
+        PhysicsExit,      // 玩家离开物理碰撞器
+        PhysicsStay       // 玩家停留在物理碰撞器上
     }
 
     [Header("触发设置")]
+    public bool debugmode = false;
     [SerializeField] private TriggerType triggerType = TriggerType.PlayerEnter;
     [SerializeField] public string playerTag = "Player";
     [SerializeField] private float triggerDelay = 0f;
@@ -52,6 +56,7 @@ public class Trigger : MonoBehaviour, ISaveable
     protected bool hasTriggered = false;
     protected bool isActive = false;
     protected bool playerInTriggerArea = false;  // 跟踪玩家是否在触发区域内
+    protected bool playerInPhysicsArea = false;  // 跟踪玩家是否在物理碰撞区域内
     protected int currentRepeatCount = 0;        // 当前重复次数
     protected Coroutine timerCoroutine;          // 定时器协程引用
     
@@ -225,6 +230,59 @@ public class Trigger : MonoBehaviour, ISaveable
         }
     }
 
+    protected virtual void OnCollisionEnter2D(Collision2D collision)
+    {
+        if (!isActive)
+        {
+#if UNITY_EDITOR
+            if (debugmode)
+                Debug.LogFormat($"触发器 {gameObject.name} 未激活，忽略碰撞进入");
+#endif
+            return;
+        }
+
+        // 确保是物理碰撞器触发的事件
+        if (physicsCollider != null && collision.collider.CompareTag(playerTag))
+        {
+            // 检查碰撞是否发生在我们的物理碰撞器上
+            foreach (ContactPoint2D contact in collision.contacts)
+            {
+                if (contact.collider == physicsCollider || contact.otherCollider == physicsCollider)
+                {
+                    // 更新玩家在物理区域内的状态
+                    playerInPhysicsArea = true;
+
+#if UNITY_EDITOR
+                    if (debugmode)
+                        Debug.LogFormat($"玩家进入了 {gameObject.name} 的物理碰撞区域");
+#endif
+
+                    if (triggerType == TriggerType.PhysicsEnter)
+                    {
+#if UNITY_EDITOR
+                        if (debugmode)
+                            Debug.LogFormat($"触发器 {gameObject.name} 的 PhysicsEnter 被激活");
+#endif
+                        ActivateTrigger();
+                    }
+                    break;
+                }
+            }
+        }
+        else
+        {
+#if UNITY_EDITOR
+            if (debugmode)
+            {
+                if (physicsCollider == null)
+                    Debug.LogWarningFormat($"触发器 {gameObject.name} 的物理碰撞器为空");
+                else if (!collision.collider.CompareTag(playerTag))
+                    Debug.LogFormat($"碰撞对象 {collision.collider.name} 没有 Player 标签");
+            }
+#endif
+        }
+    }
+
     protected virtual void OnTriggerExit2D(Collider2D other)
     {
         if (!isActive) return;
@@ -251,26 +309,83 @@ public class Trigger : MonoBehaviour, ISaveable
             }
         }
     }
+
+    protected virtual void OnCollisionExit2D(Collision2D collision)
+    {
+        if (!isActive)
+        {
+            #if UNITY_EDITOR
+            if (debugmode)
+                Debug.LogFormat($"触发器 {gameObject.name} 未激活，忽略碰撞退出");
+                #endif
+            return;
+        }
+
+        // 确保是物理碰撞器触发的事件
+        if (physicsCollider != null && collision.collider.CompareTag(playerTag))
+        {
+#if UNITY_EDITOR
+            if (debugmode)
+                Debug.LogFormat($"玩家离开了 {gameObject.name} 的物理碰撞区域");
+#endif
+
+            // 更新玩家离开物理区域的状态
+            playerInPhysicsArea = false;
+
+            if (triggerType == TriggerType.PhysicsExit)
+            {
+                Debug.LogFormat($"触发器 {gameObject.name} 的 PhysicsExit 被激活");
+                ActivateTrigger();
+            }
+        }
+        else
+        {
+            if (physicsCollider == null)
+                Debug.LogError($"触发器 {gameObject.name} 的物理碰撞器为空");
+            else if (!collision.collider.CompareTag(playerTag))
+#if UNITY_EDITOR
+                if (debugmode)
+                    Debug.LogFormat($"碰撞对象 {collision.collider.name} 没有 Player 标签");
+                #endif
+        }
+    }
     
     protected virtual void OnTriggerStay2D(Collider2D other)
     {
         if (!isActive) return;
-        
+
         // 确保是交互碰撞器触发的事件
-        if (interactionCollider != null && other.IsTouching(interactionCollider) && 
+        if (interactionCollider != null && other.IsTouching(interactionCollider) &&
             triggerType == TriggerType.PlayerStay && other.CompareTag(playerTag))
         {
             ActivateTrigger();
         }
     }
-    
+
+    protected virtual void OnCollisionStay2D(Collision2D collision)
+    {
+        if (!isActive) return;
+
+        // 确保是物理碰撞器触发的事件
+        if (physicsCollider != null && collision.collider.CompareTag(playerTag) &&
+            triggerType == TriggerType.PhysicsStay)
+        {
+#if UNITY_EDITOR
+            if (debugmode)
+                Debug.LogFormat($"玩家停留在 {gameObject.name} 的物理碰撞区域");
+#endif
+
+            ActivateTrigger();
+        }
+    }
+
     /// <summary>
     /// 激活触发器，通知所有关联的接收器
     /// </summary>
     public virtual void ActivateTrigger()
     {
         if (oneTimeOnly && hasTriggered) return;
-        
+
         if (triggerDelay > 0)
         {
             StartCoroutine(DelayedTrigger());

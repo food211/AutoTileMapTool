@@ -525,13 +525,15 @@ namespace TilemapTools
                     ApplyIterationStep(inputTilemap, tempTilemaps[i], iterationSteps[i].terrainSystem);
                 }
 
-                // 按顺序合并所有结果到输出Tilemap
+                // 按顺序将所有结果累积到输出Tilemap
+                // 修改这部分以确保规则结果的累积
                 for (int i = 0; i < iterationSteps.Count; i++)
                 {
                     if (!iterationSteps[i].enabled || iterationSteps[i].terrainSystem == null)
                         continue;
 
                     // 将当前步骤的结果合并到输出Tilemap
+                    // 由于MergeTilemapToOutput只会覆盖有瓦片的位置，所以后面的规则只会覆盖它们实际修改的部分
                     MergeTilemapToOutput(tempTilemaps[i], outputTilemap);
                     Debug.Log($"合并步骤 {i + 1} 的结果到最终输出");
                 }
@@ -553,7 +555,6 @@ namespace TilemapTools
                 }
             }
         }
-
 
         // 新增方法，处理所有的 emptyMarkerTile
         private void ProcessEmptyMarkerTiles()
@@ -614,7 +615,6 @@ namespace TilemapTools
                     originalTiles[x - bounds.min.x, y - bounds.min.y] = sourceTilemap.GetTile(pos);
                 }
             }
-
 
             // 修改规则排序逻辑，使优先级高的规则排在前面，优先级低的规则排在后面
             List<AutoTerrainTileRuleConfiger.TerrainRule> sortedRules = new List<AutoTerrainTileRuleConfiger.TerrainRule>(terrainSystem.rules);
@@ -689,7 +689,7 @@ namespace TilemapTools
 
             // 按优先级顺序应用规则的结果（高优先级的规则先应用）
             int totalApplied = 0;
-            foreach (var rule in sortedRules) // 现在sortedRules已经按照优先级从低到高排序，我们从前到后遍历
+            foreach (var rule in sortedRules) // 现在sortedRules已经按照优先级从高到低排序，我们从前到后遍历
             {
                 if (!ruleMatchResults.ContainsKey(rule))
                     continue;
@@ -715,45 +715,60 @@ namespace TilemapTools
                 totalApplied += ruleApplied;
             }
 
-            // 处理未匹配的位置 - 保持原样
-            int keptOriginal = 0;
-            for (int y = bounds.min.y; y < bounds.max.y; y++)
+            // 检查destTilemap是否为空（如果是第一个应用的规则）
+            bool isFirstRule = true;
+            destTilemap.CompressBounds();
+            if (destTilemap.cellBounds.size.x > 0 && destTilemap.cellBounds.size.y > 0)
             {
-                for (int x = bounds.min.x; x < bounds.max.x; x++)
+                isFirstRule = false;
+            }
+
+            // 只有当这是第一个应用的规则时，才处理未匹配的位置 - 保持原样
+            int keptOriginal = 0;
+            if (isFirstRule)
+            {
+                for (int y = bounds.min.y; y < bounds.max.y; y++)
                 {
-                    Vector3Int pos = new Vector3Int(x, y, 0);
-                    TileBase currentTile = originalTiles[x - bounds.min.x, y - bounds.min.y];
-
-                    // 检查这个位置是否被任何规则匹配过
-                    bool matchedByAnyRule = false;
-                    foreach (var rule in sortedRules)
+                    for (int x = bounds.min.x; x < bounds.max.x; x++)
                     {
-                        if (ruleMatchResults.ContainsKey(rule) && ruleMatchResults[rule].ContainsKey(pos))
-                        {
-                            matchedByAnyRule = true;
-                            break;
-                        }
-                    }
+                        Vector3Int pos = new Vector3Int(x, y, 0);
+                        TileBase currentTile = originalTiles[x - bounds.min.x, y - bounds.min.y];
 
-                    // 如果没有被任何规则匹配，保持原样
-                    if (currentTile != null && !matchedByAnyRule)
-                    {
-                        // 如果当前瓦片是emptyMarkerTile，则不放置任何瓦片（真正的空白）
-                        if (currentTile == terrainSystem.emptyMarkerTile)
+                        // 检查这个位置是否被任何规则匹配过
+                        bool matchedByAnyRule = false;
+                        foreach (var rule in sortedRules)
                         {
-                            // 不设置任何瓦片，保持为空
+                            if (ruleMatchResults.ContainsKey(rule) && ruleMatchResults[rule].ContainsKey(pos))
+                            {
+                                matchedByAnyRule = true;
+                                break;
+                            }
                         }
-                        else
+
+                        // 如果没有被任何规则匹配，保持原样
+                        if (currentTile != null && !matchedByAnyRule)
                         {
-                            // 否则保持原样
-                            destTilemap.SetTile(pos, currentTile);
-                            keptOriginal++;
+                            // 如果当前瓦片是emptyMarkerTile，则不放置任何瓦片（真正的空白）
+                            if (currentTile == terrainSystem.emptyMarkerTile)
+                            {
+                                // 不设置任何瓦片，保持为空
+                            }
+                            else
+                            {
+                                // 否则保持原样
+                                destTilemap.SetTile(pos, currentTile);
+                                keptOriginal++;
+                            }
                         }
                     }
                 }
+                Debug.Log($"保持原样的位置: {keptOriginal} 个");
+            }
+            else
+            {
+                Debug.Log("非首个规则，跳过未匹配位置的复制，保留前面规则的结果");
             }
 
-            Debug.Log($"保持原样的位置: {keptOriginal} 个");
             Debug.Log($"总计应用规则的位置: {totalApplied} 个");
 
             // 刷新输出tilemap
@@ -885,7 +900,7 @@ namespace TilemapTools
                 }
             }
 
-            // 排序规则
+            // 排序规则，优先级高的先应用
             List<AutoTerrainTileRuleConfiger.TerrainRule> sortedRules = new List<AutoTerrainTileRuleConfiger.TerrainRule>(terrainSystem.rules);
             sortedRules.Sort((a, b) => b.priority.CompareTo(a.priority));
 
@@ -943,7 +958,55 @@ namespace TilemapTools
                 }
             }
 
-            // 按优先级顺序应用规则的结果
+            // 检查destTilemap是否为空（如果是第一个应用的规则）
+            bool isFirstRule = true;
+            destTilemap.CompressBounds();
+            if (destTilemap.cellBounds.size.x > 0 && destTilemap.cellBounds.size.y > 0)
+            {
+                isFirstRule = false;
+            }
+
+            // 只有当这是第一个应用的规则时，才处理未匹配的位置 - 保持原样
+            // 修改这部分逻辑，使其与ApplyIterationStep一致
+            if (isFirstRule)
+            {
+                for (int y = bounds.min.y; y < bounds.max.y; y++)
+                {
+                    for (int x = bounds.min.x; x < bounds.max.x; x++)
+                    {
+                        Vector3Int pos = new Vector3Int(x, y, 0);
+                        TileBase currentTile = originalTiles[x - bounds.min.x, y - bounds.min.y];
+
+                        // 检查这个位置是否被任何规则匹配过
+                        bool matchedByAnyRule = false;
+                        foreach (var rule in sortedRules)
+                        {
+                            if (ruleMatchResults.ContainsKey(rule) && ruleMatchResults[rule].ContainsKey(pos))
+                            {
+                                matchedByAnyRule = true;
+                                break;
+                            }
+                        }
+
+                        // 如果没有被任何规则匹配，保持原样
+                        if (currentTile != null && !matchedByAnyRule)
+                        {
+                            // 如果当前瓦片是emptyMarkerTile，则不放置任何瓦片（真正的空白）
+                            if (currentTile == terrainSystem.emptyMarkerTile)
+                            {
+                                // 不设置任何瓦片，保持为空
+                            }
+                            else
+                            {
+                                // 否则保持原样
+                                destTilemap.SetTile(pos, currentTile);
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 然后按优先级顺序应用规则的结果，高优先级的规则会覆盖低优先级的结果
             foreach (var rule in sortedRules)
             {
                 if (!ruleMatchResults.ContainsKey(rule))
@@ -961,42 +1024,6 @@ namespace TilemapTools
                     {
                         // 设置输出瓦片
                         destTilemap.SetTile(pos, outputTile);
-                    }
-                }
-            }
-
-            // 处理未匹配的位置 - 保持原样
-            for (int y = bounds.min.y; y < bounds.max.y; y++)
-            {
-                for (int x = bounds.min.x; x < bounds.max.x; x++)
-                {
-                    Vector3Int pos = new Vector3Int(x, y, 0);
-                    TileBase currentTile = originalTiles[x - bounds.min.x, y - bounds.min.y];
-
-                    // 检查这个位置是否被任何规则匹配过
-                    bool matchedByAnyRule = false;
-                    foreach (var rule in sortedRules)
-                    {
-                        if (ruleMatchResults.ContainsKey(rule) && ruleMatchResults[rule].ContainsKey(pos))
-                        {
-                            matchedByAnyRule = true;
-                            break;
-                        }
-                    }
-
-                    // 如果没有被任何规则匹配，保持原样
-                    if (currentTile != null && !matchedByAnyRule)
-                    {
-                        // 如果当前瓦片是emptyMarkerTile，则不放置任何瓦片
-                        if (currentTile == terrainSystem.emptyMarkerTile)
-                        {
-                            // 不设置任何瓦片，保持为空
-                        }
-                        else
-                        {
-                            // 否则保持原样
-                            destTilemap.SetTile(pos, currentTile);
-                        }
                     }
                 }
             }
@@ -1021,6 +1048,7 @@ namespace TilemapTools
                     TileBase tile = source.GetTile(pos);
 
                     // 只有当源Tilemap中有瓦片时才覆盖目标Tilemap
+                    // 这样，后面规则只会覆盖它们实际修改的部分，而不会清除前面规则的结果
                     if (tile != null)
                     {
                         destination.SetTile(pos, tile);
