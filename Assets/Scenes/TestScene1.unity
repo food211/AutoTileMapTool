@@ -2088,6 +2088,7 @@ MonoBehaviour:
   maxShakeRotation: 10
   traumaDecayRate: 0.25
   traumaPower: 2
+  noiseSpeed: 10
   enableFallingOffsetAdjustment: 1
   maxPositiveYOffset: 0
   maxNegativeYOffset: 0

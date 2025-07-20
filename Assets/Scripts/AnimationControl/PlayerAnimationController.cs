@@ -377,7 +377,7 @@ public class PlayerAnimationController : MonoBehaviour
         float horizontalSpeed = Mathf.Abs(playerRb.velocity.x);
         
         // 检测着地
-        if (!wasGrounded && isGrounded && currentState == AnimState.InAir)
+        if (!wasGrounded && isGrounded && currentState == AnimState.InAir && !isRopeMode)
         {
             ChangeState(AnimState.Land);
             return;

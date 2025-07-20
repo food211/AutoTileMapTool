@@ -1,0 +1,25 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e94c511a04b63f94a897ac9e19aa1f90, type: 3}
+  m_Name: rule_2
+  m_EditorClassIdentifier: 
+  emptyMarkerTile: {fileID: 11400000, guid: 195c53c143d2f33489d394149b2411e8, type: 2}
+  anyNonEmptyTile: {fileID: 11400000, guid: ea1f85d41b8b55349acf041837775836, type: 2}
+  emptyTileAlpha: 0.185
+  inputRulesPrefab: {fileID: 4699387014568106545, guid: 7a1cf74452b4ca04bb82a5339bf40bad, type: 3}
+  outputRulesPrefab: {fileID: 8077210129294542072, guid: 6af29e1ace6c58245a989ce50cb6f34e, type: 3}
+  rules:
+  - ruleName: Rule 0
+    bounds:
+      m_Position: {x: 1, y: 44, z: 0}
+      m_Size: {x: 3, y: 3, z: 1}
+    priority: 1
