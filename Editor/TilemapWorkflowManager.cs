@@ -59,6 +59,7 @@ namespace TilemapTools
         private List<string> existingRuleGuids = new List<string>();
         private List<string> existingRuleNames = new List<string>();
         private Vector2 ruleListScrollPosition;
+        private Vector2 mainScrollPosition;
         private bool isRuleListInitialized = false;
         public static bool IsAutomatedWorkflow { get; set; } = false;
 
@@ -565,6 +566,9 @@ namespace TilemapTools
 
         private void OnGUI()
         {
+            // 开始主滚动视图
+            mainScrollPosition = EditorGUILayout.BeginScrollView(mainScrollPosition);
+
             // 标题和语言设置按钮
             EditorGUILayout.BeginHorizontal();
             GUILayout.Label(GetLocalizedText("title"), EditorStyles.boldLabel);
@@ -642,6 +646,9 @@ namespace TilemapTools
                     DrawLayerEditingStep();
                     break;
             }
+
+            // 结束主滚动视图
+            EditorGUILayout.EndScrollView();
         }
 
         private void DrawAutomatedWorkflowStep()
