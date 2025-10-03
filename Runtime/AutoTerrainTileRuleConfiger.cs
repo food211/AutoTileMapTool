@@ -60,6 +60,27 @@ namespace TilemapTools
         // 所有定义的规则
         public List<TerrainRule> rules = new List<TerrainRule>();
 
+        // 清除所有规则
+        public void ClearRules()
+        {
+            rules.Clear();
+            #if UNITY_EDITOR
+            UnityEditor.EditorUtility.SetDirty(this);
+            #endif
+            Debug.Log($"已清除所有规则，规则列表现在为空");
+        }
+
+        // 添加新规则
+        public void AddRule(TerrainRule rule)
+        {
+            rules.Add(rule);
+            #if UNITY_EDITOR
+            UnityEditor.EditorUtility.SetDirty(this);
+            #endif
+            Debug.Log($"添加规则 '{rule.ruleName}': 边界=({rule.bounds.min.x}, {rule.bounds.min.y}), " +
+                    $"大小={rule.bounds.size.x}x{rule.bounds.size.y}, 优先级={rule.priority}");
+        }
+
         // 清除缓存的Tilemap引用，确保在规则Prefab更改时重新获取
         public void ClearCache()
         {

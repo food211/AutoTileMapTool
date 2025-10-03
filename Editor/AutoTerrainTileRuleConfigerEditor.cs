@@ -359,7 +359,7 @@ namespace TilemapTools
             Undo.RecordObject(terrainSystem, "Extract Terrain Rules");
 
             // 清除现有规则
-            terrainSystem.rules.Clear();
+            terrainSystem.ClearRules();
 
             // 扫描规则Tilemap，寻找规则区块
             bool[,] visited = new bool[inputBounds.size.x, inputBounds.size.y];
@@ -428,18 +428,9 @@ namespace TilemapTools
             for (int i = 0; i < extractedRules.Count; i++)
             {
                 extractedRules[i].priority = extractedRules.Count - i;
-                terrainSystem.rules.Add(extractedRules[i]);
-                Debug.Log(GetLocalizedText("addedRule",
-                    extractedRules[i].ruleName,
-                    extractedRules[i].bounds.min.x,
-                    extractedRules[i].bounds.min.y,
-                    extractedRules[i].bounds.size.x,
-                    extractedRules[i].bounds.size.y,
-                    extractedRules[i].priority));
+                // 使用AddRule方法而不是直接操作规则列表
+                terrainSystem.AddRule(extractedRules[i]);
             }
-
-            // 标记对象为已修改，确保保存
-            EditorUtility.SetDirty(terrainSystem);
 
             Debug.Log(GetLocalizedText("extractedRules", terrainSystem.rules.Count));
         }
@@ -466,8 +457,8 @@ namespace TilemapTools
             inputTilemap.CompressBounds();
             BoundsInt inputBounds = inputTilemap.cellBounds;
 
-            // 清除现有规则
-            ruleConfiger.rules.Clear();
+            // 使用ClearRules方法清除现有规则，而不是直接操作规则列表
+            ruleConfiger.ClearRules();
 
             // 扫描规则Tilemap，寻找规则区块
             bool[,] visited = new bool[inputBounds.size.x, inputBounds.size.y];
@@ -497,9 +488,6 @@ namespace TilemapTools
                     {
                         // 找到规则的起始点，执行洪水填充算法找到整个规则区块
                         BoundsInt ruleBounds = FindRuleBoundsStatic(x, y, inputBounds, inputTilemap);
-
-                        // 打印找到的规则边界
-                        // Debug.Log($"找到规则区块: min=({ruleBounds.min.x}, {ruleBounds.min.y}), 大小={ruleBounds.size.x}x{ruleBounds.size.y}");
 
                         // 标记该区域为已访问
                         for (int ry = ruleBounds.min.y; ry < ruleBounds.max.y; ry++)
@@ -536,13 +524,9 @@ namespace TilemapTools
             for (int i = 0; i < extractedRules.Count; i++)
             {
                 extractedRules[i].priority = extractedRules.Count - i;
-                ruleConfiger.rules.Add(extractedRules[i]);
-                Debug.Log($"添加规则 '{extractedRules[i].ruleName}': 边界=({extractedRules[i].bounds.min.x}, {extractedRules[i].bounds.min.y}), " +
-                        $"大小={extractedRules[i].bounds.size.x}x{extractedRules[i].bounds.size.y}, 优先级={extractedRules[i].priority}");
+                // 使用AddRule方法而不是直接操作规则列表
+                ruleConfiger.AddRule(extractedRules[i]);
             }
-
-            // 标记对象为已修改，确保保存
-            EditorUtility.SetDirty(ruleConfiger);
 
             Debug.Log($"提取了 {ruleConfiger.rules.Count} 条规则，上方规则优先级更高");
         }

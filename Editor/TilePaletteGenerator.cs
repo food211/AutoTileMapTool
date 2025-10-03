@@ -25,6 +25,9 @@ public class TilePaletteGenerator : EditorWindow
     public static bool preserveGUIDs = false;
     public int sliceSize = 16; // 默认切片大小为16x16
 
+    private static bool askedAboutUpdating = false;
+    private static bool shouldUpdateAllTiles = false;
+
 
     private enum DedupPrecision { Low, Medium, High }
     private DedupPrecision dedupPrecision = DedupPrecision.Medium;
@@ -1163,6 +1166,9 @@ public class TilePaletteGenerator : EditorWindow
 
         public void GenerateTilePalette()
         {
+            // 重置询问状态，确保每次生成调色板时重新询问
+            askedAboutUpdating = false;
+
             // 如果设置了使用Aseprite但没有源纹理，提示用户先导入
             if (useAseprite && sourceTexture == null)
             {
@@ -1593,6 +1599,9 @@ public class TilePaletteGenerator : EditorWindow
             string paletteFileName,
             bool preserveGuids = false)
         {
+            // 重置询问状态
+            askedAboutUpdating = false;
+
             // 添加调试日志
             Debug.Log(GetLocalizedText("startGeneratingPalette", paletteFileName));
             Debug.Log(GetLocalizedText("sourceTextureInfo", (sourceTexture != null ? sourceTexture.name : "null")));
@@ -1768,66 +1777,73 @@ public class TilePaletteGenerator : EditorWindow
             return palettePath;
         }
 
-        public Tile CreateTileFromSprite(Sprite sprite, string hash, ref int createdTileAssets)
-        {
-            string shortHash = hash.Substring(0, Mathf.Min(16, hash.Length));
-            string path = $"{tilesOutputPath}/tile_{shortHash}.asset";
-            bool fileExists = File.Exists(path);
+    public Tile CreateTileFromSprite(Sprite sprite, string hash, ref int createdTileAssets)
+    {
+        string shortHash = hash.Substring(0, Mathf.Min(16, hash.Length));
+        string path = $"{tilesOutputPath}/tile_{shortHash}.asset";
+        bool fileExists = File.Exists(path);
 
-            if (fileExists)
+        if (fileExists)
+        {
+            // 在自动化工作流中，直接使用静态变量
+            if (TilemapWorkflowManager.IsAutomatedWorkflow)
             {
-                // 在自动化工作流中，直接使用静态变量
-                if (TilemapWorkflowManager.IsAutomatedWorkflow)
+                // 如果设置为不保留GUID，则加载现有资产
+                if (!preserveGUIDs)
                 {
-                    // 如果设置为不保留GUID，则加载现有资产
-                    if (!preserveGUIDs)
-                    {
-                        return AssetDatabase.LoadAssetAtPath<Tile>(path);
-                    }
+                    return AssetDatabase.LoadAssetAtPath<Tile>(path);
                 }
-                else
+            }
+            else
+            {
+                // 只在第一次遇到重复文件时询问用户
+                if (!askedAboutUpdating)
                 {
                     // 在交互式模式下，显示对话框
-                    bool shouldUpdate = EditorUtility.DisplayDialog(
+                    shouldUpdateAllTiles = EditorUtility.DisplayDialog(
                         GetLocalizedText("assetsExist"),
                         GetLocalizedText("updateExistingTiles"),
                         GetLocalizedText("updateAll"),
                         GetLocalizedText("skipAll"));
-
+                    
+                    // 记录用户已做出选择
+                    askedAboutUpdating = true;
+                    
                     // 更新静态变量以保持一致性
-                    preserveGUIDs = shouldUpdate;
-
-                    // 如果用户选择不更新，则加载现有资产
-                    if (!shouldUpdate)
-                    {
-                        return AssetDatabase.LoadAssetAtPath<Tile>(path);
-                    }
+                    preserveGUIDs = shouldUpdateAllTiles;
                 }
 
-                // 加载现有的瓦片资产
-                Tile existingTile = AssetDatabase.LoadAssetAtPath<Tile>(path);
-                if (existingTile != null)
+                // 根据先前的用户选择决定是否更新
+                if (!shouldUpdateAllTiles)
                 {
-                    // 更新现有瓦片的精灵引用，而不是删除并重新创建
-                    existingTile.sprite = sprite;
-                    EditorUtility.SetDirty(existingTile);
-                    AssetDatabase.SaveAssets();
-                    return existingTile;
-                }
-                else
-                {
-                    // 如果无法加载现有瓦片，则删除并重新创建
-                    AssetDatabase.DeleteAsset(path);
+                    return AssetDatabase.LoadAssetAtPath<Tile>(path);
                 }
             }
 
-            // 创建新的瓦片资产
-            Tile tile = ScriptableObject.CreateInstance<Tile>();
-            tile.sprite = sprite;
-            AssetDatabase.CreateAsset(tile, path);
-            createdTileAssets++;
-            return tile;
+            // 加载现有的瓦片资产
+            Tile existingTile = AssetDatabase.LoadAssetAtPath<Tile>(path);
+            if (existingTile != null)
+            {
+                // 更新现有瓦片的精灵引用，而不是删除并重新创建
+                existingTile.sprite = sprite;
+                EditorUtility.SetDirty(existingTile);
+                AssetDatabase.SaveAssets();
+                return existingTile;
+            }
+            else
+            {
+                // 如果无法加载现有瓦片，则删除并重新创建
+                AssetDatabase.DeleteAsset(path);
+            }
         }
+
+        // 创建新的瓦片资产
+        Tile tile = ScriptableObject.CreateInstance<Tile>();
+        tile.sprite = sprite;
+        AssetDatabase.CreateAsset(tile, path);
+        createdTileAssets++;
+        return tile;
+    }
 
         private bool CheckForUnslicedPixels(Texture2D texture, Sprite[] sprites)
         {
